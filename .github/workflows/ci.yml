@@ -1,0 +1,64 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: python lint + type + dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Install dev deps
+        run: uv pip install --system -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check bench/
+
+      - name: Mypy
+        run: mypy bench/
+
+      - name: Py compile
+        run: python -m compileall -q bench/
+
+      - name: Dry-run
+        run: python -m bench.runner --config config.yaml --dry-run
+
+  shell:
+    name: shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Shellcheck
+        run: shellcheck bin/serve.sh run.sh
+
+  yaml:
+    name: yaml + actions lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: actionlint
+        uses: reviewdog/action-actionlint@v1
+        with:
+          reporter: github-check
+          fail_level: error

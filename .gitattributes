@@ -1,0 +1,24 @@
+# Normalize line endings for everything text on checkout; preserves
+# whatever is on disk as LF in the repo regardless of the contributor's OS.
+# Without this, a Windows clone can rewrite `bin/serve.sh` and `run.sh` with
+# CRLF line endings, and bash refuses to parse `#!/usr/bin/env bash\r`.
+* text=auto eol=lf
+
+# Shell scripts must be LF even if a tool tries to normalize to CRLF.
+*.sh       text eol=lf
+*.bash     text eol=lf
+
+# Python / config: LF.
+*.py       text eol=lf
+*.yaml     text eol=lf
+*.yml      text eol=lf
+*.toml     text eol=lf
+*.md       text eol=lf
+*.txt      text eol=lf
+*.json     text eol=lf
+
+# Binary — never touch.
+*.gguf     binary
+*.png      binary
+*.jpg      binary
+*.pdf      binary

@@ -9,11 +9,17 @@ run:
   warmup: true        # throw away one call after each boot (JIT / first-batch skew)
 
 # ---------- Serving ---------------------------------------------------------
-# Shared llama.cpp container args. Per-model overrides live under models[].
+# The harness runs a llama-swap proxy in front of a llama.cpp Vulkan
+# container. llama-swap owns the lifecycle of each backend container and
+# swaps them on demand; the runner talks to a single stable port
+# (`swap_port`). Per-model overrides live under models[].
 server:
   models_dir: "~/.lmstudio/models"
   image: "ghcr.io/ggml-org/llama.cpp:server-vulkan"
-  port: 8080                  # bound to 127.0.0.1:<port>
+  swap_port: 8080             # llama-swap listens on 127.0.0.1:<swap_port>
+  backend_start_port: 5800    # llama-swap allocates ${PORT} for backend
+                              # containers starting here (one port per
+                              # active model).
   ctx: 4096                   # small on purpose — benchmark prompts are short
   ngl: 99                     # offload all layers (Strix Halo unified memory)
   ubatch: 512

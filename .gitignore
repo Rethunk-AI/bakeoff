@@ -18,6 +18,9 @@ uv.lock
 results/
 datasets/
 
+# Vendored llama-swap binary + generated proxy config
+.cache/
+
 # IDE / OS
 .vscode/
 .idea/

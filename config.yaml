@@ -92,6 +92,8 @@ cost:
   enabled: true
   kwh_rate_usd: 0.15
   gpu_index: 0
+  sample_hz: 10               # background power sampler rate (Hz). Trapezoidal
+                              # integration over the call window.
 
 # ---------- Output ----------------------------------------------------------
 output:

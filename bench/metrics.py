@@ -7,15 +7,19 @@ Quality:
   - judge: pairwise LLM-judge (handled in runner after both A/B responses exist)
 
 Energy:
-  - sample nvidia-smi power.draw (W) at start + end of a call, average, multiply
-    by wall time to get Wh. Multiply by kwh_rate_usd/1000 for USD.
-  - fallback: cost_usd = None when nvidia-smi missing or GPU not found.
+  - background `PowerSampler` thread polls nvidia-smi/rocm-smi at N Hz during
+    each call; trapezoidal integration of (watts, t) pairs yields Wh.
+    A high-freq sampler captures burst-y decode power that a 2-point
+    start/end average undercounts.
+  - fallback: cost_usd = None when no sample succeeded.
 """
 from __future__ import annotations
 
 import re
 import shutil
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 
 # --- Heuristic quality ------------------------------------------------------
@@ -204,3 +208,87 @@ def cost_usd(wh: float | None, kwh_rate: float) -> float | None:
     if wh is None:
         return None
     return (wh / 1000.0) * kwh_rate
+
+
+# --- high-frequency background sampler -------------------------------------
+
+def trapezoid_wh(samples: list[tuple[float, float]]) -> float | None:
+    """Integrate (t_seconds, watts) pairs by the trapezoid rule -> Wh.
+
+    Returns None for empty input. For a single sample, returns 0.0 (no
+    duration to integrate over — the caller's call_one falls back to
+    rectangle rule with the sampled wattage in that case).
+    """
+    if not samples:
+        return None
+    if len(samples) == 1:
+        return 0.0
+    total_ws = 0.0
+    for (t0, w0), (t1, w1) in zip(samples, samples[1:]):
+        total_ws += (w0 + w1) / 2.0 * (t1 - t0)
+    return total_ws / 3600.0
+
+
+class PowerSampler:
+    """Background sampler. `with PowerSampler(hz=10, gpu_index=0) as s: ...`.
+
+    On `__exit__`, stops the thread and exposes:
+      - `samples`: list[(t_rel_s, watts)] taken while active.
+      - `energy_wh`: trapezoidal integral of the samples.
+      - `mean_watts`: simple mean of sampled wattages (diagnostic).
+
+    Safe to use when no power source is available: `sampler.samples` will
+    be empty and `energy_wh` None. Never raises from the thread.
+    """
+
+    def __init__(self, hz: float = 10.0, gpu_index: int = 0):
+        self.interval_s = 1.0 / max(hz, 0.1)
+        self.gpu_index = gpu_index
+        self._stop = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._t0: float = 0.0
+        self.samples: list[tuple[float, float]] = []
+
+    def _run(self) -> None:
+        while not self._stop.is_set():
+            ps = sample_power(self.gpu_index)
+            if ps.ok and ps.watts is not None:
+                self.samples.append((time.perf_counter() - self._t0, ps.watts))
+            # Event.wait lets stop() preempt mid-interval; avoids trailing
+            # sleep after the call already returned.
+            if self._stop.wait(self.interval_s):
+                break
+
+    def __enter__(self) -> "PowerSampler":
+        self._t0 = time.perf_counter()
+        self._stop.clear()
+        # Prime with one immediate sample so very short calls still have
+        # a reading; the thread then continues at interval_s.
+        ps = sample_power(self.gpu_index)
+        if ps.ok and ps.watts is not None:
+            self.samples.append((0.0, ps.watts))
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5.0)
+
+    @property
+    def energy_wh(self) -> float | None:
+        if not self.samples:
+            return None
+        wh = trapezoid_wh(self.samples)
+        if wh == 0.0 and len(self.samples) == 1:
+            # Rectangle fallback: single sample over the elapsed wall time.
+            elapsed = time.perf_counter() - self._t0
+            return self.samples[0][1] * (elapsed / 3600.0)
+        return wh
+
+    @property
+    def mean_watts(self) -> float | None:
+        if not self.samples:
+            return None
+        return sum(w for _, w in self.samples) / len(self.samples)

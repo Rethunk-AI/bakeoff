@@ -30,14 +30,13 @@ import yaml
 from bench.clients import ChatClient, ChatResult
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
+    PowerSampler,
     cost_usd,
-    energy_wh,
     invert_winner,
     judge_pair_randomized,
     judge_score_prompt,
     parse_judge,
     parse_score,
-    sample_power,
     score_heuristic,
 )
 
@@ -110,18 +109,19 @@ def call_one(
     gpu_index: int,
     cost_enabled: bool,
     kwh_rate: float,
+    sample_hz: float = 10.0,
 ) -> tuple[ChatResult, float | None, float | None]:
-    p0 = sample_power(gpu_index) if cost_enabled else None
-    res = client.chat([
+    messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
-    ])
-    p1 = sample_power(gpu_index) if cost_enabled else None
-    avg_w: float | None = None
-    if p0 and p1 and p0.ok and p1.ok:
-        avg_w = (p0.watts + p1.watts) / 2.0  # type: ignore[operator]
-    wh = energy_wh(avg_w, res.latency_s)
-    usd = cost_usd(wh, kwh_rate) if cost_enabled else None
+    ]
+    if not cost_enabled:
+        res = client.chat(messages)
+        return res, None, None
+    with PowerSampler(hz=sample_hz, gpu_index=gpu_index) as sampler:
+        res = client.chat(messages)
+    wh = sampler.energy_wh
+    usd = cost_usd(wh, kwh_rate)
     return res, wh, usd
 
 
@@ -181,10 +181,11 @@ def run_model_phase(
         cost_enabled = bool(cost_cfg.get("enabled"))
         kwh = float(cost_cfg.get("kwh_rate_usd", 0.0))
         gpu_i = int(cost_cfg.get("gpu_index", 0))
+        sample_hz = float(cost_cfg.get("sample_hz", 10.0))
         for task, prm in itertools.product(tasks, prompts):
             try:
                 res, wh, usd = call_one(client, prm["system"], task.user_prompt,
-                                        gpu_i, cost_enabled, kwh)
+                                        gpu_i, cost_enabled, kwh, sample_hz)
                 records.append({
                     "task_id": task.id, "domain": task.domain,
                     "prompt_id": prm["id"], "model_id": mid,

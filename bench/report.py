@@ -13,6 +13,28 @@ from pathlib import Path
 from statistics import mean, pstdev
 from typing import Any
 
+# --- Pareto helper ---------------------------------------------------------
+
+def _pareto_frontier(points: list[tuple[str, float, float]]) -> list[str]:
+    """Return model ids on the Pareto frontier (quality vs energy).
+
+    Input tuples are (model_id, quality, energy). Higher quality is better;
+    lower energy is better. A point is non-dominated iff no other point has
+    both quality >= p.quality and energy <= p.energy with at least one
+    strict inequality. Output is sorted by ascending energy (the natural
+    plotting order).
+    """
+    frontier = [
+        p for p in points
+        if not any(
+            q is not p and q[1] >= p[1] and q[2] <= p[2]
+            and (q[1] > p[1] or q[2] < p[2])
+            for q in points
+        )
+    ]
+    return [m for m, _, _ in sorted(frontier, key=lambda p: p[2])]
+
+
 # --- percentile helpers ----------------------------------------------------
 
 def _percentile(xs: list[float], p: float) -> float | None:
@@ -272,6 +294,44 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
         lines.append("")
         lines.append("_Judge disabled or no judgements produced._")
 
+    # Pareto frontier: quality vs total energy. Use the richest quality
+    # signal available for the run; fall back to heuristic.
+    pts: list[tuple[str, float, float]] = []
+    if mode == "pairwise":
+        pr = _pairwise_rollup(judgements)
+        for m, v in pr["per_model"].items():
+            q = v.get("win_rate")
+            e = roll.get(m, {}).get("energy_wh_total")
+            if q is not None and e is not None:
+                pts.append((m, float(q), float(e)))
+        q_label = "win rate"
+    elif mode == "scored":
+        sr = _scored_rollup(judgements)
+        for m, v in sr["per_model"].items():
+            q = v.get("mean")
+            e = roll.get(m, {}).get("energy_wh_total")
+            if q is not None and e is not None:
+                pts.append((m, float(q) / 5.0, float(e)))
+        q_label = "judge score (mean/5)"
+    else:
+        for m, r in roll.items():
+            q = r.get("quality_heuristic_mean")
+            e = r.get("energy_wh_total")
+            if q is not None and e is not None:
+                pts.append((m, float(q), float(e)))
+        q_label = "heuristic quality"
+
+    if len(pts) >= 2:
+        frontier = _pareto_frontier(pts)
+        lines.append("")
+        lines.append("## Pareto: quality vs energy")
+        lines.append("")
+        lines.append(f"Quality axis: _{q_label}_ (higher better). "
+                     "Energy axis: total Wh (lower better).")
+        lines.append("")
+        lines.append(f"**Frontier (left to right, ascending energy):** "
+                     + " → ".join(frontier))
+
     path.write_text("\n".join(lines) + "\n")
 
 
@@ -326,6 +386,12 @@ th:first-child,td:first-child{{text-align:left}}
   <div id="judge-summary"></div>
   <div id="judge-matrix-wrap"></div>
   <canvas id="c_judge" style="max-height:260px;margin-top:1rem"></canvas>
+</div>
+
+<div class="card" style="margin-top:1.5rem" id="pareto_card" hidden>
+  <h2>Pareto: quality vs energy</h2>
+  <div id="pareto_summary" style="color:#666"></div>
+  <canvas id="c_pareto" style="max-height:420px;margin-top:.5rem"></canvas>
 </div>
 
 <script>
@@ -576,6 +642,102 @@ bar("c_usd", "USD",   models.map(m => roll[m].cost_usd_total ?? 0));
     options: {{
       responsive: true, plugins: {{ legend: {{ display: false }} }},
       scales: {{ y: {{ min: 0, max: 100, ticks: {{ callback: v => v + "%" }} }} }},
+    }},
+  }});
+}})();
+
+// Pareto: quality vs energy. Quality source depends on available signal:
+//   1. Pairwise win rate (if judge mode == pairwise and we have judgements).
+//   2. Scored judge mean / 5 (if judge mode == scored).
+//   3. Fallback to quality_heuristic_mean from records.
+// Lower energy is better (x-axis); higher quality is better (y-axis). The
+// Pareto frontier = models not dominated on both axes.
+(() => {{
+  const card = document.getElementById("pareto_card");
+  const canvas = document.getElementById("c_pareto");
+  const summary = document.getElementById("pareto_summary");
+
+  let qualitySrc = "heuristic";
+  let qualityMap = {{}};
+  let qualityLabel = "heuristic quality (0-1)";
+
+  if (mode === "pairwise" && data.judgements && data.judgements.length) {{
+    const pr = pairwiseRollup(data.judgements);
+    qualityMap = pr.rates;
+    qualitySrc = "pairwise";
+    qualityLabel = "win rate";
+  }} else if (mode === "scored" && data.judgements && data.judgements.length) {{
+    const sr = scoredRollup(data.judgements);
+    qualityMap = {{}};
+    for (const [m, v] of Object.entries(sr)) qualityMap[m] = v.mean / 5;
+    qualitySrc = "scored";
+    qualityLabel = "judge score (mean / 5)";
+  }} else {{
+    for (const m of models) qualityMap[m] = roll[m].quality_heuristic_mean;
+  }}
+
+  // Only plot models with both axes defined.
+  const pts = models
+    .map(m => ({{m, q: qualityMap[m], e: roll[m].energy_wh_total}}))
+    .filter(p => p.q != null && p.e != null);
+  if (pts.length < 2) {{
+    // One (or zero) plottable model — Pareto is meaningless. Skip entirely.
+    return;
+  }}
+  card.hidden = false;
+
+  // Pareto frontier: a point is non-dominated when no other point has
+  // higher-or-equal quality AND lower-or-equal energy with at least one
+  // strict inequality.
+  const frontier = pts.filter(p => !pts.some(q =>
+    q !== p && q.q >= p.q && q.e <= p.e && (q.q > p.q || q.e < p.e)
+  )).sort((a, b) => a.e - b.e);
+  const frontierSet = new Set(frontier.map(p => p.m));
+  const dominated = pts.filter(p => !frontierSet.has(p.m));
+
+  summary.textContent =
+    `Quality source: ${{qualitySrc}}. Frontier (top-left = better): ` +
+    frontier.map(p => p.m).join(" → ");
+
+  new Chart(canvas, {{
+    type: "scatter",
+    data: {{
+      datasets: [
+        {{
+          label: "Pareto frontier",
+          data: frontier.map(p => ({{x: p.e, y: p.q, label: p.m}})),
+          backgroundColor: "#2a7",
+          borderColor: "#2a7",
+          showLine: true,
+          borderDash: [6, 4],
+          pointRadius: 7,
+        }},
+        {{
+          label: "dominated",
+          data: dominated.map(p => ({{x: p.e, y: p.q, label: p.m}})),
+          backgroundColor: "#c55",
+          borderColor: "#c55",
+          showLine: false,
+          pointRadius: 6,
+        }},
+      ],
+    }},
+    options: {{
+      responsive: true,
+      plugins: {{
+        tooltip: {{
+          callbacks: {{
+            label: ctx => {{
+              const d = ctx.raw;
+              return `${{d.label}}: ${{qualityLabel}}=${{fmt(d.y)}}, energy=${{fmt(d.x)}} Wh`;
+            }},
+          }},
+        }},
+      }},
+      scales: {{
+        x: {{ title: {{display: true, text: "Total energy (Wh) — lower is better"}} }},
+        y: {{ title: {{display: true, text: qualityLabel + " — higher is better"}} }},
+      }},
     }},
   }});
 }})();

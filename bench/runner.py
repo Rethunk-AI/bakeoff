@@ -168,6 +168,7 @@ def run_model_phase(
                     "prompt_tokens": res.prompt_tokens,
                     "completion_tokens": res.completion_tokens,
                     "latency_s": res.latency_s,
+                    "ttft_s": res.ttft_s,
                     "tokens_per_sec": res.tokens_per_sec,
                     "energy_wh": wh, "cost_usd": usd,
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),

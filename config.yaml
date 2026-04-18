@@ -1,0 +1,100 @@
+# A/B benchmark config. LM Studio GGUFs served via llama.cpp podman image.
+# Matrix = models x prompt_variants x dataset; runner boots one model at a time
+# (unified-memory APU constraint) and tears down between phases.
+
+run:
+  name: "ab-run-001"
+  seed: 42
+  timeout_s: 180      # per HTTP call (first call after boot can be slow)
+
+# ---------- Serving ---------------------------------------------------------
+# Shared llama.cpp container args. Per-model overrides live under models[].
+server:
+  models_dir: "~/.lmstudio/models"
+  image: "ghcr.io/ggml-org/llama.cpp:server-vulkan"
+  port: 8080                  # bound to 127.0.0.1:<port>
+  ctx: 4096                   # small on purpose — benchmark prompts are short
+  ngl: 99                     # offload all layers (Strix Halo unified memory)
+  ubatch: 512
+  cache_type_k: "q8_0"
+  cache_type_v: "q8_0"
+  flash_attn: true
+  jinja: true                 # respect chat template in the GGUF
+  boot_timeout_s: 300          # model load can take a while on first run
+
+# ---------- Dataset ---------------------------------------------------------
+dataset:
+  n: 20
+  domains: [qa, code, summarize, classify]
+
+# ---------- Models (A/B) ----------------------------------------------------
+# gguf paths are RELATIVE to server.models_dir.
+# First two entries are A and B for the pairwise judge.
+# Skip mmproj-* files (vision projectors, not standalone text models).
+models:
+  - id: qwen3_5_9b_q4
+    alias: "qwen3.5-9b-q4"
+    gguf: "lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf"
+    ctx: 4096                 # override server.ctx per model if needed
+
+  - id: qwen3_6_35b_a3b_q4
+    alias: "qwen3.6-35b-a3b-q4"
+    gguf: "lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf"
+    ctx: 4096
+    # MoE with 3B active params. Uncomment to spill experts to CPU if OOM:
+    # n_cpu_moe: 999
+
+# Alternative cross-family pair (swap in):
+# - id: gemma_4_31b_q4
+#   alias: "gemma-4-31b-q4"
+#   gguf: "lmstudio-community/gemma-4-31B-it-GGUF/gemma-4-31B-it-Q4_K_M.gguf"
+#   ctx: 4096
+
+# ---------- Prompt variants -------------------------------------------------
+prompts:
+  - id: plain
+    system: "You are a helpful assistant. Answer concisely."
+  - id: cot
+    system: "You are a helpful assistant. Think step by step, then give a final answer on the last line prefixed with 'ANSWER:'."
+
+# ---------- Judge ----------------------------------------------------------
+# Booted as its own phase AFTER all models have been run and torn down.
+#
+# mode:
+#   pairwise_all (default) — every unordered pair of models competes on every
+#                             (task, prompt). Order is randomized per call to
+#                             de-bias positional preference. Cost:
+#                               C(N, 2) * tasks * prompts  judge calls
+#                             Good for small N (2-4); sharp ranking signal.
+#   scored                  — absolute 1-5 rubric per (model, task, prompt).
+#                             Cost:
+#                               N * tasks * prompts        judge calls
+#                             Good for larger N (5+) or cross-run comparison.
+#                             Judges cluster in the middle — expect compressed
+#                             differences between strong models.
+#
+# Example cost at n=20, prompts=2:
+#   2 models: pairwise_all = 40 calls;  scored = 80
+#   3 models: pairwise_all = 120;        scored = 120
+#   5 models: pairwise_all = 400;        scored = 200
+judge:
+  enabled: true
+  mode: "pairwise_all"        # or "scored"
+  alias: "judge"
+  gguf: "lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf"
+  ctx: 8192                   # pairwise prompt contains both responses
+
+# ---------- Cost ------------------------------------------------------------
+# Energy-based. NVIDIA: nvidia-smi power.draw. AMD: rocm-smi --showpower.
+# On Strix Halo APU with broken libdrm_amdgpu.so, expect cost_usd: null.
+cost:
+  enabled: true
+  kwh_rate_usd: 0.15
+  gpu_index: 0
+
+# ---------- Output ----------------------------------------------------------
+output:
+  dir: "results"
+  emit_json: true
+  emit_markdown: true
+  emit_html: true

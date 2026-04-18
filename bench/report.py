@@ -329,7 +329,7 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
         lines.append(f"Quality axis: _{q_label}_ (higher better). "
                      "Energy axis: total Wh (lower better).")
         lines.append("")
-        lines.append(f"**Frontier (left to right, ascending energy):** "
+        lines.append("**Frontier (left to right, ascending energy):** "
                      + " → ".join(frontier))
 
     path.write_text("\n".join(lines) + "\n")

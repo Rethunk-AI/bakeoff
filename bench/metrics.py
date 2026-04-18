@@ -15,6 +15,7 @@ Energy:
 """
 from __future__ import annotations
 
+import itertools
 import re
 import shutil
 import subprocess
@@ -224,7 +225,7 @@ def trapezoid_wh(samples: list[tuple[float, float]]) -> float | None:
     if len(samples) == 1:
         return 0.0
     total_ws = 0.0
-    for (t0, w0), (t1, w1) in zip(samples, samples[1:]):
+    for (t0, w0), (t1, w1) in itertools.pairwise(samples):
         total_ws += (w0 + w1) / 2.0 * (t1 - t0)
     return total_ws / 3600.0
 
@@ -259,7 +260,7 @@ class PowerSampler:
             if self._stop.wait(self.interval_s):
                 break
 
-    def __enter__(self) -> "PowerSampler":
+    def __enter__(self) -> PowerSampler:
         self._t0 = time.perf_counter()
         self._stop.clear()
         # Prime with one immediate sample so very short calls still have

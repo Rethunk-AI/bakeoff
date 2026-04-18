@@ -13,7 +13,6 @@ import pytest
 from bench import metrics
 from bench.metrics import PowerSampler, trapezoid_wh
 
-
 # --- trapezoid_wh ---------------------------------------------------------
 
 def test_trapezoid_empty_is_none():

@@ -7,7 +7,6 @@ import pytest
 
 from bench.report import _pareto_frontier, _percentile, _rollup
 
-
 # --- _percentile ----------------------------------------------------------
 
 def test_percentile_empty_returns_none():

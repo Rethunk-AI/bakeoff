@@ -113,26 +113,28 @@ class ChatClient:
         ttft: float | None = None
 
         t0 = time.perf_counter()
-        with httpx.Client(timeout=self.timeout_s) as c:
-            with c.stream("POST", url, json=body, headers=headers) as r:
-                r.raise_for_status()
-                for line in r.iter_lines():
-                    if not line:
-                        continue
-                    chunk = _parse_sse_chunk(line)
-                    if chunk is None:
-                        continue
-                    last_chunk = chunk
-                    u = chunk.get("usage")
-                    if u:
-                        usage = u
-                    c_delta, r_delta = _extract_delta(chunk)
-                    if (c_delta or r_delta) and ttft is None:
-                        ttft = time.perf_counter() - t0
-                    if c_delta:
-                        content_parts.append(c_delta)
-                    if r_delta:
-                        reasoning_parts.append(r_delta)
+        with (
+            httpx.Client(timeout=self.timeout_s) as c,
+            c.stream("POST", url, json=body, headers=headers) as r,
+        ):
+            r.raise_for_status()
+            for line in r.iter_lines():
+                if not line:
+                    continue
+                chunk = _parse_sse_chunk(line)
+                if chunk is None:
+                    continue
+                last_chunk = chunk
+                u = chunk.get("usage")
+                if u:
+                    usage = u
+                c_delta, r_delta = _extract_delta(chunk)
+                if (c_delta or r_delta) and ttft is None:
+                    ttft = time.perf_counter() - t0
+                if c_delta:
+                    content_parts.append(c_delta)
+                if r_delta:
+                    reasoning_parts.append(r_delta)
         latency = time.perf_counter() - t0
 
         content = "".join(content_parts)

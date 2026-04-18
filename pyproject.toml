@@ -18,6 +18,13 @@ dev = [
     "types-PyYAML>=6",
 ]
 
+# Auto-discovery trips over the gitignored `results/` and `datasets/` output
+# directories when they exist on disk during `pip install -e .`. Pin the
+# package set explicitly so local dev installs don't depend on those dirs
+# being absent.
+[tool.setuptools]
+packages = ["bench"]
+
 # --- Ruff ------------------------------------------------------------------
 # Runner/reporter text contains user-facing Unicode (×, em dashes, etc.) by
 # design; fixture prompts in dataset.py are long literal strings. Keep lint

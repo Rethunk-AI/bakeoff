@@ -51,8 +51,8 @@ If you added a new config knob, the dry-run should parse it without error.
 
 - **Conventional Commits**: `type(scope): subject`. `feat`, `fix`, `docs`,
   `refactor`, `test`, `ci`, `build`, `style`, `chore`. Scope is the module
-  (`runner`, `report`, `clients`, `metrics`) or a docs tier (`readme`,
-  `agents`).
+  (`runner`, `report`, `clients`, `metrics`, `llama-swap`) or a docs tier
+  (`readme`, `agents`).
 - **Body explains _why_**, not _what_. A diff already shows the what.
 - **One logical unit per commit.** If a PR is a bundle of unrelated changes,
   reviewers will ask for a split.

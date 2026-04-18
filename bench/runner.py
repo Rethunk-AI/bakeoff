@@ -416,9 +416,13 @@ def main() -> int:
     if args.dry_run:
         # Also exercise the llama-swap generator so a misconfigured
         # models[] block trips CI's dry-run step instead of a live
-        # benchmark run.
+        # benchmark run. The yaml round-trip guards against a future
+        # regression where a non-primitive (e.g. pathlib.Path) leaks
+        # into the emitted config — safe_dump would fail at runtime
+        # otherwise; here it fails in CI.
         models_dir = resolve_models_dir(server_cfg)
-        llama_swap.build(cfg, str(models_dir))
+        ls_cfg = llama_swap.build(cfg, str(models_dir))
+        yaml.safe_dump(ls_cfg, sort_keys=False)
         print("[dry-run] dataset + proxy config ok", file=sys.stderr)
         return 0
 

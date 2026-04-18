@@ -18,7 +18,6 @@ import shutil
 import subprocess
 from dataclasses import dataclass
 
-
 # --- Heuristic quality ------------------------------------------------------
 
 def score_heuristic(scorer: str, expected: str | None, text: str) -> float | None:

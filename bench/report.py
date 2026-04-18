@@ -13,7 +13,6 @@ from pathlib import Path
 from statistics import mean, pstdev
 from typing import Any
 
-
 # --- numeric rollup from records -------------------------------------------
 
 def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:

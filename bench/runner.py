@@ -1,15 +1,33 @@
-"""Benchmark runner: sequential model phases (one boot at a time).
+"""Benchmark runner: sequential model phases over a llama-swap proxy.
 
 Phases:
   1. Generate dataset.
-  2. For each model: boot llama.cpp podman server -> run all (task x prompt)
-     calls -> tear down -> next model.
-  3. Judge phase (optional): boot judge model -> run pairwise judge on stored
-     A/B responses -> tear down.
-  4. Emit reports (JSON + Markdown + static HTML dashboard).
+  2. Start llama-swap proxy in front of podman + llama.cpp backends.
+  3. For each model: warmup (triggers the swap) -> run all
+     (task x prompt) calls -> next model.
+  4. Judge phase (optional): warmup the judge model -> run judgements
+     over stored A/B responses.
+  5. Stop the proxy (SIGTERM + sweep any bench-llama-* containers).
+  6. Emit reports (JSON + Markdown + static HTML dashboard).
 
-The unified-memory APU (AMD Strix Halo) makes concurrent model serving wasteful;
-sequential phases keep VRAM usage bounded to one model at a time.
+Invariants (AGENTS.md):
+
+  - **One model in VRAM at a time.** llama-swap's default behaviour
+    unloads the current backend before starting the next; we never
+    configure groups or exclusive profiles, so the default applies.
+    The runner additionally iterates per-model-sequentially — all
+    calls for model A complete before any call for model B — so a
+    full benchmark incurs exactly N swaps (N+1 with judge), not one
+    per matrix cell. Changing to a round-robin outer loop would
+    silently trigger a swap per call and invalidate the energy and
+    latency numbers.
+  - **Warmup absorbs swap + first-batch cost.** The first call to a
+    previously-unseen model name triggers llama-swap's boot. We make
+    that call outside the PowerSampler so the swap energy does not
+    leak into any row.
+  - **Judge is its own model entry**, not a live subprocess of the
+    runner. Running it through llama-swap keeps the timing model
+    identical to the A/B phase.
 """
 from __future__ import annotations
 
@@ -27,6 +45,7 @@ from typing import Any
 
 import yaml
 
+from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
@@ -41,7 +60,8 @@ from bench.metrics import (
 )
 
 HERE = Path(__file__).resolve().parent.parent
-SERVE_SH = HERE / "bin" / "serve.sh"
+LAUNCHER = HERE / "bin" / "llama-swap.sh"
+LLAMA_SWAP_CONFIG = HERE / ".cache" / "llama-swap" / "config.yaml"
 
 
 def load_config(path: Path) -> dict[str, Any]:
@@ -54,53 +74,62 @@ def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
     return Path(os.path.expanduser(p)).resolve()
 
 
-def _serve_env(server_cfg: dict[str, Any], models_dir: Path) -> dict[str, str]:
-    env = os.environ.copy()
-    env["MODELS_DIR"] = str(models_dir)
-    env["IMAGE"] = str(server_cfg.get("image", "ghcr.io/ggml-org/llama.cpp:server-vulkan"))
-    env["NGL"] = str(server_cfg.get("ngl", 99))
-    env["UBATCH"] = str(server_cfg.get("ubatch", 512))
-    env["CACHE_TYPE_K"] = str(server_cfg.get("cache_type_k", "q8_0"))
-    env["CACHE_TYPE_V"] = str(server_cfg.get("cache_type_v", "q8_0"))
-    env["FLASH_ATTN"] = "1" if server_cfg.get("flash_attn", True) else "0"
-    env["JINJA"] = "1" if server_cfg.get("jinja", True) else "0"
-    return env
+# --- llama-swap lifecycle ---------------------------------------------------
 
-
-def boot(
-    gguf_rel: str,
-    alias: str,
-    port: int,
-    ctx: int,
-    server_cfg: dict[str, Any],
+def _write_proxy_config(
+    bakeoff_cfg: dict[str, Any],
     models_dir: Path,
-    n_cpu_moe: int | None = None,
-) -> str:
-    """Start container. Returns container name on success; raises on failure."""
-    args = [str(SERVE_SH), "up", gguf_rel, alias, str(port), str(ctx)]
-    if n_cpu_moe is not None:
-        args.append(str(n_cpu_moe))
-    res = subprocess.run(args, env=_serve_env(server_cfg, models_dir),
-                         capture_output=True, text=True)
-    if res.returncode != 0:
-        raise RuntimeError(f"serve.sh up failed: {res.stderr.strip() or res.stdout.strip()}")
-    name = res.stdout.strip().splitlines()[-1].strip()
-    return name
+    target: Path,
+) -> None:
+    ls_cfg = llama_swap.build(bakeoff_cfg, str(models_dir))
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(yaml.safe_dump(ls_cfg, sort_keys=False))
 
 
-def wait_ready(port: int, timeout_s: int) -> None:
-    res = subprocess.run(
-        [str(SERVE_SH), "wait", str(port), str(timeout_s)],
-        capture_output=True, text=True,
+def _launcher_args(*extra: str) -> list[str]:
+    return [str(LAUNCHER), *extra]
+
+
+def _proxy_start(listen: str, config_path: Path, boot_timeout_s: int) -> subprocess.Popen[bytes]:
+    """Launch llama-swap as a child process; block until it is accepting requests.
+
+    The launcher script handles the pre-start sweep of stale
+    `bench-llama-*` containers and then execs the binary, so the
+    Popen pid tracks the binary once exec completes.
+    """
+    print(f"[proxy] starting llama-swap on {listen}", file=sys.stderr)
+    proc = subprocess.Popen(
+        _launcher_args("up", str(config_path), listen),
+        stdout=sys.stderr.fileno(),
+        stderr=subprocess.STDOUT,
     )
-    if res.returncode != 0:
-        raise RuntimeError(f"server not ready on :{port}: {res.stderr.strip()}")
+    try:
+        subprocess.run(
+            _launcher_args("wait", listen, str(boot_timeout_s)),
+            check=True,
+        )
+    except Exception:
+        _proxy_stop(proc)
+        raise
+    print("[proxy] ready", file=sys.stderr)
+    return proc
 
 
-def teardown(container_name: str) -> None:
-    subprocess.run([str(SERVE_SH), "down", container_name],
-                   capture_output=True, text=True, check=False)
+def _proxy_stop(proc: subprocess.Popen[bytes]) -> None:
+    print("[proxy] stopping llama-swap", file=sys.stderr)
+    if proc.poll() is None:
+        proc.terminate()
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait(timeout=5)
+    # Defensive: even if the proxy exited cleanly, sweep orphans that a
+    # crashed `cmd` might have left behind.
+    subprocess.run(_launcher_args("sweep"), check=False)
 
+
+# --- Call wrapper -----------------------------------------------------------
 
 def call_one(
     client: ChatClient,
@@ -129,12 +158,14 @@ WARMUP_SYSTEM = "You are a helpful assistant. Answer concisely."
 WARMUP_USER = "Say 'ready' and nothing else."
 
 
-def _warmup(client: ChatClient, timeout_s: float) -> None:
-    """Fire one throwaway call to prime caches / JIT / first-batch paths.
+def _warmup(client: ChatClient) -> None:
+    """Fire one throwaway call so the timed matrix starts hot.
 
-    llama.cpp's first post-boot call typically pays a graph-build and
-    weight-page-in cost that skews tokens/sec and TTFT by 10-50x. Burning
-    one call here keeps the timed matrix representative of steady-state.
+    With llama-swap in front, the first call to a given model name
+    triggers an unload-of-previous + boot-of-requested backend. On
+    unified-memory APUs that can add seconds of graph-build and
+    weight-page-in cost. We absorb that here, outside the PowerSampler
+    wrapper, so it never contaminates a recorded row.
     """
     try:
         client.chat([
@@ -145,72 +176,67 @@ def _warmup(client: ChatClient, timeout_s: float) -> None:
         print(f"[warmup-err] {e}", file=sys.stderr)
 
 
+# --- Phases -----------------------------------------------------------------
+
 def run_model_phase(
     model_cfg: dict[str, Any],
     tasks: list[Task],
     prompts: list[dict[str, Any]],
-    server_cfg: dict[str, Any],
-    models_dir: Path,
+    base_url: str,
     cost_cfg: dict[str, Any],
     timeout_s: float,
     warmup: bool = True,
 ) -> list[dict[str, Any]]:
-    mid = model_cfg["id"]
-    port = int(server_cfg["port"])
-    ctx = int(model_cfg.get("ctx", server_cfg.get("ctx", 4096)))
-    boot_timeout = int(server_cfg.get("boot_timeout_s", 300))
+    """Run every (task x prompt) cell for one model against the proxy.
 
-    print(f"[phase] booting {mid} ({model_cfg['gguf']})", file=sys.stderr)
-    container = boot(
-        model_cfg["gguf"], model_cfg["alias"], port, ctx,
-        server_cfg, models_dir,
-        n_cpu_moe=model_cfg.get("n_cpu_moe"),
+    `model_cfg["id"]` is the llama-swap routing key (not `alias` — the
+    alias stays inside the generated `cmd` as llama.cpp's `-a` flag).
+    """
+    mid = model_cfg["id"]
+    print(f"[phase] {mid}", file=sys.stderr)
+
+    client = ChatClient(
+        base_url=base_url,
+        model=mid,
+        api_key="none",
+        timeout_s=timeout_s,
     )
+    if warmup:
+        print(f"[warmup] {mid}", file=sys.stderr)
+        _warmup(client)
+
+    cost_enabled = bool(cost_cfg.get("enabled"))
+    kwh = float(cost_cfg.get("kwh_rate_usd", 0.0))
+    gpu_i = int(cost_cfg.get("gpu_index", 0))
+    sample_hz = float(cost_cfg.get("sample_hz", 10.0))
+
     records: list[dict[str, Any]] = []
-    try:
-        wait_ready(port, boot_timeout)
-        client = ChatClient(
-            base_url=f"http://127.0.0.1:{port}/v1",
-            model=model_cfg["alias"],
-            api_key="none",
-            timeout_s=timeout_s,
-        )
-        if warmup:
-            print(f"[warmup] {mid}", file=sys.stderr)
-            _warmup(client, timeout_s)
-        cost_enabled = bool(cost_cfg.get("enabled"))
-        kwh = float(cost_cfg.get("kwh_rate_usd", 0.0))
-        gpu_i = int(cost_cfg.get("gpu_index", 0))
-        sample_hz = float(cost_cfg.get("sample_hz", 10.0))
-        for task, prm in itertools.product(tasks, prompts):
-            try:
-                res, wh, usd = call_one(client, prm["system"], task.user_prompt,
-                                        gpu_i, cost_enabled, kwh, sample_hz)
-                records.append({
-                    "task_id": task.id, "domain": task.domain,
-                    "prompt_id": prm["id"], "model_id": mid,
-                    "text": res.text,
-                    "prompt_tokens": res.prompt_tokens,
-                    "completion_tokens": res.completion_tokens,
-                    "latency_s": res.latency_s,
-                    "ttft_s": res.ttft_s,
-                    "tokens_per_sec": res.tokens_per_sec,
-                    "energy_wh": wh, "cost_usd": usd,
-                    "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
-                    "error": None,
-                })
-                print(f"[run] {mid} {prm['id']} {task.id} {res.latency_s:.2f}s",
-                      file=sys.stderr)
-            except Exception as e:
-                records.append({
-                    "task_id": task.id, "domain": task.domain,
-                    "prompt_id": prm["id"], "model_id": mid,
-                    "error": str(e),
-                })
-                print(f"[err] {mid} {prm['id']} {task.id}: {e}", file=sys.stderr)
-    finally:
-        print(f"[phase] tearing down {mid}", file=sys.stderr)
-        teardown(container)
+    for task, prm in itertools.product(tasks, prompts):
+        try:
+            res, wh, usd = call_one(client, prm["system"], task.user_prompt,
+                                    gpu_i, cost_enabled, kwh, sample_hz)
+            records.append({
+                "task_id": task.id, "domain": task.domain,
+                "prompt_id": prm["id"], "model_id": mid,
+                "text": res.text,
+                "prompt_tokens": res.prompt_tokens,
+                "completion_tokens": res.completion_tokens,
+                "latency_s": res.latency_s,
+                "ttft_s": res.ttft_s,
+                "tokens_per_sec": res.tokens_per_sec,
+                "energy_wh": wh, "cost_usd": usd,
+                "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
+                "error": None,
+            })
+            print(f"[run] {mid} {prm['id']} {task.id} {res.latency_s:.2f}s",
+                  file=sys.stderr)
+        except Exception as e:
+            records.append({
+                "task_id": task.id, "domain": task.domain,
+                "prompt_id": prm["id"], "model_id": mid,
+                "error": str(e),
+            })
+            print(f"[err] {mid} {prm['id']} {task.id}: {e}", file=sys.stderr)
     return records
 
 
@@ -310,8 +336,7 @@ def run_judge_phase(
     tasks: list[Task],
     prompts: list[dict[str, Any]],
     records: list[dict[str, Any]],
-    server_cfg: dict[str, Any],
-    models_dir: Path,
+    base_url: str,
     timeout_s: float,
     seed: int,
     warmup: bool = True,
@@ -338,44 +363,32 @@ def run_judge_phase(
     if mode == "scored" and len(models) < 1:
         return []
 
-    port = int(server_cfg["port"])
-    ctx = int(judge_cfg.get("ctx", server_cfg.get("ctx", 8192)))
-    boot_timeout = int(server_cfg.get("boot_timeout_s", 300))
+    judge_id = str(judge_cfg.get("id") or "judge")
+    print(f"[phase] judge ({judge_id}), mode={mode}", file=sys.stderr)
 
-    print(f"[phase] booting judge ({judge_cfg['gguf']}), mode={mode}", file=sys.stderr)
-    container = boot(
-        judge_cfg["gguf"], judge_cfg["alias"], port, ctx,
-        server_cfg, models_dir,
-        n_cpu_moe=judge_cfg.get("n_cpu_moe"),
+    judge = ChatClient(
+        base_url=base_url,
+        model=judge_id,
+        api_key="none",
+        timeout_s=timeout_s,
     )
-    judgements: list[dict[str, Any]] = []
-    try:
-        wait_ready(port, boot_timeout)
-        judge = ChatClient(
-            base_url=f"http://127.0.0.1:{port}/v1",
-            model=judge_cfg["alias"],
-            api_key="none",
-            timeout_s=timeout_s,
-        )
-        if warmup:
-            print("[warmup] judge", file=sys.stderr)
-            _warmup(judge, timeout_s)
-        if mode == "pairwise_all":
-            rng = random.Random(seed)
-            judgements = _pairwise_all_phase(judge, models, tasks, prompts, records, rng)
-        else:  # scored
-            judgements = _scored_phase(judge, models, tasks, prompts, records)
-    finally:
-        print("[phase] tearing down judge", file=sys.stderr)
-        teardown(container)
-    return judgements
+    if warmup:
+        print(f"[warmup] {judge_id}", file=sys.stderr)
+        _warmup(judge)
 
+    if mode == "pairwise_all":
+        rng = random.Random(seed)
+        return _pairwise_all_phase(judge, models, tasks, prompts, records, rng)
+    return _scored_phase(judge, models, tasks, prompts, records)
+
+
+# --- Entry point ------------------------------------------------------------
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--dry-run", action="store_true",
-                    help="Parse + gen dataset, no container or network calls.")
+                    help="Parse + gen dataset, no proxy startup or network calls.")
     args = ap.parse_args()
 
     cfg = load_config(Path(args.config))
@@ -401,11 +414,16 @@ def main() -> int:
     print(f"[dataset] {len(tasks)} tasks -> {ds_path}", file=sys.stderr)
 
     if args.dry_run:
-        print("[dry-run] dataset ok, skipping container phases", file=sys.stderr)
+        # Also exercise the llama-swap generator so a misconfigured
+        # models[] block trips CI's dry-run step instead of a live
+        # benchmark run.
+        models_dir = resolve_models_dir(server_cfg)
+        llama_swap.build(cfg, str(models_dir))
+        print("[dry-run] dataset + proxy config ok", file=sys.stderr)
         return 0
 
-    if not SERVE_SH.exists():
-        print(f"[error] missing launcher: {SERVE_SH}", file=sys.stderr)
+    if not LAUNCHER.exists():
+        print(f"[error] missing launcher: {LAUNCHER}", file=sys.stderr)
         return 2
 
     models_dir = resolve_models_dir(server_cfg)
@@ -413,21 +431,31 @@ def main() -> int:
     models = cfg["models"]
     timeout_s = float(run_cfg.get("timeout_s", 180))
     warmup = bool(run_cfg.get("warmup", True))
+    swap_port = int(server_cfg.get("swap_port", 8080))
+    boot_timeout = int(server_cfg.get("boot_timeout_s", 300))
+    listen = f"127.0.0.1:{swap_port}"
+    base_url = f"http://{listen}/v1"
 
-    # 2. Per-model phases (sequential)
-    all_records: list[dict[str, Any]] = []
-    for m in models:
-        recs = run_model_phase(m, tasks, prompts, server_cfg, models_dir,
-                               cost_cfg, timeout_s, warmup=warmup)
-        all_records.extend(recs)
+    _write_proxy_config(cfg, models_dir, LLAMA_SWAP_CONFIG)
+    proxy = _proxy_start(listen, LLAMA_SWAP_CONFIG, boot_timeout)
 
-    # 3. Judge phase
-    judgements = run_judge_phase(
-        judge_cfg, models, tasks, prompts, all_records,
-        server_cfg, models_dir, timeout_s,
-        seed=int(run_cfg.get("seed", 42)),
-        warmup=warmup,
-    )
+    try:
+        # 2. Per-model phases (sequential — see invariant above).
+        all_records: list[dict[str, Any]] = []
+        for m in models:
+            recs = run_model_phase(m, tasks, prompts, base_url,
+                                   cost_cfg, timeout_s, warmup=warmup)
+            all_records.extend(recs)
+
+        # 3. Judge phase
+        judgements = run_judge_phase(
+            judge_cfg, models, tasks, prompts, all_records,
+            base_url, timeout_s,
+            seed=int(run_cfg.get("seed", 42)),
+            warmup=warmup,
+        )
+    finally:
+        _proxy_stop(proxy)
 
     # 4. Emit
     out_json = out_dir / f"run-{ts}.json"

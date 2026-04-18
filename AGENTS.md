@@ -1,6 +1,6 @@
 # AGENTS.md — LLM onboarding
 
-Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` container over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; runner boots one model at a time (unified-memory APU constraint), runs all calls, tears down, then runs a separate judge phase.
+Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap` proxy sitting in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` containers, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on `llama-swap`'s singleton swap to unload the previous backend before the next boots. Judge runs as its own swap target after the A/B phases.
 
 **Claude Code:** `CLAUDE.md` is a symlink to this file. Edit **AGENTS.md**.
 
@@ -12,25 +12,31 @@ Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `podman` + 
 
 ```
 config.yaml          single source of truth (server, models, prompts, dataset, judge, cost, output)
-bin/serve.sh         podman launcher / teardown (`down-all` nukes every bench-llama-* container)
+bin/llama-swap.sh    llama-swap launcher: up (sweep stragglers + exec binary) / down / sweep / wait
 bench/
   clients.py         httpx OpenAI-compat client; prefers `content`, falls back to `reasoning_content`
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
   download.py        huggingface_hub fetcher; writes `<models_dir>/<repo_id>/<filename>`
+  llama_swap.py      pure config generator: bakeoff config.yaml → llama-swap proxy config
   metrics.py         heuristic scorers + judge prompts + nvidia-smi / rocm-smi power sampling
-  runner.py          boot → run all calls → teardown, per model; then judge phase
+  runner.py          start proxy → warmup + matrix per model → judge → stop proxy
   report.py          JSON + Markdown + single-file HTML dashboard (Chart.js via CDN)
-run.sh               uv venv + uv pip install + uv run; `fetch` subcommand → bench.download
+run.sh               uv venv + uv pip install + pinned llama-swap bootstrap + uv run;
+                     `fetch` subcommand → bench.download
+.cache/              vendored llama-swap binary + generated proxy config (gitignored)
 datasets/ results/   generated artifacts (gitignored)
 ```
 
 ## Design invariants (don't break silently)
 
-- **One model in VRAM at a time.** Unified-memory APU (Strix Halo / Radeon 8060S) can't hold A + B + judge concurrently. Phases are sequential by design — don't "optimize" to parallel boot.
-- **Judge runs as its own phase** after every model has completed and been torn down. Judge results reference stored per-call outputs, not live model state.
+- **One model in VRAM at a time.** Unified-memory APU (Strix Halo / Radeon 8060S) can't hold A + B + judge concurrently. `llama-swap`'s default behaviour — unload current before starting next — enforces this at the proxy. No groups, no exclusive profiles; the default applies. `globalTTL: 0` (and per-model `ttl: 0`) in the generated config stops an idle model from silently unloading mid-matrix and forcing a silent re-boot inside a timed call.
+- **Runner iterates per-model-sequentially.** All (task × prompt) cells for model A finish before any call lands for model B. A full benchmark incurs exactly N swaps (N+1 with judge), not one per cell. A round-robin outer loop would turn every cell into a swap and invalidate the energy + latency numbers. Preserve this iteration order if you touch `run_model_phase` / `main`.
+- **Warmup absorbs swap + first-batch cost.** The first call to a model id is made outside the `PowerSampler` wrapper so the swap (which can pay graph-build + weight-page-in) does not leak into any recorded row.
+- **`sendLoadingState: false` in the generated proxy config.** Otherwise `llama-swap` injects a loading message into `reasoning_content` during boot; the `ChatClient` falls back to `reasoning_content` when `content` is empty, so warmup could silently capture the loading text as the answer.
+- **Judge runs as its own proxy entry** (`models[<judge_id>]`), not a separate subprocess of the runner. The judge swap follows the last A/B model's teardown exactly once.
 - **Pairwise order randomized per call** (seeded from `run.seed`); swapped verdicts inverted before counting. Every judgement records `order: "AB" | "BA"`. Mitigates 5-15% positional bias.
-- **Cost axis is energy, not tokens.** `nvidia-smi --query-gpu=power.draw` or `rocm-smi --showpower` sampled at call start + end. Neither available → `energy_wh` / `cost_usd` set to `null`. Do not substitute latency.
-- **`mmproj-*` files are vision projectors, not standalone models.** Never list under `models:`.
+- **Cost axis is energy, not tokens.** `nvidia-smi --query-gpu=power.draw` or `rocm-smi --showpower` sampled during the call. Neither available → `energy_wh` / `cost_usd` set to `null`. Do not substitute latency.
+- **`mmproj-*` files are vision projectors, not standalone models.** Never list under `models:`. The generator rejects them outright.
 
 ## Hardware caveats
 
@@ -46,7 +52,9 @@ datasets/ results/   generated artifacts (gitignored)
 
 ## When editing
 
-- `config.yaml` is the contract. Add new knobs there first, then wire through `runner.py` / `serve.sh`. Don't hard-code.
+- `config.yaml` is the contract. Add new knobs there first, then wire through `runner.py` and/or `llama_swap.py`. Don't hard-code.
+- Backend container flags (image args, ctx, ngl, etc.) are rendered into `cmd` strings inside `bench/llama_swap.py`. Changes there are covered by `tests/test_llama_swap.py` — keep the structural assertions current.
+- Bumping the pinned `llama-swap` version means updating `LLAMA_SWAP_VERSION` **and** the matching per-platform SHA256 constants in `run.sh`. A mismatch aborts the bootstrap; never silence the check.
 - Every new scorer/judge mode must preserve the JSON record shape in `results/run-<ts>.json` — the HTML dashboard reads it verbatim.
 - Python env: `uv`. No `python -m venv`, no bare `pip`.
 - Match style in touched files; no drive-by refactors.

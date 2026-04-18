@@ -4,7 +4,7 @@
 [![license](https://img.shields.io/github/license/Rethunk-AI/bakeoff)](LICENSE)
 [![python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](pyproject.toml)
 
-Small harness that serves models from `~/.lmstudio/models/` through a `llama.cpp` podman container and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models: round-robin tournament (`pairwise_all`) or absolute rubric (`scored`). Emits JSON, Markdown, and a single-file HTML dashboard.
+Small harness that serves models from `~/.lmstudio/models/` through a [`llama-swap`](https://github.com/mostlygeek/llama-swap) proxy in front of `llama.cpp` podman containers, and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models: round-robin tournament (`pairwise_all`) or absolute rubric (`scored`). Emits JSON, Markdown, and a single-file HTML dashboard.
 
 Matrix: `tasks × prompt_variants × models`.
 
@@ -24,8 +24,8 @@ Matrix: `tasks × prompt_variants × models`.
 
 | Concern | Choice | Reason |
 |---|---|---|
-| Serving | `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` | Works on AMD (Strix Halo tested), NVIDIA, Intel without per-backend wrangling. No `llama-server` binary ships in LM Studio's own `~/.lmstudio/extensions/backends/*/` — only `.so` libraries for LM Studio's internal runtime. |
-| One model at a time | Sequential phase per model: boot → run all calls → tear down → next | Unified-memory APUs (and modest-VRAM discrete GPUs) can't hold A + B + judge concurrently. Serial is honest. |
+| Serving | `llama-swap` proxy in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` | `llama-swap` owns model lifecycle (boot/unload on demand). The Vulkan image works on AMD (Strix Halo tested), NVIDIA, Intel without per-backend wrangling. No `llama-server` binary ships in LM Studio's own `~/.lmstudio/extensions/backends/*/` — only `.so` libraries for LM Studio's internal runtime. |
+| One model at a time | `llama-swap` unloads current backend before starting next; runner iterates per-model-sequentially on top of that | Unified-memory APUs (and modest-VRAM discrete GPUs) can't hold A + B + judge concurrently. Each model pays exactly one swap, absorbed by warmup. |
 | Transport | OpenAI-compatible `/v1/chat/completions` | llama.cpp server exposes it; one client class works for Ollama, vLLM, LM Studio, llama.cpp. |
 | Quality scorer | `pairwise_all` tournament (default) or `scored` 1-5 rubric via LLM judge; plus heuristic (`exact` / `contains` / `regex`) for structured tasks | Tournament gives sharp ranking on small N (2-4); rubric scales linearly for larger N. Heuristics catch hard ground-truth items without a judge round trip. |
 | Pairwise positional-bias mitigation | Order randomized per call (seeded from `run.seed`); swapped verdicts inverted before counting | Judges show a 5-15% preference for slot A; flipping per call averages it out across the matrix. `order: "AB" \| "BA"` is stored on every judgement. |
@@ -40,9 +40,10 @@ Matrix: `tasks × prompt_variants × models`.
 
 ```
 config.yaml          the contract
-bin/serve.sh         podman launcher
-bench/               clients · dataset · download · metrics · runner · report
-run.sh               uv venv + install + run
+bin/llama-swap.sh    proxy launcher (up / down / sweep / wait)
+bench/               clients · dataset · download · llama_swap · metrics · runner · report
+run.sh               uv venv + install + pinned llama-swap bootstrap + run
+.cache/              vendored llama-swap binary + generated proxy config (gitignored)
 datasets/            generated inputs (gitignored)
 results/             run-<ts>.json / .md / .html (gitignored)
 ```

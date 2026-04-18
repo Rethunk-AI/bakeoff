@@ -6,6 +6,7 @@ run:
   name: "ab-run-001"
   seed: 42
   timeout_s: 180      # per HTTP call (first call after boot can be slow)
+  warmup: true        # throw away one call after each boot (JIT / first-batch skew)
 
 # ---------- Serving ---------------------------------------------------------
 # Shared llama.cpp container args. Per-model overrides live under models[].

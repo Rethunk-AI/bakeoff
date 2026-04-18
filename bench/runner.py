@@ -125,6 +125,26 @@ def call_one(
     return res, wh, usd
 
 
+WARMUP_SYSTEM = "You are a helpful assistant. Answer concisely."
+WARMUP_USER = "Say 'ready' and nothing else."
+
+
+def _warmup(client: ChatClient, timeout_s: float) -> None:
+    """Fire one throwaway call to prime caches / JIT / first-batch paths.
+
+    llama.cpp's first post-boot call typically pays a graph-build and
+    weight-page-in cost that skews tokens/sec and TTFT by 10-50x. Burning
+    one call here keeps the timed matrix representative of steady-state.
+    """
+    try:
+        client.chat([
+            {"role": "system", "content": WARMUP_SYSTEM},
+            {"role": "user", "content": WARMUP_USER},
+        ])
+    except Exception as e:
+        print(f"[warmup-err] {e}", file=sys.stderr)
+
+
 def run_model_phase(
     model_cfg: dict[str, Any],
     tasks: list[Task],
@@ -133,6 +153,7 @@ def run_model_phase(
     models_dir: Path,
     cost_cfg: dict[str, Any],
     timeout_s: float,
+    warmup: bool = True,
 ) -> list[dict[str, Any]]:
     mid = model_cfg["id"]
     port = int(server_cfg["port"])
@@ -154,6 +175,9 @@ def run_model_phase(
             api_key="none",
             timeout_s=timeout_s,
         )
+        if warmup:
+            print(f"[warmup] {mid}", file=sys.stderr)
+            _warmup(client, timeout_s)
         cost_enabled = bool(cost_cfg.get("enabled"))
         kwh = float(cost_cfg.get("kwh_rate_usd", 0.0))
         gpu_i = int(cost_cfg.get("gpu_index", 0))
@@ -289,6 +313,7 @@ def run_judge_phase(
     models_dir: Path,
     timeout_s: float,
     seed: int,
+    warmup: bool = True,
 ) -> list[dict[str, Any]]:
     """Dispatch judge phase based on judge.mode.
 
@@ -331,6 +356,9 @@ def run_judge_phase(
             api_key="none",
             timeout_s=timeout_s,
         )
+        if warmup:
+            print("[warmup] judge", file=sys.stderr)
+            _warmup(judge, timeout_s)
         if mode == "pairwise_all":
             rng = random.Random(seed)
             judgements = _pairwise_all_phase(judge, models, tasks, prompts, records, rng)
@@ -383,12 +411,13 @@ def main() -> int:
     prompts = cfg["prompts"]
     models = cfg["models"]
     timeout_s = float(run_cfg.get("timeout_s", 180))
+    warmup = bool(run_cfg.get("warmup", True))
 
     # 2. Per-model phases (sequential)
     all_records: list[dict[str, Any]] = []
     for m in models:
         recs = run_model_phase(m, tasks, prompts, server_cfg, models_dir,
-                               cost_cfg, timeout_s)
+                               cost_cfg, timeout_s, warmup=warmup)
         all_records.extend(recs)
 
     # 3. Judge phase
@@ -396,6 +425,7 @@ def main() -> int:
         judge_cfg, models, tasks, prompts, all_records,
         server_cfg, models_dir, timeout_s,
         seed=int(run_cfg.get("seed", 42)),
+        warmup=warmup,
     )
 
     # 4. Emit

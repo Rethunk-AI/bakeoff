@@ -13,6 +13,26 @@ from pathlib import Path
 from statistics import mean, pstdev
 from typing import Any
 
+# --- percentile helpers ----------------------------------------------------
+
+def _percentile(xs: list[float], p: float) -> float | None:
+    """Linear-interpolation percentile. p in [0, 100]. Returns None for [].
+
+    Matches numpy's default (method="linear") so cross-checking against a
+    pandas/numpy rollup during debugging doesn't produce spurious deltas.
+    """
+    if not xs:
+        return None
+    s = sorted(xs)
+    if len(s) == 1:
+        return float(s[0])
+    k = (len(s) - 1) * (p / 100.0)
+    lo = int(k)
+    hi = min(lo + 1, len(s) - 1)
+    frac = k - lo
+    return float(s[lo] + (s[hi] - s[lo]) * frac)
+
+
 # --- numeric rollup from records -------------------------------------------
 
 def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
@@ -25,6 +45,7 @@ def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     out: dict[str, dict[str, Any]] = {}
     for mid, rows in by_model.items():
         lat = [r["latency_s"] for r in rows if r.get("latency_s") is not None]
+        ttft = [r["ttft_s"] for r in rows if r.get("ttft_s") is not None]
         tps = [r["tokens_per_sec"] for r in rows if r.get("tokens_per_sec")]
         wh = [r["energy_wh"] for r in rows if r.get("energy_wh") is not None]
         usd = [r["cost_usd"] for r in rows if r.get("cost_usd") is not None]
@@ -32,6 +53,13 @@ def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         out[mid] = {
             "n": len(rows),
             "latency_mean_s": mean(lat) if lat else None,
+            "latency_p50_s": _percentile(lat, 50),
+            "latency_p95_s": _percentile(lat, 95),
+            "latency_p99_s": _percentile(lat, 99),
+            "ttft_mean_s": mean(ttft) if ttft else None,
+            "ttft_p50_s": _percentile(ttft, 50),
+            "ttft_p95_s": _percentile(ttft, 95),
+            "ttft_p99_s": _percentile(ttft, 99),
             "tokens_per_sec_mean": mean(tps) if tps else None,
             "energy_wh_total": sum(wh) if wh else None,
             "cost_usd_total": sum(usd) if usd else None,
@@ -179,6 +207,34 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
 
     lines.append("")
 
+    # Latency distribution + TTFT: a separate section keeps the rollup
+    # table narrow while still surfacing the tails that mean hides.
+    lines.append("## Latency distribution (s)")
+    lines.append("")
+    lines.append("| Model | mean | p50 | p95 | p99 |")
+    lines.append("|---|---:|---:|---:|---:|")
+    for mid, r in roll.items():
+        lines.append(
+            f"| {mid} | {_fmt(r['latency_mean_s'])} | "
+            f"{_fmt(r['latency_p50_s'])} | {_fmt(r['latency_p95_s'])} | "
+            f"{_fmt(r['latency_p99_s'])} |"
+        )
+    lines.append("")
+
+    # TTFT may be all-None on legacy runs that predate streaming; skip then.
+    if any(r.get("ttft_mean_s") is not None for r in roll.values()):
+        lines.append("## Time-to-first-token (s)")
+        lines.append("")
+        lines.append("| Model | mean | p50 | p95 | p99 |")
+        lines.append("|---|---:|---:|---:|---:|")
+        for mid, r in roll.items():
+            lines.append(
+                f"| {mid} | {_fmt(r['ttft_mean_s'])} | "
+                f"{_fmt(r['ttft_p50_s'])} | {_fmt(r['ttft_p95_s'])} | "
+                f"{_fmt(r['ttft_p99_s'])} |"
+            )
+        lines.append("")
+
     if mode == "pairwise":
         pr = _pairwise_rollup(judgements)
         lines.append("## Tournament (pairwise)")
@@ -248,6 +304,16 @@ th:first-child,td:first-child{{text-align:left}}
   <table id="rollup"></table>
 </div>
 
+<div class="card" style="margin-top:1.5rem">
+  <h2>Latency distribution (s)</h2>
+  <table id="lat_dist"></table>
+</div>
+
+<div class="card" style="margin-top:1.5rem" id="ttft_card" hidden>
+  <h2>Time-to-first-token (s)</h2>
+  <table id="ttft_dist"></table>
+</div>
+
 <div class="grid" style="margin-top:1.5rem">
   <div class="card"><h3>Mean latency (s)</h3><canvas id="c_lat"></canvas></div>
   <div class="card"><h3>Mean tokens/sec</h3><canvas id="c_tps"></canvas></div>
@@ -275,14 +341,25 @@ function detectMode(js) {{
 const mode = detectMode(data.judgements);
 document.getElementById("mode").textContent = mode || "none";
 
+function percentile(xs, p) {{
+  if (!xs.length) return null;
+  const s = [...xs].sort((a,b)=>a-b);
+  if (s.length === 1) return s[0];
+  const k = (s.length - 1) * (p / 100);
+  const lo = Math.floor(k);
+  const hi = Math.min(lo + 1, s.length - 1);
+  return s[lo] + (s[hi] - s[lo]) * (k - lo);
+}}
+
 function rollup(records) {{
   const by = {{}};
   for (const r of records) {{
     if (r.error) continue;
     const k = r.model_id;
-    by[k] ??= {{n:0, lat:[], tps:[], wh:[], usd:[], qh:[]}};
+    by[k] ??= {{n:0, lat:[], ttft:[], tps:[], wh:[], usd:[], qh:[]}};
     by[k].n++;
     if (r.latency_s != null) by[k].lat.push(r.latency_s);
+    if (r.ttft_s != null) by[k].ttft.push(r.ttft_s);
     if (r.tokens_per_sec) by[k].tps.push(r.tokens_per_sec);
     if (r.energy_wh != null) by[k].wh.push(r.energy_wh);
     if (r.cost_usd != null) by[k].usd.push(r.cost_usd);
@@ -295,6 +372,13 @@ function rollup(records) {{
     out[k] = {{
       n: v.n,
       latency_mean_s: mean(v.lat),
+      latency_p50_s: percentile(v.lat, 50),
+      latency_p95_s: percentile(v.lat, 95),
+      latency_p99_s: percentile(v.lat, 99),
+      ttft_mean_s: mean(v.ttft),
+      ttft_p50_s: percentile(v.ttft, 50),
+      ttft_p95_s: percentile(v.ttft, 95),
+      ttft_p99_s: percentile(v.ttft, 99),
       tokens_per_sec_mean: mean(v.tps),
       energy_wh_total: sum(v.wh),
       cost_usd_total: sum(v.usd),
@@ -400,6 +484,30 @@ bar("c_lat", "s",    models.map(m => roll[m].latency_mean_s ?? 0));
 bar("c_tps", "tok/s", models.map(m => roll[m].tokens_per_sec_mean ?? 0));
 bar("c_wh",  "Wh",    models.map(m => roll[m].energy_wh_total ?? 0));
 bar("c_usd", "USD",   models.map(m => roll[m].cost_usd_total ?? 0));
+
+// Latency distribution table
+(() => {{
+  const t = document.getElementById("lat_dist");
+  const header = "<tr><th>Model</th><th>mean</th><th>p50</th><th>p95</th><th>p99</th></tr>";
+  t.innerHTML = header + models.map(m => {{
+    const r = roll[m];
+    return `<tr><td>${{m}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.latency_p50_s)}}</td><td>${{fmt(r.latency_p95_s)}}</td><td>${{fmt(r.latency_p99_s)}}</td></tr>`;
+  }}).join("");
+}})();
+
+// TTFT distribution table — hidden if no streamed calls produced data.
+(() => {{
+  const anyTtft = models.some(m => roll[m].ttft_mean_s != null);
+  if (!anyTtft) return;
+  const card = document.getElementById("ttft_card");
+  card.hidden = false;
+  const t = document.getElementById("ttft_dist");
+  const header = "<tr><th>Model</th><th>mean</th><th>p50</th><th>p95</th><th>p99</th></tr>";
+  t.innerHTML = header + models.map(m => {{
+    const r = roll[m];
+    return `<tr><td>${{m}}</td><td>${{fmt(r.ttft_mean_s)}}</td><td>${{fmt(r.ttft_p50_s)}}</td><td>${{fmt(r.ttft_p95_s)}}</td><td>${{fmt(r.ttft_p99_s)}}</td></tr>`;
+  }}).join("");
+}})();
 
 // Judge section
 (() => {{

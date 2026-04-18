@@ -13,4 +13,13 @@ fi
 [ -d .venv ] || uv venv .venv
 uv pip install --quiet -r requirements.txt
 
-uv run python -m bench.runner --config config.yaml "$@"
+# Subcommands. Default: run the benchmark with the default config.
+case "${1:-}" in
+  fetch)
+    shift
+    exec uv run python -m bench.download "$@"
+    ;;
+  *)
+    exec uv run python -m bench.runner --config config.yaml "$@"
+    ;;
+esac

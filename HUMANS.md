@@ -17,7 +17,7 @@ Matrix: `tasks × prompt_variants × models`.
 
 - **`podman`** — runs the llama.cpp container.
 - **`uv`** — Python env management. See [installation](https://docs.astral.sh/uv/getting-started/installation/).
-- One or more GGUFs under `~/.lmstudio/models/` (or wherever `server.models_dir` points).
+- One or more GGUFs under `~/.lmstudio/models/` (or wherever `server.models_dir` points). Fetch them with `./run.sh fetch` — see [Downloading models](#downloading-models).
 - First container run pulls `ghcr.io/ggml-org/llama.cpp:server-vulkan` (~1 GB).
 
 AMD users: the image uses Vulkan, works on ROCm-supported GPUs and APUs without needing the ROCm userspace stack to be fully functional.
@@ -37,6 +37,27 @@ uv venv .venv
 uv pip install -r requirements.txt
 uv run python -m bench.runner --config config.yaml
 ```
+
+## Downloading models
+
+`./run.sh fetch` pulls GGUFs from Hugging Face into `server.models_dir`, matching the `<repo_id>/<filename>` layout that `config.yaml`'s `gguf:` paths already assume — so no config edits after fetching.
+
+```sh
+./run.sh fetch                               # every missing gguf in config.yaml
+./run.sh fetch --list                        # dry-run: show plan + total size
+./run.sh fetch <repo_id> <filename>          # ad-hoc, one file
+./run.sh fetch --config other.yaml           # alternate config
+```
+
+Ad-hoc example (pulls `<models_dir>/lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf`):
+
+```sh
+./run.sh fetch lmstudio-community/Qwen3.5-9B-GGUF Qwen3.5-9B-Q4_K_M.gguf
+```
+
+- Existing files are skipped (idempotent).
+- Gated repos (Llama, Gemma): `hf auth login` first, or export `HF_TOKEN=<token>`.
+- Faster transfers: `export HF_HUB_ENABLE_HF_TRANSFER=1` (optional; installs separately).
 
 ## Configuration
 

@@ -16,10 +16,11 @@ bin/serve.sh         podman launcher / teardown (`down-all` nukes every bench-ll
 bench/
   clients.py         httpx OpenAI-compat client; prefers `content`, falls back to `reasoning_content`
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
+  download.py        huggingface_hub fetcher; writes `<models_dir>/<repo_id>/<filename>`
   metrics.py         heuristic scorers + judge prompts + nvidia-smi / rocm-smi power sampling
   runner.py          boot → run all calls → teardown, per model; then judge phase
   report.py          JSON + Markdown + single-file HTML dashboard (Chart.js via CDN)
-run.sh               uv venv + uv pip install + uv run
+run.sh               uv venv + uv pip install + uv run; `fetch` subcommand → bench.download
 datasets/ results/   generated artifacts (gitignored)
 ```
 

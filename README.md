@@ -43,6 +43,7 @@ bin/serve.sh         minimal podman launcher for llama.cpp:server-vulkan
 bench/
   clients.py         OpenAI-compat HTTP client (httpx)
   dataset.py         seeded synthetic task generator
+  download.py        fetch GGUFs from Hugging Face into models_dir
   metrics.py         heuristic scoring, pairwise judge, nvidia/rocm power sampling
   runner.py          sequential boot → run → teardown orchestrator
   report.py          markdown + HTML dashboard emit
@@ -54,7 +55,8 @@ results/             run-<ts>.json / .md / .html
 ## Quick start
 
 ```sh
-./run.sh
+./run.sh fetch    # pull GGUFs referenced in config.yaml from Hugging Face
+./run.sh          # dataset + all phases + reports
 ```
 
 For prerequisites, configuration, and troubleshooting see [HUMANS.md](HUMANS.md).

@@ -68,7 +68,7 @@ Three-tier split prevents duplication and routes content to the right audience. 
 - **New troubleshooting recipe** → **HUMANS.md**
 - **New scorer / judge mode / runner phase** → **AGENTS.md** (invariants section) + **HUMANS.md** (usage)
 - **Typo / broken link** → fix in place
-- **Re-shuffled files** → update **README.md** layout + **AGENTS.md** layout + pointers
+- **Re-shuffled files** → update **AGENTS.md** § Layout (canonical, per-module behavior) + confirm **README.md**'s compact tree still reflects reality. README points to AGENTS for module notes; do **not** duplicate per-file annotations back into README.
 
 ### Drift patterns to consolidate
 
@@ -77,7 +77,21 @@ Three-tier split prevents duplication and routes content to the right audience. 
 - ✗ Design invariants in **HUMANS** → move to **AGENTS**
 - ✗ Global shell/git rules in any project file → delete; they live in `~/.claude/CLAUDE.md`
 - ✗ Duplicated command blocks in **README** and **HUMANS** → keep in **HUMANS**; README links
+- ✗ Per-module file annotations in **README** → trim to bare tree; canonical annotated layout is **AGENTS** § Layout
+- ✗ Environment / install instructions in **CONTRIBUTING** → keep in **HUMANS**; CONTRIBUTING only adds the dev-extras delta (`.[dev]`) and the PR checklist
 
 ### Keep it lean
 
 Single-repo project. No submodules, no nested package-manager split. Three files stay flat at repo root; no per-subdirectory `AGENTS.md`. If the project ever grows a submodule or a separable library, add a local `AGENTS.md` there following the same split.
+
+### Community-profile files (outside the three-tier split)
+
+These are **not** product documentation and are not governed by the three-tier split above. They are standard GitHub community-profile files that live at repo root by convention and are consumed by GitHub flows (PR surfacing, security-advisory prompts, community-health badge):
+
+- [`LICENSE`](LICENSE) — terms of use.
+- [`SECURITY.md`](SECURITY.md) — private disclosure policy.
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — PR routing + checklist. **Thin pointer only** — must not duplicate HUMANS (setup) or AGENTS (invariants).
+
+Do not fold any of these into README / HUMANS / AGENTS, and do not move them into a `docs/` directory — GitHub looks for them at root.
+
+A `docs/` directory is **not** warranted for this project. The three-tier split already covers product documentation at the right granularity; adding a folder would fragment without consolidating. Revisit only if a fourth distinct audience emerges that the existing tiers can't absorb.

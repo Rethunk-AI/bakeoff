@@ -4,10 +4,7 @@ This guide covers **prerequisites, installation, running, configuring, and troub
 
 ## What it does
 
-Serves one or more GGUFs from `~/.lmstudio/models/` through a `llama.cpp` podman container and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models:
-
-- **`pairwise_all`** — round-robin tournament; sharp ranking, cost `C(N,2) × tasks × prompts` judge calls.
-- **`scored`** — absolute 1-5 rubric; linear cost `N × tasks × prompts`.
+Serves one or more GGUFs from `~/.lmstudio/models/` through a `llama.cpp` podman container and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models with two judge modes: `pairwise_all` (round-robin tournament) and `scored` (absolute 1-5 rubric). Pick one — see [AGENTS § Judge mode selection](AGENTS.md#judge-mode-selection) for thresholds and cost formulas.
 
 Emits JSON, Markdown, and a single-file HTML dashboard under `results/`.
 
@@ -65,9 +62,7 @@ Ad-hoc example (pulls `<models_dir>/lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9
 
 - **Add models** — append entries under `models:`. No two-model limit. First two entries are A / B for pairwise judging; additional models are added to the tournament (pairwise) or the absolute rubric (scored).
 - **Prompt variants** — `prompts:` list; every task runs against every prompt against every model.
-- **Judge mode** — `judge.mode: pairwise_all` (default) or `judge.mode: scored`. Pick based on N:
-  - N = 2–4 → `pairwise_all` (sharp ranking; cost `C(N,2) × tasks × prompts`)
-  - N ≥ 5 → `scored` (linear cost `N × tasks × prompts`)
+- **Judge mode** — `judge.mode: pairwise_all` (default) or `judge.mode: scored`. Threshold + cost formulas live in [AGENTS § Judge mode selection](AGENTS.md#judge-mode-selection).
 - **Skip the judge entirely** — `judge.enabled: false`. Quality column shows only heuristic scores; tasks with `scorer: "judge"` emit `null`.
 - **Per-model context** — set `ctx:` on a model entry to override `server.ctx` (useful when one model has larger KV demands).
 - **MoE model OOM** — uncomment `n_cpu_moe: 999` on the model entry to spill experts to CPU.

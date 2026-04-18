@@ -14,6 +14,7 @@ Matrix: `tasks × prompt_variants × models`.
 
 - **[HUMANS.md](HUMANS.md)** — operators & developers: prerequisites, install, run, configure, troubleshoot, clean up.
 - **[AGENTS.md](AGENTS.md)** — LLMs & contributors: design invariants, hardware caveats, judge-mode selection, editing conventions. `CLAUDE.md` is a symlink here.
+- **[CONTRIBUTING.md](CONTRIBUTING.md)** — opening a PR: pre-commit checklist, commit style, what not to change without discussing.
 
 **Reference:**
 
@@ -38,19 +39,15 @@ Matrix: `tasks × prompt_variants × models`.
 ## Layout
 
 ```
-config.yaml          server, models, prompts, dataset, judge, cost, output
-bin/serve.sh         minimal podman launcher for llama.cpp:server-vulkan
-bench/
-  clients.py         OpenAI-compat HTTP client (httpx)
-  dataset.py         seeded synthetic task generator
-  download.py        fetch GGUFs from Hugging Face into models_dir
-  metrics.py         heuristic scoring, pairwise judge, nvidia/rocm power sampling
-  runner.py          sequential boot → run → teardown orchestrator
-  report.py          markdown + HTML dashboard emit
+config.yaml          the contract
+bin/serve.sh         podman launcher
+bench/               clients · dataset · download · metrics · runner · report
 run.sh               uv venv + install + run
-datasets/            generated tasks-<ts>.jsonl
-results/             run-<ts>.json / .md / .html
+datasets/            generated inputs (gitignored)
+results/             run-<ts>.json / .md / .html (gitignored)
 ```
+
+Per-module breakdown with behavior notes: [`AGENTS.md` § Layout](AGENTS.md#layout).
 
 ## Quick start
 

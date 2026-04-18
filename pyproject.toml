@@ -1,0 +1,41 @@
+[project]
+name = "bakeoff"
+version = "0.1.0"
+description = "Local LLM N-vs-N benchmark harness (llama.cpp podman + OpenAI-compat)."
+requires-python = ">=3.10"
+readme = "README.md"
+license = { file = "LICENSE" }
+dependencies = [
+    "httpx>=0.27",
+    "pyyaml>=6",
+]
+
+[project.optional-dependencies]
+dev = [
+    "mypy>=1.10",
+    "ruff>=0.5",
+    "types-PyYAML>=6",
+]
+
+# --- Ruff ------------------------------------------------------------------
+# Runner/reporter text contains user-facing Unicode (×, em dashes, etc.) by
+# design; fixture prompts in dataset.py are long literal strings. Keep lint
+# discipline but exempt those.
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"bench/dataset.py" = ["E501"]   # fixture prompts are intentionally long
+"bench/report.py"  = ["RUF001", "E501"] # intentional × in UI strings; long literal HTML/table rows
+
+# --- Mypy ------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true

@@ -1,0 +1,15 @@
+# Default owner for everything in this repo.
+# GitHub uses the LAST matching pattern, so order from general to specific.
+
+*                           @AlbinoGeek
+
+# LLM onboarding / project governance — changes here affect every future
+# contributor (human or agent), so route explicitly.
+/AGENTS.md                  @AlbinoGeek
+/CLAUDE.md                  @AlbinoGeek
+/HUMANS.md                  @AlbinoGeek
+/README.md                  @AlbinoGeek
+
+# CI + repo hygiene
+/.github/                   @AlbinoGeek
+/pyproject.toml             @AlbinoGeek

@@ -1,5 +1,9 @@
 # Local LLM N-vs-N Benchmark (LM Studio GGUFs via llama.cpp)
 
+[![ci](https://github.com/Rethunk-AI/bakeoff/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Rethunk-AI/bakeoff/actions/workflows/ci.yml)
+[![license](https://img.shields.io/github/license/Rethunk-AI/bakeoff)](LICENSE)
+[![python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](pyproject.toml)
+
 Small harness that serves models from `~/.lmstudio/models/` through a `llama.cpp` podman container and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models: round-robin tournament (`pairwise_all`) or absolute rubric (`scored`). Emits JSON, Markdown, and a single-file HTML dashboard.
 
 Matrix: `tasks × prompt_variants × models`.

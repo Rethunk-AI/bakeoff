@@ -19,7 +19,7 @@ jobs:
     name: python lint + type + dry-run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v5
         with:
@@ -47,7 +47,7 @@ jobs:
     name: shell scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Shellcheck
         run: shellcheck bin/serve.sh run.sh
@@ -56,7 +56,7 @@ jobs:
     name: actionlint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install actionlint
         run: |

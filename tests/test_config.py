@@ -250,15 +250,18 @@ class TestJudge:
 # --- validate_config — server numeric fields --------------------------------
 
 
+_SERVER_FIELDS = ["ctx", "ngl", "ubatch", "boot_timeout_s", "swap_port", "backend_start_port"]
+
+
 class TestServerNumerics:
-    @pytest.mark.parametrize("field", ["ctx", "ngl", "ubatch", "boot_timeout_s", "swap_port", "backend_start_port"])
+    @pytest.mark.parametrize("field", _SERVER_FIELDS)
     def test_negative_server_field(self, field):
         cfg = _cfg()
         cfg["server"][field] = -1
         issues = validate_config(cfg)
         assert any(i.path == f"server.{field}" for i in issues)
 
-    @pytest.mark.parametrize("field", ["ctx", "ngl", "ubatch", "boot_timeout_s", "swap_port", "backend_start_port"])
+    @pytest.mark.parametrize("field", _SERVER_FIELDS)
     def test_zero_server_field(self, field):
         cfg = _cfg()
         cfg["server"][field] = 0

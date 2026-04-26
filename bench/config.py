@@ -39,7 +39,7 @@ def load_config(path: Path) -> dict[str, Any]:
         with path.open() as f:
             data = yaml.safe_load(f)
     except FileNotFoundError:
-        raise ConfigError(f"config file not found: {path}")
+        raise ConfigError(f"config file not found: {path}") from None
     except yaml.YAMLError as e:
         raise ConfigError(f"YAML parse error in {path}: {e}") from e
     if not isinstance(data, dict):
@@ -147,15 +147,15 @@ def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
 
         judge_id = str(judge.get("id") or "judge")
         if judge_id in seen_model_ids:
-            err("judge.id", f"judge id {judge_id!r} collides with a model id; set judge.id to a distinct value")
+            err("judge.id",
+                f"judge id {judge_id!r} collides with a model id; set judge.id to a distinct value")
 
     # Server — positive numeric fields
     server = cfg.get("server") or {}
     for field in ("ctx", "ngl", "ubatch", "boot_timeout_s", "swap_port", "backend_start_port"):
         v = server.get(field)
-        if v is not None:
-            if not isinstance(v, (int, float)) or v <= 0:
-                err(f"server.{field}", f"must be a positive number, got {v!r}")
+        if v is not None and (not isinstance(v, (int, float)) or v <= 0):
+            err(f"server.{field}", f"must be a positive number, got {v!r}")
 
     # Cost
     cost = cfg.get("cost") or {}

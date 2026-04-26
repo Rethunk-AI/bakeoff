@@ -196,6 +196,26 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
     lines.append(f"Timestamp: `{payload['timestamp']}`")
     if mode:
         lines.append(f"Judge mode: `{mode}`")
+    prov = payload.get("provenance") or {}
+    if prov:
+        git = prov.get("git") or {}
+        parts = []
+        if git.get("sha"):
+            dirty = " (dirty)" if git.get("dirty") else ""
+            parts.append(f"git `{git['sha']}{dirty}`")
+        if prov.get("config_hash"):
+            parts.append(f"config `{prov['config_hash']}`")
+        if prov.get("seed") is not None:
+            parts.append(f"seed `{prov['seed']}`")
+        if prov.get("llama_swap_version"):
+            parts.append(f"llama-swap `{prov['llama_swap_version']}`")
+        if prov.get("server_image"):
+            parts.append(f"image `{prov['server_image']}`")
+        if prov.get("python"):
+            py = prov["python"].split()[0]
+            parts.append(f"Python `{py}`")
+        if parts:
+            lines.append(" · ".join(parts))
     lines.append("")
     lines.append("## Per-model rollup")
     lines.append("")
@@ -357,7 +377,7 @@ th:first-child,td:first-child{{text-align:left}}
 .cell-draw{{background:#f0f0f0}}
 </style></head><body>
 <h1>Benchmark: {run_id}</h1>
-<div class="meta">Timestamp: {ts} · Judge mode: <code id="mode"></code></div>
+<div class="meta">Timestamp: {ts} · Judge mode: <code id="mode"></code>{prov_line}</div>
 
 <div class="card">
   <h2>Per-model rollup</h2>
@@ -746,10 +766,31 @@ bar("c_usd", "USD",   models.map(m => roll[m].cost_usd_total ?? 0));
 """
 
 
+def _html_prov_line(prov: dict[str, Any]) -> str:
+    if not prov:
+        return ""
+    git = prov.get("git") or {}
+    parts = []
+    if git.get("sha"):
+        dirty = " (dirty)" if git.get("dirty") else ""
+        parts.append(f"git <code>{git['sha']}{dirty}</code>")
+    if prov.get("config_hash"):
+        parts.append(f"config <code>{prov['config_hash']}</code>")
+    if prov.get("seed") is not None:
+        parts.append(f"seed <code>{prov['seed']}</code>")
+    if prov.get("llama_swap_version"):
+        parts.append(f"llama-swap <code>{prov['llama_swap_version']}</code>")
+    if not parts:
+        return ""
+    return " · " + " · ".join(parts)
+
+
 def emit_html(payload: dict[str, Any], path: Path) -> None:
+    prov = payload.get("provenance") or {}
     html = _HTML_TEMPLATE.format(
         run_id=payload.get("run_id", payload["timestamp"]),
         ts=payload["timestamp"],
+        prov_line=_html_prov_line(prov),
         payload_json=json.dumps(payload),
     )
     path.write_text(html)

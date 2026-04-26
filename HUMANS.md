@@ -207,6 +207,27 @@ Only one model loads at a time (see [AGENTS § Design invariants](AGENTS.md#desi
 rm -rf .venv results datasets .cache  # nuke generated state incl. pinned llama-swap binary
 ```
 
+## HuggingFace metadata enrichment
+
+By default no network calls are made post-benchmark. Set `run.hf_enrichment` in `config.yaml` (or pass `--hf-enrichment` to the runner) to add model card metadata to `model_metadata` in the result JSON:
+
+```yaml
+run:
+  hf_enrichment: "best-effort"   # off (default) | best-effort | strict
+```
+
+| Mode | Behaviour |
+|------|-----------|
+| `off` | No HF calls. Safe for offline and air-gapped environments. |
+| `best-effort` | Failures append to `provenance.warnings` and the run continues. |
+| `strict` | Any lookup failure aborts the run with an error. |
+
+Enriched fields added to each `model_metadata` entry: `hf_sha`, `hf_tags`, `hf_pipeline_tag`, `hf_private`.
+
+**Credentials:** Public repos work without authentication. For gated repos (Llama 3, Gemma, etc.), set `HF_TOKEN` or run `huggingface-cli login` first — same as for `./run.sh fetch`.
+
+**Offline:** Use `hf_enrichment: "off"` (the default). No network calls are made, and no warnings are emitted.
+
 ## Comparing two runs
 
 `bench.compare` produces a Markdown delta report between any two result JSON files — useful after swapping a GGUF quantization, editing a prompt, or adding a model.

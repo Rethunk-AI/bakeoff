@@ -2,16 +2,16 @@
 
 ## P0
 
-- [ ] Define the `provenance` JSON shape with backwards-compatible optional fields.
-- [ ] Capture git SHA, dirty state, branch, and config hash.
-- [ ] Capture Python, package, platform, podman, and llama-swap details where available.
-- [ ] Capture server image and benchmark seed in provenance.
-- [ ] Normalize configured model metadata into a top-level `model_metadata` list.
-- [ ] Infer safe local fields such as repo ID, filename, quantization, context length, and MoE CPU-offload setting.
-- [ ] Add provenance and model metadata to emitted JSON payloads.
-- [ ] Render concise provenance in Markdown reports.
-- [ ] Render concise provenance in HTML reports.
-- [ ] Preserve report compatibility with legacy payloads.
+- [x] Define the `provenance` JSON shape with backwards-compatible optional fields.
+- [x] Capture git SHA, dirty state, branch, and config hash.
+- [x] Capture Python, package, platform, podman, and llama-swap details where available.
+- [x] Capture server image and benchmark seed in provenance.
+- [x] Normalize configured model metadata into a top-level `model_metadata` list.
+- [x] Infer safe local fields such as repo ID, filename, quantization, context length, and MoE CPU-offload setting.
+- [x] Add provenance and model metadata to emitted JSON payloads.
+- [x] Render concise provenance in Markdown reports.
+- [x] Render concise provenance in HTML reports.
+- [x] Preserve report compatibility with legacy payloads.
 
 ## P1
 

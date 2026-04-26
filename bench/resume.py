@@ -6,14 +6,21 @@ Stable row keys:
   scored key:   (task_id, prompt_id, model_id)
 
 A model row is "complete" when it has no error field. Missing rows and
-errored rows are both treated as pending for the default P0 resume mode.
-Judge resume (skip already-judged pairs) is P1.
+errored rows are both treated as pending by default; pass rerun_errors=False
+or rerun_missing=False to build_pending to narrow the scope.
+
+Judge resume: build_pending_judge_pairs / build_pending_judge_scores compute
+the subset of judge cells not yet completed in a prior run.
 """
 from __future__ import annotations
 
+import itertools
 import json
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    pass
 
 
 class ResumeError(ValueError):
@@ -118,24 +125,102 @@ def build_pending(
     task_ids: list[str],
     prompt_ids: list[str],
     prior_records: list[dict[str, Any]],
+    *,
+    rerun_errors: bool = True,
+    rerun_missing: bool = True,
+    filter_models: set[str] | None = None,
+    filter_tasks: set[str] | None = None,
+    filter_prompts: set[str] | None = None,
 ) -> dict[str, set[tuple[str, str]]]:
     """Return {model_id → set of (task_id, prompt_id) cells that still need running}.
 
-    A cell is pending if it is missing from prior_records or its prior row
-    has an error. Rows that completed without error are reused.
+    By default both missing and errored cells are pending. Pass
+    rerun_errors=False to skip errored rows, rerun_missing=False to skip
+    missing rows. filter_models/tasks/prompts restrict which IDs are considered.
     """
     complete: set[tuple[str, str, str]] = {
         row_key(r) for r in prior_records if not r.get("error")
     }
+    errored: set[tuple[str, str, str]] = {
+        row_key(r) for r in prior_records if r.get("error")
+    }
     pending: dict[str, set[tuple[str, str]]] = {}
     for m in models:
         mid = str(m["id"])
+        if filter_models is not None and mid not in filter_models:
+            pending[mid] = set()
+            continue
         cells: set[tuple[str, str]] = set()
         for tid in task_ids:
+            if filter_tasks is not None and tid not in filter_tasks:
+                continue
             for pid in prompt_ids:
-                if (tid, pid, mid) not in complete:
-                    cells.add((tid, pid))
+                if filter_prompts is not None and pid not in filter_prompts:
+                    continue
+                key = (tid, pid, mid)
+                if key in complete:
+                    continue
+                if key in errored:
+                    if rerun_errors:
+                        cells.add((tid, pid))
+                else:
+                    if rerun_missing:
+                        cells.add((tid, pid))
         pending[mid] = cells
+    return pending
+
+
+def build_pending_judge_pairs(
+    prior_judgements: list[dict[str, Any]],
+    models: list[dict[str, Any]],
+    task_ids: list[str],
+    prompt_ids: list[str],
+) -> set[tuple[str, str, frozenset]]:
+    """Return pairwise keys not yet judged in the prior run.
+
+    Keys: (task_id, prompt_id, frozenset({a_model, b_model}))
+    Errored judgements (winner=None with error field) are treated as pending.
+    """
+    done: set[tuple[str, str, frozenset]] = {
+        pairwise_key(j)
+        for j in prior_judgements
+        if j.get("mode") == "pairwise" and not j.get("error") and j.get("winner") is not None
+    }
+    pending: set[tuple[str, str, frozenset]] = set()
+    for a_m, b_m in itertools.combinations(models, 2):
+        a_id, b_id = str(a_m["id"]), str(b_m["id"])
+        for tid in task_ids:
+            for pid in prompt_ids:
+                key: tuple[str, str, frozenset] = (tid, pid, frozenset({a_id, b_id}))
+                if key not in done:
+                    pending.add(key)
+    return pending
+
+
+def build_pending_judge_scores(
+    prior_judgements: list[dict[str, Any]],
+    models: list[dict[str, Any]],
+    task_ids: list[str],
+    prompt_ids: list[str],
+) -> set[tuple[str, str, str]]:
+    """Return scored keys not yet judged in the prior run.
+
+    Keys: (task_id, prompt_id, model_id)
+    Errored judgements are treated as pending.
+    """
+    done: set[tuple[str, str, str]] = {
+        scored_key(j)
+        for j in prior_judgements
+        if j.get("mode") == "scored" and not j.get("error") and j.get("score") is not None
+    }
+    pending: set[tuple[str, str, str]] = set()
+    for m in models:
+        mid = str(m["id"])
+        for tid in task_ids:
+            for pid in prompt_ids:
+                key = (tid, pid, mid)
+                if key not in done:
+                    pending.add(key)
     return pending
 
 

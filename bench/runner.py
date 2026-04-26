@@ -64,6 +64,8 @@ from bench.provenance import collect as collect_provenance
 from bench.resume import (
     ResumeError,
     build_pending,
+    build_pending_judge_pairs,
+    build_pending_judge_scores,
     check_compat,
     load_prior,
     tag_fresh,
@@ -289,9 +291,14 @@ def _pairwise_all_phase(
     prompts: list[dict[str, Any]],
     records: list[dict[str, Any]],
     rng: random.Random,
+    pending_pairs: set | None = None,
 ) -> list[dict[str, Any]]:
     """Round-robin all unordered pairs (N choose 2). Randomize slot order
-    per call to de-bias positional preference; invert winner on swap."""
+    per call to de-bias positional preference; invert winner on swap.
+
+    When pending_pairs is provided, only those (task_id, prompt_id,
+    frozenset({a,b})) keys are run; others are skipped.
+    """
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {
         (r["task_id"], r["prompt_id"], r["model_id"]): r
         for r in records if not r.get("error")
@@ -300,6 +307,11 @@ def _pairwise_all_phase(
     for a_m, b_m in itertools.combinations(models, 2):
         a_id, b_id = a_m["id"], b_m["id"]
         for task, prm in itertools.product(tasks, prompts):
+            if pending_pairs is not None:
+                from bench.resume import pairwise_key as _pk
+                if _pk({"task_id": task.id, "prompt_id": prm["id"],
+                         "a_model": a_id, "b_model": b_id}) not in pending_pairs:
+                    continue
             a = by_key.get((task.id, prm["id"], a_id))
             b = by_key.get((task.id, prm["id"], b_id))
             if not a or not b:
@@ -337,8 +349,13 @@ def _scored_phase(
     tasks: list[Task],
     prompts: list[dict[str, Any]],
     records: list[dict[str, Any]],
+    pending_scores: set | None = None,
 ) -> list[dict[str, Any]]:
-    """Absolute 1-5 rubric score per (model, task, prompt). Linear in N models."""
+    """Absolute 1-5 rubric score per (model, task, prompt). Linear in N models.
+
+    When pending_scores is provided, only (task_id, prompt_id, model_id)
+    keys in that set are run; others are skipped.
+    """
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {
         (r["task_id"], r["prompt_id"], r["model_id"]): r
         for r in records if not r.get("error")
@@ -347,6 +364,8 @@ def _scored_phase(
     for m in models:
         mid = m["id"]
         for task, prm in itertools.product(tasks, prompts):
+            if pending_scores is not None and (task.id, prm["id"], mid) not in pending_scores:
+                continue
             rec = by_key.get((task.id, prm["id"], mid))
             if not rec:
                 continue
@@ -382,6 +401,8 @@ def run_judge_phase(
     timeout_s: float,
     seed: int,
     warmup: bool = True,
+    pending_pairs: set | None = None,
+    pending_scores: set | None = None,
 ) -> list[dict[str, Any]]:
     """Dispatch judge phase based on judge.mode.
 
@@ -420,8 +441,10 @@ def run_judge_phase(
 
     if mode == "pairwise_all":
         rng = random.Random(seed)
-        return _pairwise_all_phase(judge, models, tasks, prompts, records, rng)
-    return _scored_phase(judge, models, tasks, prompts, records)
+        return _pairwise_all_phase(judge, models, tasks, prompts, records, rng,
+                                   pending_pairs=pending_pairs)
+    return _scored_phase(judge, models, tasks, prompts, records,
+                         pending_scores=pending_scores)
 
 
 # --- Entry point ------------------------------------------------------------
@@ -433,6 +456,16 @@ def main() -> int:
                     help="Parse + gen dataset, no proxy startup or network calls.")
     ap.add_argument("--resume-from", metavar="RESULT_JSON",
                     help="Prior result JSON. Reuses complete rows, reruns errored/missing.")
+    ap.add_argument("--rerun-errors", action=argparse.BooleanOptionalAction, default=True,
+                    help="Rerun errored rows on resume (default: true).")
+    ap.add_argument("--rerun-missing", action=argparse.BooleanOptionalAction, default=True,
+                    help="Rerun missing rows on resume (default: true).")
+    ap.add_argument("--resume-models", nargs="+", metavar="MODEL_ID",
+                    help="Limit resume to these model IDs.")
+    ap.add_argument("--resume-tasks", nargs="+", metavar="TASK_ID",
+                    help="Limit resume to these task IDs.")
+    ap.add_argument("--resume-prompts", nargs="+", metavar="PROMPT_ID",
+                    help="Limit resume to these prompt IDs.")
     ap.add_argument("--hf-enrichment", choices=["off", "best-effort", "strict"],
                     default=None,
                     help="HuggingFace metadata enrichment (overrides run.hf_enrichment in config).")
@@ -516,7 +549,10 @@ def main() -> int:
     # 2. Resume: load prior run, plan pending cells.
     seed = int(run_cfg.get("seed", 42))
     reused_records: list[dict[str, Any]] = []
+    reused_judgements: list[dict[str, Any]] = []
     pending_by_model: dict[str, set[tuple[str, str]]] | None = None
+    pending_pairs: set | None = None
+    pending_scores: set | None = None
     prior_run_id: str | None = None
 
     if args.resume_from:
@@ -531,11 +567,50 @@ def main() -> int:
         compat_errors = check_compat(cfg, seed=seed, task_ids=task_ids, prior=prior)
         for err in compat_errors:
             print(f"[resume-warn] {err}", file=sys.stderr)
-        pending_by_model = build_pending(models, task_ids, prompt_ids, prior["records"])
+        pending_by_model = build_pending(
+            models, task_ids, prompt_ids, prior["records"],
+            rerun_errors=args.rerun_errors,
+            rerun_missing=args.rerun_missing,
+            filter_models=set(args.resume_models) if args.resume_models else None,
+            filter_tasks=set(args.resume_tasks) if args.resume_tasks else None,
+            filter_prompts=set(args.resume_prompts) if args.resume_prompts else None,
+        )
         complete = [r for r in prior["records"] if not r.get("error")]
         reused_records = tag_reused(complete, prior_run_id or "")
         n_reused = len(reused_records)
         n_pending = sum(len(v) for v in pending_by_model.values())
+        # Judge resume planning
+        prior_judgements = prior.get("judgements") or []
+        if prior_judgements and judge_cfg.get("enabled"):
+            judge_mode = judge_cfg.get("mode", "pairwise_all")
+            if judge_mode == "pairwise_all":
+                pending_pairs = build_pending_judge_pairs(
+                    prior_judgements, models, task_ids, prompt_ids
+                )
+                reused_judgements = [
+                    j for j in prior_judgements
+                    if j.get("mode") == "pairwise" and not j.get("error")
+                    and j.get("winner") is not None
+                ]
+                print(
+                    f"[resume] judge: {len(reused_judgements)} pairs reused,"
+                    f" {len(pending_pairs)} pending",
+                    file=sys.stderr,
+                )
+            elif judge_mode == "scored":
+                pending_scores = build_pending_judge_scores(
+                    prior_judgements, models, task_ids, prompt_ids
+                )
+                reused_judgements = [
+                    j for j in prior_judgements
+                    if j.get("mode") == "scored" and not j.get("error")
+                    and j.get("score") is not None
+                ]
+                print(
+                    f"[resume] judge: {len(reused_judgements)} scores reused,"
+                    f" {len(pending_scores)} pending",
+                    file=sys.stderr,
+                )
         print(f"[resume] prior={prior_run_id} reused={n_reused} pending_cells={n_pending}",
               file=sys.stderr)
 
@@ -551,12 +626,15 @@ def main() -> int:
         all_records = reused_records + fresh_records
 
         # 4. Judge phase
-        judgements = run_judge_phase(
+        fresh_judgements = run_judge_phase(
             judge_cfg, models, tasks, prompts, all_records,
             base_url, timeout_s,
             seed=seed,
             warmup=warmup,
+            pending_pairs=pending_pairs,
+            pending_scores=pending_scores,
         )
+        judgements = reused_judgements + fresh_judgements
     finally:
         _proxy_stop(proxy)
 

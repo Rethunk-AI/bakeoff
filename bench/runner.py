@@ -47,6 +47,7 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
+from bench.config import ConfigError, load_config, validate_config
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
@@ -62,11 +63,6 @@ from bench.metrics import (
 HERE = Path(__file__).resolve().parent.parent
 LAUNCHER = HERE / "bin" / "llama-swap.sh"
 LLAMA_SWAP_CONFIG = HERE / ".cache" / "llama-swap" / "config.yaml"
-
-
-def load_config(path: Path) -> dict[str, Any]:
-    with path.open() as f:
-        return yaml.safe_load(f)
 
 
 def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
@@ -391,7 +387,18 @@ def main() -> int:
                     help="Parse + gen dataset, no proxy startup or network calls.")
     args = ap.parse_args()
 
-    cfg = load_config(Path(args.config))
+    try:
+        cfg = load_config(Path(args.config))
+    except ConfigError as e:
+        print(f"[error] {e}", file=sys.stderr)
+        return 1
+
+    issues = validate_config(cfg)
+    if issues:
+        for issue in issues:
+            print(f"[config] {issue}", file=sys.stderr)
+        return 1
+
     run_cfg = cfg.get("run", {})
     ds_cfg = cfg["dataset"]
     server_cfg = cfg["server"]

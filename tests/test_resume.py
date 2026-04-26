@@ -11,6 +11,8 @@ import pytest
 from bench.resume import (
     ResumeError,
     build_pending,
+    build_pending_judge_pairs,
+    build_pending_judge_scores,
     check_compat,
     load_prior,
     pairwise_key,
@@ -215,6 +217,117 @@ class TestBuildPending:
     def test_returns_entry_for_every_model(self):
         pending = build_pending(self._models(["m_a", "m_b", "m_c"]), ["t1"], ["p1"], [])
         assert set(pending.keys()) == {"m_a", "m_b", "m_c"}
+
+    def test_rerun_errors_false_skips_errored(self):
+        prior = [_record("m_a", error="timeout")]
+        pending = build_pending(
+            self._models(["m_a"]), ["t1"], ["p1"], prior, rerun_errors=False
+        )
+        assert ("t1", "p1") not in pending["m_a"]
+
+    def test_rerun_missing_false_skips_missing(self):
+        prior = []  # m_a has no rows at all — missing
+        pending = build_pending(
+            self._models(["m_a"]), ["t1"], ["p1"], prior, rerun_missing=False
+        )
+        assert ("t1", "p1") not in pending["m_a"]
+
+    def test_filter_models_excludes_unselected(self):
+        pending = build_pending(
+            self._models(), ["t1"], ["p1"], [],
+            filter_models={"m_a"},
+        )
+        assert ("t1", "p1") in pending["m_a"]
+        assert pending["m_b"] == set()
+
+    def test_filter_tasks_excludes_unselected(self):
+        pending = build_pending(
+            self._models(["m_a"]), ["t1", "t2"], ["p1"], [],
+            filter_tasks={"t1"},
+        )
+        assert ("t1", "p1") in pending["m_a"]
+        assert ("t2", "p1") not in pending["m_a"]
+
+    def test_filter_prompts_excludes_unselected(self):
+        pending = build_pending(
+            self._models(["m_a"]), ["t1"], ["p1", "p2"], [],
+            filter_prompts={"p1"},
+        )
+        assert ("t1", "p1") in pending["m_a"]
+        assert ("t1", "p2") not in pending["m_a"]
+
+
+# --- TestJudgePending --------------------------------------------------------
+
+
+def _pairwise_j(a, b, task_id="t1", prompt_id="p1", winner="m_a", error=None):
+    return {
+        "mode": "pairwise", "task_id": task_id, "prompt_id": prompt_id,
+        "a_model": a, "b_model": b, "winner": winner, "error": error,
+    }
+
+
+def _scored_j(model_id, score, task_id="t1", prompt_id="p1", error=None):
+    return {
+        "mode": "scored", "task_id": task_id, "prompt_id": prompt_id,
+        "model_id": model_id, "score": score, "error": error,
+    }
+
+
+class TestBuildPendingJudgePairs:
+    def _models(self):
+        return [{"id": "m_a"}, {"id": "m_b"}]
+
+    def test_all_judged_returns_empty(self):
+        j = [_pairwise_j("m_a", "m_b")]
+        pending = build_pending_judge_pairs(j, self._models(), ["t1"], ["p1"])
+        assert len(pending) == 0
+
+    def test_missing_pair_is_pending(self):
+        pending = build_pending_judge_pairs([], self._models(), ["t1"], ["p1"])
+        assert len(pending) == 1
+
+    def test_errored_pair_is_pending(self):
+        j = [_pairwise_j("m_a", "m_b", winner=None, error="timeout")]
+        pending = build_pending_judge_pairs(j, self._models(), ["t1"], ["p1"])
+        assert len(pending) == 1
+
+    def test_symmetric_key_recognized(self):
+        j = [_pairwise_j("m_b", "m_a")]  # swapped order
+        pending = build_pending_judge_pairs(j, self._models(), ["t1"], ["p1"])
+        assert len(pending) == 0
+
+    def test_multiple_tasks_prompts(self):
+        # 2 tasks x 2 prompts = 4 pairs total; 1 already judged
+        j = [_pairwise_j("m_a", "m_b", task_id="t1", prompt_id="p1")]
+        pending = build_pending_judge_pairs(j, self._models(), ["t1", "t2"], ["p1", "p2"])
+        assert len(pending) == 3
+
+
+class TestBuildPendingJudgeScores:
+    def _models(self):
+        return [{"id": "m_a"}, {"id": "m_b"}]
+
+    def test_all_scored_returns_empty(self):
+        j = [_scored_j("m_a", 4), _scored_j("m_b", 3)]
+        pending = build_pending_judge_scores(j, self._models(), ["t1"], ["p1"])
+        assert len(pending) == 0
+
+    def test_missing_score_is_pending(self):
+        j = [_scored_j("m_a", 4)]
+        pending = build_pending_judge_scores(j, self._models(), ["t1"], ["p1"])
+        assert ("t1", "p1", "m_b") in pending
+
+    def test_errored_score_is_pending(self):
+        j = [_scored_j("m_a", None, error="timeout"), _scored_j("m_b", 3)]
+        pending = build_pending_judge_scores(j, self._models(), ["t1"], ["p1"])
+        assert ("t1", "p1", "m_a") in pending
+        assert ("t1", "p1", "m_b") not in pending
+
+    def test_multiple_tasks_prompts(self):
+        j = [_scored_j("m_a", 4, task_id="t1", prompt_id="p1")]
+        pending = build_pending_judge_scores(j, self._models(), ["t1", "t2"], ["p1", "p2"])
+        assert len(pending) == 7  # 2 models x 2 tasks x 2 prompts - 1 done
 
 
 # --- TestTagging -------------------------------------------------------------

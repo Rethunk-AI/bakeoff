@@ -2,16 +2,16 @@
 
 ## P0
 
-- [ ] Define stable keys for model rows: model ID, prompt ID, task ID.
-- [ ] Define stable keys for pairwise and scored judge rows.
-- [ ] Add resume source loading with clear errors for missing or malformed result JSON.
-- [ ] Validate resume compatibility for config identity, seed, tasks, prompts, models, and judge mode.
-- [ ] Add pending-cell planning for missing and errored model rows.
-- [ ] Keep model execution grouped by model for resumed pending cells.
-- [ ] Add resume metadata to reused and fresh rows.
-- [ ] Emit resumed benchmarks as new result files.
-- [ ] Add tests proving normal run phase order.
-- [ ] Add tests proving resumed run phase order.
+- [x] Define stable keys for model rows: model ID, prompt ID, task ID.
+- [x] Define stable keys for pairwise and scored judge rows.
+- [x] Add resume source loading with clear errors for missing or malformed result JSON.
+- [x] Validate resume compatibility for config identity, seed, tasks, prompts, models, and judge mode.
+- [x] Add pending-cell planning for missing and errored model rows.
+- [x] Keep model execution grouped by model for resumed pending cells.
+- [x] Add resume metadata to reused and fresh rows.
+- [x] Emit resumed benchmarks as new result files.
+- [x] Add tests proving normal run phase order.
+- [x] Add tests proving resumed run phase order.
 
 ## P1
 

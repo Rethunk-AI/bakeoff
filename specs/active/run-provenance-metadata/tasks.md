@@ -15,11 +15,11 @@
 
 ## P1
 
-- [ ] Add optional HuggingFace metadata enrichment for config entries in `<org>/<repo>/<file>.gguf` form.
-- [ ] Record HuggingFace lookup failures as metadata warnings, not benchmark failures.
-- [ ] Add config or CLI control for enrichment mode: off, best-effort, strict.
-- [ ] Mock HuggingFace calls in tests.
-- [ ] Document offline behavior and credential expectations.
+- [x] Add optional HuggingFace metadata enrichment for config entries in `<org>/<repo>/<file>.gguf` form.
+- [x] Record HuggingFace lookup failures as metadata warnings, not benchmark failures.
+- [x] Add config or CLI control for enrichment mode: off, best-effort, strict.
+- [x] Mock HuggingFace calls in tests.
+- [x] Document offline behavior and credential expectations.
 
 ## P2
 

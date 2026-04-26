@@ -59,6 +59,8 @@ from bench.metrics import (
     parse_score,
     score_heuristic,
 )
+from bench.provenance import build_model_metadata
+from bench.provenance import collect as collect_provenance
 
 HERE = Path(__file__).resolve().parent.parent
 LAUNCHER = HERE / "bin" / "llama-swap.sh"
@@ -470,10 +472,15 @@ def main() -> int:
 
     # 4. Emit
     out_json = out_dir / f"run-{ts}.json"
+    seed = int(run_cfg.get("seed", 42))
+    binary_dir = LLAMA_SWAP_CONFIG.parent
+    provenance = collect_provenance(cfg, seed=seed, repo_root=HERE, binary_dir=binary_dir)
     payload = {
         "run_id": run_cfg.get("name", ts),
         "timestamp": ts,
         "config": cfg,
+        "provenance": provenance,
+        "model_metadata": build_model_metadata(cfg),
         "tasks": [asdict(t) for t in tasks],
         "records": all_records,
         "judgements": judgements,

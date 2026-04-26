@@ -2,12 +2,12 @@
 
 ## P0
 
-- [ ] Add recommended benchmark profiles to `HUMANS.md`.
-- [ ] Include quick smoke, two-model serious run, three-to-four-model pairwise run, five-plus scored run, and low-memory MoE run.
-- [ ] Explain which config fields each profile changes.
-- [ ] Link to judge mode selection in `AGENTS.md`.
-- [ ] Keep README free of duplicated operator detail.
-- [ ] Run pre-commit.
+- [x] Add recommended benchmark profiles to `HUMANS.md`.
+- [x] Include quick smoke, two-model serious run, three-to-four-model pairwise run, five-plus scored run, and low-memory MoE run.
+- [x] Explain which config fields each profile changes.
+- [x] Link to judge mode selection in `AGENTS.md`.
+- [x] Keep README free of duplicated operator detail.
+- [x] Run pre-commit.
 
 ## P1
 

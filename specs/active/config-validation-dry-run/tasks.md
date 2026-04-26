@@ -2,15 +2,15 @@
 
 ## P0
 
-- [ ] Create `bench.config` with reusable config loading and validation primitives.
-- [ ] Validate required top-level sections and user-facing path names.
-- [ ] Validate model IDs, duplicate IDs, GGUF path shape, and `mmproj-*` rejection.
-- [ ] Validate judge enablement, judge mode, judge ID collisions, and judge GGUF shape.
-- [ ] Validate dataset, prompt, server, cost, and output values used by the runner.
-- [ ] Wire validation into `bench.runner` before any side effects.
-- [ ] Preserve llama-swap generator invariant checks as defensive errors.
-- [ ] Add tests for valid minimal config and representative invalid configs.
-- [ ] Confirm `uv run python -m bench.runner --config config.yaml --dry-run` passes.
+- [x] Create `bench.config` with reusable config loading and validation primitives.
+- [x] Validate required top-level sections and user-facing path names.
+- [x] Validate model IDs, duplicate IDs, GGUF path shape, and `mmproj-*` rejection.
+- [x] Validate judge enablement, judge mode, judge ID collisions, and judge GGUF shape.
+- [x] Validate dataset, prompt, server, cost, and output values used by the runner.
+- [x] Wire validation into `bench.runner` before any side effects.
+- [x] Preserve llama-swap generator invariant checks as defensive errors.
+- [x] Add tests for valid minimal config and representative invalid configs.
+- [x] Confirm `uv run python -m bench.runner --config config.yaml --dry-run` passes.
 
 ## P1
 

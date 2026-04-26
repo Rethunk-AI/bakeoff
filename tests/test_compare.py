@@ -2,12 +2,8 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
-
-import pytest
 
 from bench.compare import _compat_warnings, _delta, compare, compare_markdown, load_result
-
 
 # --- Fixture helpers ---------------------------------------------------------
 

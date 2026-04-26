@@ -122,7 +122,7 @@ def collect(
 
 def _hf_model_info(repo_id: str) -> dict[str, Any]:
     """Fetch HuggingFace model info. Raises on any failure (caller handles mode)."""
-    from huggingface_hub import model_info  # type: ignore[import-untyped]
+    from huggingface_hub import model_info
     info = model_info(repo_id)
     return {
         "hf_sha": getattr(info, "sha", None),

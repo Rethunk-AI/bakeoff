@@ -18,7 +18,6 @@ from typing import Any
 
 from bench.report import _detect_mode, _pairwise_rollup, _rollup, _scored_rollup
 
-
 # --- Compatibility check -----------------------------------------------------
 
 
@@ -57,18 +56,22 @@ def _compat_warnings(base: dict[str, Any], cand: dict[str, Any]) -> list[str]:
 
     base_prov = base.get("provenance") or {}
     cand_prov = cand.get("provenance") or {}
-    if base_prov.get("seed") is not None and cand_prov.get("seed") is not None:
-        if base_prov["seed"] != cand_prov["seed"]:
-            warnings.append(
-                f"seed differs: base={base_prov['seed']} candidate={cand_prov['seed']}"
-            )
+    if (
+        base_prov.get("seed") is not None
+        and cand_prov.get("seed") is not None
+        and base_prov["seed"] != cand_prov["seed"]
+    ):
+        warnings.append(f"seed differs: base={base_prov['seed']} candidate={cand_prov['seed']}")
 
-    if base_prov.get("config_hash") and cand_prov.get("config_hash"):
-        if base_prov["config_hash"] != cand_prov["config_hash"]:
-            warnings.append(
-                f"config hash differs: base={base_prov['config_hash']} "
-                f"candidate={cand_prov['config_hash']}"
-            )
+    if (
+        base_prov.get("config_hash")
+        and cand_prov.get("config_hash")
+        and base_prov["config_hash"] != cand_prov["config_hash"]
+    ):
+        warnings.append(
+            f"config hash differs: base={base_prov['config_hash']} "
+            f"candidate={cand_prov['config_hash']}"
+        )
 
     return warnings
 
@@ -213,11 +216,13 @@ def compare_markdown(
                 cm = cpr["per_model"].get(mid, {})
                 bwr = bm.get("win_rate")
                 cwr = cm.get("win_rate")
+                base_win_rate = bwr * 100 if bwr is not None else None
+                cand_win_rate = cwr * 100 if cwr is not None else None
                 lines.append(
                     f"| {mid} "
-                    f"| {_fmt(bwr * 100 if bwr is not None else None, 1)}% "
-                    f"| {_fmt(cwr * 100 if cwr is not None else None, 1)}% "
-                    f"| {_delta2(bwr * 100 if bwr is not None else None, cwr * 100 if cwr is not None else None, 1)}% |"
+                    f"| {_fmt(base_win_rate, 1)}% "
+                    f"| {_fmt(cand_win_rate, 1)}% "
+                    f"| {_delta2(base_win_rate, cand_win_rate, 1)}% |"
                 )
             lines.append("")
 

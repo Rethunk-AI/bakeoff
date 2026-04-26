@@ -61,6 +61,14 @@ from bench.metrics import (
 )
 from bench.provenance import build_model_metadata
 from bench.provenance import collect as collect_provenance
+from bench.resume import (
+    ResumeError,
+    build_pending,
+    check_compat,
+    load_prior,
+    tag_fresh,
+    tag_reused,
+)
 
 HERE = Path(__file__).resolve().parent.parent
 LAUNCHER = HERE / "bin" / "llama-swap.sh"
@@ -184,11 +192,15 @@ def run_model_phase(
     cost_cfg: dict[str, Any],
     timeout_s: float,
     warmup: bool = True,
+    pending: set[tuple[str, str]] | None = None,
 ) -> list[dict[str, Any]]:
     """Run every (task x prompt) cell for one model against the proxy.
 
     `model_cfg["id"]` is the llama-swap routing key (not `alias` — the
     alias stays inside the generated `cmd` as llama.cpp's `-a` flag).
+
+    When `pending` is provided, only (task_id, prompt_id) pairs in that
+    set are executed; all others are silently skipped.
     """
     mid = model_cfg["id"]
     print(f"[phase] {mid}", file=sys.stderr)
@@ -210,6 +222,8 @@ def run_model_phase(
 
     records: list[dict[str, Any]] = []
     for task, prm in itertools.product(tasks, prompts):
+        if pending is not None and (str(task.id), str(prm["id"])) not in pending:
+            continue
         try:
             res, wh, usd = call_one(client, prm["system"], task.user_prompt,
                                     gpu_i, cost_enabled, kwh, sample_hz)
@@ -236,6 +250,36 @@ def run_model_phase(
             })
             print(f"[err] {mid} {prm['id']} {task.id}: {e}", file=sys.stderr)
     return records
+
+
+def _run_model_phases(
+    models: list[dict[str, Any]],
+    tasks: list[Task],
+    prompts: list[dict[str, Any]],
+    base_url: str,
+    cost_cfg: dict[str, Any],
+    timeout_s: float,
+    warmup: bool,
+    pending_by_model: dict[str, set[tuple[str, str]]] | None,
+    prior_run_id: str | None,
+) -> list[dict[str, Any]]:
+    """Iterate per-model-sequentially, honouring resume pending sets.
+
+    Returns only the fresh records; caller merges with reused records.
+    """
+    fresh: list[dict[str, Any]] = []
+    for m in models:
+        mid = str(m["id"])
+        pending = pending_by_model[mid] if pending_by_model is not None else None
+        if pending is not None and not pending:
+            print(f"[resume] {mid}: all cells complete, skipping", file=sys.stderr)
+            continue
+        recs = run_model_phase(m, tasks, prompts, base_url, cost_cfg, timeout_s,
+                               warmup=warmup, pending=pending)
+        if prior_run_id is not None:
+            recs = tag_fresh(recs, prior_run_id)
+        fresh.extend(recs)
+    return fresh
 
 
 def _pairwise_all_phase(
@@ -387,6 +431,8 @@ def main() -> int:
     ap.add_argument("--config", default="config.yaml")
     ap.add_argument("--dry-run", action="store_true",
                     help="Parse + gen dataset, no proxy startup or network calls.")
+    ap.add_argument("--resume-from", metavar="RESULT_JSON",
+                    help="Prior result JSON. Reuses complete rows, reruns errored/missing.")
     args = ap.parse_args()
 
     try:
@@ -449,30 +495,55 @@ def main() -> int:
     listen = f"127.0.0.1:{swap_port}"
     base_url = f"http://{listen}/v1"
 
+    # 2. Resume: load prior run, plan pending cells.
+    seed = int(run_cfg.get("seed", 42))
+    reused_records: list[dict[str, Any]] = []
+    pending_by_model: dict[str, set[tuple[str, str]]] | None = None
+    prior_run_id: str | None = None
+
+    if args.resume_from:
+        try:
+            prior = load_prior(Path(args.resume_from))
+        except ResumeError as e:
+            print(f"[error] resume: {e}", file=sys.stderr)
+            return 1
+        prior_run_id = prior.get("run_id")
+        task_ids = [str(t.id) for t in tasks]
+        prompt_ids = [str(p["id"]) for p in prompts]
+        compat_errors = check_compat(cfg, seed=seed, task_ids=task_ids, prior=prior)
+        for err in compat_errors:
+            print(f"[resume-warn] {err}", file=sys.stderr)
+        pending_by_model = build_pending(models, task_ids, prompt_ids, prior["records"])
+        complete = [r for r in prior["records"] if not r.get("error")]
+        reused_records = tag_reused(complete, prior_run_id or "")
+        n_reused = len(reused_records)
+        n_pending = sum(len(v) for v in pending_by_model.values())
+        print(f"[resume] prior={prior_run_id} reused={n_reused} pending_cells={n_pending}",
+              file=sys.stderr)
+
     _write_proxy_config(cfg, models_dir, LLAMA_SWAP_CONFIG)
     proxy = _proxy_start(listen, LLAMA_SWAP_CONFIG, boot_timeout)
 
     try:
-        # 2. Per-model phases (sequential — see invariant above).
-        all_records: list[dict[str, Any]] = []
-        for m in models:
-            recs = run_model_phase(m, tasks, prompts, base_url,
-                                   cost_cfg, timeout_s, warmup=warmup)
-            all_records.extend(recs)
+        # 3. Per-model phases (sequential — see invariant above).
+        fresh_records = _run_model_phases(
+            models, tasks, prompts, base_url, cost_cfg, timeout_s, warmup,
+            pending_by_model, prior_run_id,
+        )
+        all_records = reused_records + fresh_records
 
-        # 3. Judge phase
+        # 4. Judge phase
         judgements = run_judge_phase(
             judge_cfg, models, tasks, prompts, all_records,
             base_url, timeout_s,
-            seed=int(run_cfg.get("seed", 42)),
+            seed=seed,
             warmup=warmup,
         )
     finally:
         _proxy_stop(proxy)
 
-    # 4. Emit
+    # 5. Emit
     out_json = out_dir / f"run-{ts}.json"
-    seed = int(run_cfg.get("seed", 42))
     binary_dir = LLAMA_SWAP_CONFIG.parent
     provenance = collect_provenance(cfg, seed=seed, repo_root=HERE, binary_dir=binary_dir)
     payload = {
@@ -484,6 +555,7 @@ def main() -> int:
         "tasks": [asdict(t) for t in tasks],
         "records": all_records,
         "judgements": judgements,
+        "resumed_from": prior_run_id,
     }
     with out_json.open("w") as f:
         json.dump(payload, f, indent=2)

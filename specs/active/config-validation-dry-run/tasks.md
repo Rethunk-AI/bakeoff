@@ -14,9 +14,9 @@
 
 ## P1
 
-- [ ] Emit a concise dry-run summary listing validation, dataset, and proxy-config checks.
-- [ ] Add a lightweight CI dry-run fixture for non-default config branches.
-- [ ] Update `HUMANS.md` dry-run and troubleshooting text.
+- [x] Emit a concise dry-run summary listing validation, dataset, and proxy-config checks.
+- [x] Add a lightweight CI dry-run fixture for non-default config branches.
+- [x] Update `HUMANS.md` dry-run and troubleshooting text.
 
 ## P2
 

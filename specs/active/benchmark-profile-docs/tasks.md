@@ -11,8 +11,8 @@
 
 ## P1
 
-- [ ] Add comparison-report workflow guidance after comparison CLI lands.
-- [ ] Add resume workflow guidance after resume support lands.
+- [x] Add comparison-report workflow guidance after comparison CLI lands.
+- [x] Add resume workflow guidance after resume support lands.
 
 ## P2
 

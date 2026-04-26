@@ -16,7 +16,7 @@
 
 - [x] Add output-to-file support.
 - [x] Add strict mode that exits non-zero on compatibility warnings.
-- [ ] Document examples for prompt changes, model changes, and quantization changes.
+- [x] Document examples for prompt changes, model changes, and quantization changes.
 
 ## P2
 

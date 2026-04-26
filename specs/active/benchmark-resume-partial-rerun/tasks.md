@@ -15,9 +15,9 @@
 
 ## P1
 
-- [ ] Add CLI selectors for `--rerun-errors`, `--rerun-missing`, model IDs, prompt IDs, and task IDs.
-- [ ] Add judge resume planning for pairwise mode.
-- [ ] Add judge resume planning for scored mode.
+- [x] Add CLI selectors for `--rerun-errors`, `--rerun-missing`, model IDs, prompt IDs, and task IDs.
+- [x] Add judge resume planning for pairwise mode.
+- [x] Add judge resume planning for scored mode.
 - [x] Document resume examples in `HUMANS.md`.
 
 ## P2

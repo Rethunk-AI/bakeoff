@@ -1,14 +1,17 @@
 """Unit tests for bench.provenance."""
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from types import SimpleNamespace
+from unittest.mock import patch
 
 import pytest
 
-from bench.provenance import _infer_quantization, build_model_metadata, collect
-
+from bench.provenance import (
+    _infer_quantization,
+    build_model_metadata,
+    collect,
+    enrich_model_metadata,
+)
 
 # --- _infer_quantization ----------------------------------------------------
 
@@ -157,3 +160,79 @@ class TestCollect:
             prov = collect(self._cfg(), seed=42, repo_root=tmp_path)
 
         assert prov["server_image"] == "ghcr.io/ggml-org/llama.cpp:server-vulkan"
+
+
+# --- enrich_model_metadata --------------------------------------------------
+
+
+def _fake_info(sha="abc123", tags=None, pipeline_tag="text-generation", private=False):
+    return SimpleNamespace(
+        sha=sha,
+        tags=tags or ["gguf", "llama"],
+        pipeline_tag=pipeline_tag,
+        private=private,
+    )
+
+
+def _meta(repo_id="org/repo"):
+    return [{"id": "m_a", "repo_id": repo_id, "filename": "model.gguf"}]
+
+
+class TestEnrichModelMetadata:
+    def test_off_mode_is_noop(self):
+        result = enrich_model_metadata(_meta(), mode="off", warnings=[])
+        assert "hf_sha" not in result[0]
+
+    def test_best_effort_adds_hf_fields(self):
+        fake = _fake_info()
+        with patch("bench.provenance._hf_model_info", return_value={
+            "hf_sha": fake.sha,
+            "hf_tags": list(fake.tags),
+            "hf_pipeline_tag": fake.pipeline_tag,
+            "hf_private": fake.private,
+        }):
+            result = enrich_model_metadata(_meta(), mode="best-effort", warnings=[])
+        assert result[0]["hf_sha"] == "abc123"
+        assert "gguf" in result[0]["hf_tags"]
+        assert result[0]["hf_pipeline_tag"] == "text-generation"
+
+    def test_best_effort_failure_appends_warning(self):
+        warnings: list[str] = []
+        with patch("bench.provenance._hf_model_info", side_effect=Exception("404")):
+            result = enrich_model_metadata(_meta(), mode="best-effort", warnings=warnings)
+        assert any("HuggingFace" in w for w in warnings)
+        assert "hf_sha" not in result[0]
+
+    def test_strict_mode_raises_on_failure(self):
+        with patch("bench.provenance._hf_model_info", side_effect=Exception("timeout")), \
+             pytest.raises(RuntimeError, match="HuggingFace lookup failed"):
+            enrich_model_metadata(_meta(), mode="strict", warnings=[])
+
+    def test_strict_mode_succeeds_when_lookup_works(self):
+        with patch("bench.provenance._hf_model_info", return_value={
+            "hf_sha": "xyz", "hf_tags": [], "hf_pipeline_tag": None, "hf_private": False,
+        }):
+            result = enrich_model_metadata(_meta(), mode="strict", warnings=[])
+        assert result[0]["hf_sha"] == "xyz"
+
+    def test_no_repo_id_skips_enrichment(self):
+        meta = [{"id": "m_a", "repo_id": None, "filename": "model.gguf"}]
+        with patch("bench.provenance._hf_model_info") as mock_info:
+            result = enrich_model_metadata(meta, mode="best-effort", warnings=[])
+        mock_info.assert_not_called()
+        assert "hf_sha" not in result[0]
+
+    def test_preserves_existing_fields(self):
+        with patch("bench.provenance._hf_model_info", return_value={"hf_sha": "q"}):
+            result = enrich_model_metadata(_meta(), mode="best-effort", warnings=[])
+        assert result[0]["id"] == "m_a"
+        assert result[0]["filename"] == "model.gguf"
+
+    def test_multiple_models_all_enriched(self):
+        meta = [
+            {"id": "m_a", "repo_id": "org/repo-a", "filename": "a.gguf"},
+            {"id": "m_b", "repo_id": "org/repo-b", "filename": "b.gguf"},
+        ]
+        with patch("bench.provenance._hf_model_info", return_value={"hf_sha": "s"}):
+            result = enrich_model_metadata(meta, mode="best-effort", warnings=[])
+        assert all(r["hf_sha"] == "s" for r in result)

@@ -478,7 +478,22 @@ def main() -> int:
         models_dir = resolve_models_dir(server_cfg)
         ls_cfg = llama_swap.build(cfg, str(models_dir))
         yaml.safe_dump(ls_cfg, sort_keys=False)
-        print("[dry-run] dataset + proxy config ok", file=sys.stderr)
+        n_backends = len(ls_cfg.get("models", {}))
+        n_prompts = len(cfg.get("prompts") or [])
+        n_cells = len(tasks) * n_prompts
+        judge_mode = "off"
+        if (cfg.get("judge") or {}).get("enabled"):
+            judge_mode = (cfg.get("judge") or {}).get("mode", "pairwise_all")
+        print(
+            f"[dry-run] ok"
+            f" · validation passed"
+            f" · {len(tasks)} tasks"
+            f" · {n_backends} backends (incl. judge)"
+            f" · {n_prompts} prompts"
+            f" · {n_cells} cells/model"
+            f" · judge={judge_mode}",
+            file=sys.stderr,
+        )
         return 0
 
     if not LAUNCHER.exists():

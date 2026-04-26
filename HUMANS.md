@@ -72,6 +72,102 @@ Ad-hoc example (pulls `<models_dir>/lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9
 - **Proxy port** — `server.swap_port` (default `8080`) is the public listener the runner talks to. `server.backend_start_port` (default `5800`) is the base for `llama-swap`'s `${PORT}` allocation to backend containers. Change these only if another service already holds the ports.
 - **Skip `mmproj-*` files** — vision projectors that ship alongside multimodal GGUFs in LM Studio. Not standalone text models. The harness refuses them in the generator.
 
+## Recommended benchmark profiles
+
+Each profile maps a goal to the minimal `config.yaml` edits required. Judge mode cost formulas and N thresholds live in [AGENTS § Judge mode selection](AGENTS.md#judge-mode-selection); the one-model-in-VRAM constraint is documented in [AGENTS § Design invariants](AGENTS.md#design-invariants-dont-break-silently).
+
+### Quick smoke — verify setup
+
+**When:** Just installed the harness; want end-to-end confirmation before a long run.
+
+```yaml
+dataset:
+  n: 5                   # 5 tasks instead of 20
+
+judge:
+  enabled: false         # skip judge; heuristic scores only
+```
+
+Keep one model in `models:`. Run `./run.sh --dry-run` first, then `./run.sh`. Total: 5 tasks × 2 prompts = 10 model calls, no judge calls.
+
+**Inspect:** `results/run-<ts>.md` — confirm all rows have `latency_s` values and no `null` answers.
+
+### Two-model A/B — serious comparison
+
+**When:** Two candidate models; want a sharp, statistically clean head-to-head.
+
+This is the default `config.yaml` shape. Only edit the two `gguf:` paths:
+
+```yaml
+models:
+  - id: model_a
+    gguf: "org/repo-GGUF/model-a-Q4_K_M.gguf"
+  - id: model_b
+    gguf: "org/repo-GGUF/model-b-Q4_K_M.gguf"
+
+judge:
+  mode: "pairwise_all"   # default; both orders are tried per call to de-bias
+```
+
+**Cost at defaults (n=20, prompts=2):** 80 model calls + 40 judge calls = 120 total.
+
+**Inspect:** W/L/T table in `results/run-<ts>.md`; win-rate chart in the HTML dashboard.
+
+### Three-to-four-model pairwise tournament
+
+**When:** Ranking 3–4 models with the sharpest signal the harness can provide.
+
+```yaml
+models:
+  - id: model_a
+    gguf: "..."
+  - id: model_b
+    gguf: "..."
+  - id: model_c          # add up to 4 total
+    gguf: "..."
+
+judge:
+  mode: "pairwise_all"
+```
+
+**Cost at n=20, prompts=2:** 3 models → 120 judge calls; 4 models → 240 judge calls. Judge call count grows as C(N,2) — budget several extra minutes of wall-clock time per added model.
+
+**Inspect:** N×N win-rate matrix in the HTML dashboard; look for a clear Condorcet winner.
+
+### Five-or-more-model scored run
+
+**When:** ≥ 5 models and `pairwise_all` judge call count would be impractical.
+
+```yaml
+models:
+  - id: model_a
+    gguf: "..."
+  # ... 4+ more entries
+
+judge:
+  mode: "scored"         # absolute 1-5 rubric; cost is linear in N
+```
+
+**Cost at n=20, prompts=2:** N × 40 judge calls — 200 at N=5 versus 400 for `pairwise_all` at the same N. Trade-off: scored judges compress differences between strong models. Use the `mean ± sd` column to spot statistically significant gaps.
+
+**Inspect:** `mean ± sd` column in the Markdown report; bar chart in the HTML dashboard.
+
+### Low-memory MoE run
+
+**When:** A MoE model (e.g. Qwen3.6-35B-A3B) OOMs on boot despite unified memory.
+
+```yaml
+models:
+  - id: moe_model
+    gguf: "org/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf"
+    ctx: 2048              # shrink KV cache to reduce activation memory
+    n_cpu_moe: 999         # spill expert layers to CPU; throughput drops ~30–50%
+```
+
+Only one model loads at a time (see [AGENTS § Design invariants](AGENTS.md#design-invariants-dont-break-silently)), so `n_cpu_moe` on one entry does not affect others. Budget extra wall-clock time. `cost_usd` remains `null` on Strix Halo regardless.
+
+**Inspect:** `latency_s` — expect 3–5× slower than a fully-offloaded model of similar size.
+
 ## Output
 
 - **`results/run-<ts>.json`** — full record: config snapshot, tasks, per-call metrics, judgements. Each judgement is tagged `mode: "pairwise" | "scored"`; pairwise entries also carry slot `order`.

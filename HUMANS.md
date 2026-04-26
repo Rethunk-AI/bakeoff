@@ -26,7 +26,7 @@ AMD users: the image uses Vulkan, works on ROCm-supported GPUs and APUs without 
 
 ```sh
 ./run.sh                       # dataset + all phases + reports
-./run.sh --dry-run             # parse config + generate dataset only
+./run.sh --dry-run             # validate config + gen dataset; no proxy or network
 ./run.sh --config other.yaml   # alternate config
 ```
 
@@ -37,6 +37,14 @@ uv venv .venv
 uv pip install -r requirements.txt
 uv run python -m bench.runner --config config.yaml
 ```
+
+**Dry-run** validates config, generates the dataset, and exercises the `llama-swap` proxy config generator without starting a container or making any HTTP calls. On success it prints a one-line summary:
+
+```
+[dry-run] ok · validation passed · 20 tasks · 3 backends (incl. judge) · 2 prompts · 40 cells/model · judge=pairwise_all
+```
+
+Run `--dry-run` after every `config.yaml` edit and before committing benchmark configs to CI.
 
 ## Downloading models
 
@@ -182,6 +190,9 @@ Only one model loads at a time (see [AGENTS § Design invariants](AGENTS.md#desi
 | `SHA256 mismatch for ...` during bootstrap | The pinned version's checksum no longer matches the downloaded tarball. Check the release on GitHub; update both `LLAMA_SWAP_VERSION` and the matching `LLAMA_SWAP_SHA256_*` line in `run.sh`. Never bypass the check. |
 | Port `server.swap_port` already in use | `llama-swap` itself, another benchmark instance, or LM Studio holds it. Stop the other process or change `server.swap_port`. |
 | Dry-run: `gguf must be '<org>/<repo>/<file>.gguf' form` | Path shape typo. List real files with `fd -e gguf . ~/.lmstudio/models/` and copy a matching entry into `config.yaml`. |
+| `[config] ...` errors on startup | Validation failed. Read the messages — each names the field and the problem. Fix `config.yaml` and re-run `--dry-run` to confirm. |
+| `[config] model IDs must be unique` | Two models share the same `id:`. Give each a distinct routing key. |
+| `[config] gguf must be '<org>/<repo>/<file>.gguf' form` (validation) | Path shape typo. See the troubleshooting row below for the dry-run variant. |
 | `HTTPError 404 /v1/chat/completions` | Proxy is up but the requested model's backend is still loading. Raise `server.boot_timeout_s`. |
 | `cost_usd: null` everywhere | Normal on Strix Halo (broken `libdrm_amdgpu.so`) and on non-GPU hosts. No action unless you also have `nvidia-smi`. |
 | Judge returns mostly TIE | Judge model too weak for the task pool. Swap `judge.gguf` to a stronger local model or increase `judge.ctx`. |
@@ -195,6 +206,72 @@ Only one model loads at a time (see [AGENTS § Design invariants](AGENTS.md#desi
 ./bin/llama-swap.sh down              # stop proxy + sweep bench-llama-* containers
 rm -rf .venv results datasets .cache  # nuke generated state incl. pinned llama-swap binary
 ```
+
+## Comparing two runs
+
+`bench.compare` produces a Markdown delta report between any two result JSON files — useful after swapping a GGUF quantization, editing a prompt, or adding a model.
+
+```sh
+uv run python -m bench.compare results/run-base.json results/run-cand.json
+uv run python -m bench.compare base.json cand.json --output report.md
+uv run python -m bench.compare base.json cand.json --strict   # exit 1 on any warning
+```
+
+The report includes:
+- **Core metrics** — latency, tokens/sec, heuristic quality deltas per model.
+- **Energy and cost** — total Wh and USD deltas per model (columns are `—` when energy was not measured).
+- **Judge scores / win rates** — score delta (scored mode) or win-rate delta (pairwise mode), only when both runs used the same judge mode.
+- **Compatibility warnings** — emitted to stderr when seeds, task sets, prompt IDs, model IDs, or judge modes differ between runs.
+
+### Common comparison scenarios
+
+**Quantization change** — same model, different quant level:
+
+```sh
+# Run Q4_K_M, rename result; swap gguf to Q8_0, re-run.
+mv results/run-20260101-120000.json results/run-q4.json
+# edit config.yaml gguf path: ...Q4_K_M.gguf → ...Q8_0.gguf
+./run.sh
+uv run python -m bench.compare results/run-q4.json results/run-20260101-130000.json
+```
+
+Expect: latency ↑, tokens/sec ↓, quality_heuristic ≈ same for a well-calibrated quant.
+
+**Prompt variant change** — same models, different system prompt:
+
+```sh
+# Change prompts[].system in config.yaml, re-run.
+uv run python -m bench.compare results/run-plain.json results/run-cot.json
+```
+
+The tool warns "prompt IDs differ" if the prompt `id:` fields changed between runs. If only the `system:` text changed (same IDs), no warning is emitted — the delta speaks for itself.
+
+**Model swap** — replace one model with another:
+
+```sh
+uv run python -m bench.compare results/run-qwen35.json results/run-qwen36.json
+```
+
+When model ID sets differ, the tool warns and still renders both model rows — using `—` for whichever run lacks the model.
+
+## Resuming a partial run
+
+If a benchmark fails mid-run (proxy crash, OOM, network timeout), resume it instead of re-running everything:
+
+```sh
+./run.sh --resume-from results/run-20260101-120000.json
+# or without the wrapper:
+uv run python -m bench.runner --resume-from results/run-20260101-120000.json
+```
+
+Resume behaviour:
+- **Reused rows** — model rows that completed without error in the prior run are copied into the new result and tagged `resumed_from: <prior_run_id>`.
+- **Pending cells** — rows that are missing or errored in the prior run are re-executed and tagged `source_run_id: <prior_run_id>`.
+- **Models with all cells complete** — skipped entirely (no proxy swap, no warmup call).
+- **Judge phase** — always re-runs fully after the model phase completes (judge resume is not yet implemented).
+- **New result file** — emitted as a fresh `results/run-<ts>.json` with `resumed_from` in the payload. The prior file is untouched.
+
+Compatibility warnings are printed to stderr when the prior and current configs differ (seed, task set, prompt IDs, model IDs). Warnings do not abort the run.
 
 ## More detail
 

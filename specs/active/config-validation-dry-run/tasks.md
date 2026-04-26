@@ -20,4 +20,4 @@
 
 ## P2
 
-- [ ] Consider a `--validate-only` flag if dry-run output becomes too broad.
+- [ ] ~~Consider a `--validate-only` flag if dry-run output becomes too broad.~~

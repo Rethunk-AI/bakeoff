@@ -22,5 +22,5 @@
 
 ## P2
 
-- [ ] Consider a `--resume-strict-config-hash` flag for users who want byte-for-byte config matching.
-- [ ] Consider a summary of reused, rerun, and skipped cells in Markdown/HTML reports.
+- [ ] ~~Consider a `--resume-strict-config-hash` flag for users who want byte-for-byte config matching.~~
+- [ ] ~~Consider a summary of reused, rerun, and skipped cells in Markdown/HTML reports.~~

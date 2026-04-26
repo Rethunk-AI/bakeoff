@@ -16,4 +16,4 @@
 
 ## P2
 
-- [ ] Consider sample config files only if operators still need copy-paste starting points after the docs update.
+- [ ] ~~Consider sample config files only if operators still need copy-paste starting points after the docs update.~~

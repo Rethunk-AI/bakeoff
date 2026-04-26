@@ -20,5 +20,5 @@
 
 ## P2
 
-- [ ] Consider an HTML comparison dashboard after Markdown output stabilizes.
-- [ ] Consider multi-run trend input after the two-run path is proven.
+- [ ] ~~Consider an HTML comparison dashboard after Markdown output stabilizes.~~
+- [ ] ~~Consider multi-run trend input after the two-run path is proven.~~

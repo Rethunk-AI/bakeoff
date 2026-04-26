@@ -23,5 +23,5 @@
 
 ## P2
 
-- [ ] Consider recording local GGUF file size and mtime when the file exists.
-- [ ] Consider adding a compact report footer with dependency versions.
+- [ ] ~~Consider recording local GGUF file size and mtime when the file exists.~~
+- [ ] ~~Consider adding a compact report footer with dependency versions.~~

@@ -59,7 +59,7 @@ from bench.metrics import (
     parse_score,
     score_heuristic,
 )
-from bench.provenance import build_model_metadata
+from bench.provenance import build_model_metadata, enrich_model_metadata
 from bench.provenance import collect as collect_provenance
 from bench.resume import (
     ResumeError,
@@ -433,6 +433,9 @@ def main() -> int:
                     help="Parse + gen dataset, no proxy startup or network calls.")
     ap.add_argument("--resume-from", metavar="RESULT_JSON",
                     help="Prior result JSON. Reuses complete rows, reruns errored/missing.")
+    ap.add_argument("--hf-enrichment", choices=["off", "best-effort", "strict"],
+                    default=None,
+                    help="HuggingFace metadata enrichment (overrides run.hf_enrichment in config).")
     args = ap.parse_args()
 
     try:
@@ -561,12 +564,15 @@ def main() -> int:
     out_json = out_dir / f"run-{ts}.json"
     binary_dir = LLAMA_SWAP_CONFIG.parent
     provenance = collect_provenance(cfg, seed=seed, repo_root=HERE, binary_dir=binary_dir)
+    hf_mode = args.hf_enrichment or run_cfg.get("hf_enrichment", "off")
+    model_metadata = build_model_metadata(cfg)
+    model_metadata = enrich_model_metadata(model_metadata, hf_mode, provenance["warnings"])
     payload = {
         "run_id": run_cfg.get("name", ts),
         "timestamp": ts,
         "config": cfg,
         "provenance": provenance,
-        "model_metadata": build_model_metadata(cfg),
+        "model_metadata": model_metadata,
         "tasks": [asdict(t) for t in tasks],
         "records": all_records,
         "judgements": judgements,

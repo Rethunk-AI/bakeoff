@@ -2,7 +2,13 @@
 
 Collects local context with bounded subprocess calls and best-effort
 fallbacks. Missing tools produce null fields plus warnings, not hard
-failures. HuggingFace enrichment is optional (P1) and not performed here.
+failures.
+
+HuggingFace enrichment is opt-in via `run.hf_enrichment` in config.yaml
+or the `--hf-enrichment` CLI flag:
+  off           — no network calls (default; safe for offline environments)
+  best-effort   — failures append to provenance warnings, run continues
+  strict        — any HF lookup failure raises RuntimeError and aborts
 """
 from __future__ import annotations
 
@@ -112,6 +118,56 @@ def collect(
         "server_image": server_cfg.get("image"),
         "warnings": warnings,
     }
+
+
+def _hf_model_info(repo_id: str) -> dict[str, Any]:
+    """Fetch HuggingFace model info. Raises on any failure (caller handles mode)."""
+    from huggingface_hub import model_info  # type: ignore[import-untyped]
+    info = model_info(repo_id)
+    return {
+        "hf_sha": getattr(info, "sha", None),
+        "hf_tags": list(getattr(info, "tags", None) or []),
+        "hf_pipeline_tag": getattr(info, "pipeline_tag", None),
+        "hf_private": getattr(info, "private", None),
+    }
+
+
+def _hf_enrich(
+    repo_id: str,
+    mode: str,
+    warnings: list[str],
+) -> dict[str, Any] | None:
+    """Return HF fields for one repo_id, or None. mode: off|best-effort|strict."""
+    if mode == "off":
+        return None
+    try:
+        return _hf_model_info(repo_id)
+    except Exception as e:
+        msg = f"HuggingFace lookup failed for {repo_id!r}: {e}"
+        if mode == "strict":
+            raise RuntimeError(msg) from e
+        warnings.append(msg)
+        return None
+
+
+def enrich_model_metadata(
+    metadata: list[dict[str, Any]],
+    mode: str,
+    warnings: list[str],
+) -> list[dict[str, Any]]:
+    """Add HuggingFace fields to each model metadata entry.
+
+    mode: off (no-op), best-effort (failures → warnings), strict (failures raise).
+    Entries without a repo_id are left unchanged.
+    """
+    if mode == "off":
+        return metadata
+    result = []
+    for m in metadata:
+        repo_id = m.get("repo_id")
+        hf = _hf_enrich(repo_id, mode, warnings) if repo_id else None
+        result.append({**m, **(hf or {})})
+    return result
 
 
 def _infer_quantization(filename: str) -> str | None:

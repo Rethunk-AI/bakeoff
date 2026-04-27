@@ -47,7 +47,7 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
-from bench.config import DEFAULT_CONFIG, ConfigError, load_config, resolve_models_dir, validate_config
+from bench.config import DEFAULT_CONFIG, ConfigError, judge_id, load_config, resolve_models_dir, validate_config
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
@@ -422,12 +422,12 @@ def run_judge_phase(
     if mode == "scored" and len(models) < 1:
         return []
 
-    judge_id = str(judge_cfg.get("id") or "judge")
-    print(f"[phase] judge ({judge_id}), mode={mode}", file=sys.stderr)
+    jid = judge_id(judge_cfg)
+    print(f"[phase] judge ({jid}), mode={mode}", file=sys.stderr)
 
     judge = ChatClient(
         base_url=base_url,
-        model=judge_id,
+        model=jid,
         api_key="none",
         timeout_s=timeout_s,
     )

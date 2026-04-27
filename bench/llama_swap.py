@@ -31,7 +31,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from bench.config import ConfigError
+from bench.config import ConfigError, judge_id
 
 HEALTH_ENDPOINT = "/health"
 LLAMA_IMAGE_DEFAULT = "ghcr.io/ggml-org/llama.cpp:server-vulkan"
@@ -150,8 +150,8 @@ def build(bakeoff_cfg: dict[str, Any], models_dir: str) -> dict[str, Any]:
 
     judge = dict(bakeoff_cfg.get("judge") or {})
     if judge.get("enabled") and judge.get("gguf"):
-        judge_id = str(judge.get("id") or "judge")
-        judge_entry = {**judge, "id": judge_id}
+        jid = judge_id(judge)
+        judge_entry = {**judge, "id": jid}
         mid, block = _model_block(judge_entry, server_cfg, models_dir, image)
         if mid in models_out:
             raise ConfigError(

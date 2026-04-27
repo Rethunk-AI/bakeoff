@@ -61,6 +61,11 @@ def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
     return Path(os.path.expanduser(p)).resolve()
 
 
+def judge_id(judge_cfg: dict[str, Any]) -> str:
+    """Extract judge id from judge config, defaulting to 'judge'."""
+    return str(judge_cfg.get("id") or "judge")
+
+
 def _check_id(item: dict[str, Any], item_idx: int, field_name: str, path_prefix: str,
               seen_ids: set[str], issues: list[ValidationIssue]) -> None:
     """Check ID presence and uniqueness; report issues."""
@@ -153,10 +158,10 @@ def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
         if judge_gguf:
             _check_gguf_shape(str(judge_gguf), "judge.gguf", issues)
 
-        judge_id = str(judge.get("id") or "judge")
-        if judge_id in seen_model_ids:
+        jid = judge_id(judge)
+        if jid in seen_model_ids:
             err("judge.id",
-                f"judge id {judge_id!r} collides with a model id; set judge.id to a distinct value")
+                f"judge id {jid!r} collides with a model id; set judge.id to a distinct value")
 
     # Server — positive numeric fields
     server = cfg.get("server") or {}

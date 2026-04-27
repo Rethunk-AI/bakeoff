@@ -28,8 +28,8 @@ def _compat_warnings(base: dict[str, Any], cand: dict[str, Any]) -> list[str]:
     def _sorted_ids(payload: dict[str, Any], key: str, id_field: str) -> list[str]:
         return sorted(str(e.get(id_field, "")) for e in payload.get(key) or [])
 
-    base_tasks = sorted(str(t.get("id", "")) for t in base.get("tasks") or [])
-    cand_tasks = sorted(str(t.get("id", "")) for t in cand.get("tasks") or [])
+    base_tasks = _sorted_ids(base, "tasks", "id")
+    cand_tasks = _sorted_ids(cand, "tasks", "id")
     if base_tasks != cand_tasks:
         warnings.append(
             f"task sets differ ({len(base_tasks)} base vs {len(cand_tasks)} candidate)"

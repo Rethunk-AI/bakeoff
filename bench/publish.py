@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-SCHEMA_VERSION = "bakeoff.result-bundle.v1"
+SCHEMA_VERSION = "bakeoff-results/v1"
 DEFAULT_RESULTS_REPO = "Rethunk-AI/bakeoff-results"
 SAFE_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 

@@ -47,7 +47,7 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
-from bench.config import DEFAULT_CONFIG, ConfigError, load_config, validate_config
+from bench.config import DEFAULT_CONFIG, ConfigError, load_config, resolve_models_dir, validate_config
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
@@ -76,10 +76,6 @@ HERE = Path(__file__).resolve().parent.parent
 LAUNCHER = HERE / "bin" / "llama-swap.sh"
 LLAMA_SWAP_CONFIG = HERE / ".cache" / "llama-swap" / "config.yaml"
 
-
-def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
-    p = server_cfg.get("models_dir", "~/.lmstudio/models")
-    return Path(os.path.expanduser(p)).resolve()
 
 
 # --- llama-swap lifecycle ---------------------------------------------------

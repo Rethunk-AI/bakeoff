@@ -54,6 +54,13 @@ def config_hash(cfg: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()[:16]
 
 
+def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
+    """Resolve models directory path from server config, expanding ~ and making absolute."""
+    import os
+    p = server_cfg.get("models_dir", "~/.lmstudio/models")
+    return Path(os.path.expanduser(p)).resolve()
+
+
 def _check_id(item: dict[str, Any], item_idx: int, field_name: str, path_prefix: str,
               seen_ids: set[str], issues: list[ValidationIssue]) -> None:
     """Check ID presence and uniqueness; report issues."""

@@ -27,7 +27,7 @@ from typing import Any
 import yaml
 from huggingface_hub import HfApi, hf_hub_download
 
-from bench.config import DEFAULT_CONFIG
+from bench.config import DEFAULT_CONFIG, resolve_models_dir
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
@@ -40,10 +40,6 @@ def load_config(path: Path) -> dict[str, Any]:
     with path.open() as f:
         return yaml.safe_load(f)
 
-
-def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
-    p = server_cfg.get("models_dir", "~/.lmstudio/models")
-    return Path(os.path.expanduser(p)).resolve()
 
 
 def split_gguf_path(gguf_rel: str) -> tuple[str, str]:

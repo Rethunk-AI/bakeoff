@@ -57,6 +57,12 @@ def _percentile(xs: list[float], p: float) -> float | None:
 
 # --- numeric rollup from records -------------------------------------------
 
+
+def _extract_field(rows: list[dict[str, Any]], key: str) -> list[float]:
+    """Extract non-None values for a key from a list of dicts."""
+    return [r[key] for r in rows if r.get(key) is not None]
+
+
 def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in records:
@@ -66,12 +72,12 @@ def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
     out: dict[str, dict[str, Any]] = {}
     for mid, rows in by_model.items():
-        lat = [r["latency_s"] for r in rows if r.get("latency_s") is not None]
-        ttft = [r["ttft_s"] for r in rows if r.get("ttft_s") is not None]
-        tps = [r["tokens_per_sec"] for r in rows if r.get("tokens_per_sec")]
-        wh = [r["energy_wh"] for r in rows if r.get("energy_wh") is not None]
-        usd = [r["cost_usd"] for r in rows if r.get("cost_usd") is not None]
-        qh = [r["quality_heuristic"] for r in rows if r.get("quality_heuristic") is not None]
+        lat = _extract_field(rows, "latency_s")
+        ttft = _extract_field(rows, "ttft_s")
+        tps = _extract_field(rows, "tokens_per_sec")
+        wh = _extract_field(rows, "energy_wh")
+        usd = _extract_field(rows, "cost_usd")
+        qh = _extract_field(rows, "quality_heuristic")
         out[mid] = {
             "n": len(rows),
             "latency_mean_s": mean(lat) if lat else None,

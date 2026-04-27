@@ -56,9 +56,14 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _sanitize_id(raw: str) -> str:
+    """Sanitize a string to a safe filesystem/path ID."""
+    return SAFE_ID_RE.sub("-", raw).strip("-") or "run"
+
+
 def _safe_run_id(payload: dict[str, Any]) -> str:
     raw = str(payload.get("run_id") or payload.get("timestamp") or "run")
-    return SAFE_ID_RE.sub("-", raw).strip("-") or "run"
+    return _sanitize_id(raw)
 
 
 def _require_mapping(data: dict[str, Any], key: str, errors: list[str]) -> dict[str, Any]:
@@ -294,7 +299,7 @@ def submit_bundle(
 
     manifest = _load_json(bundle_dir / "manifest.json")
     run_id = str(manifest["run_id"])
-    safe_id = SAFE_ID_RE.sub("-", run_id).strip("-") or "run"
+    safe_id = _sanitize_id(run_id)
     dest = checkout / "submissions" / safe_id
 
     if dry_run:

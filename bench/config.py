@@ -16,6 +16,7 @@ import yaml
 
 _VALID_JUDGE_MODES = {"pairwise_all", "scored"}
 _VALID_DOMAINS = {"qa", "code", "summarize", "classify"}
+DEFAULT_CONFIG = "config.yaml"
 
 
 class ConfigError(ValueError):

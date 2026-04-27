@@ -26,6 +26,8 @@ from typing import Any
 
 import yaml
 from huggingface_hub import HfApi, hf_hub_download
+
+from bench.config import DEFAULT_CONFIG
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
@@ -184,8 +186,8 @@ def main() -> int:
         prog="bench.download",
         description="Fetch GGUFs from Hugging Face into the LM Studio layout.",
     )
-    ap.add_argument("--config", default="config.yaml",
-                    help="Path to config.yaml (for the no-arg config mode).")
+    ap.add_argument("--config", default=DEFAULT_CONFIG,
+                    help=f"Path to {DEFAULT_CONFIG} (for the no-arg config mode).")
     ap.add_argument("--list", action="store_true",
                     help="Dry-run: print what would be fetched, no download.")
     ap.add_argument("repo_id", nargs="?",

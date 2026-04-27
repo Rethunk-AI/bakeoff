@@ -47,7 +47,7 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
-from bench.config import ConfigError, load_config, validate_config
+from bench.config import DEFAULT_CONFIG, ConfigError, load_config, validate_config
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
@@ -451,7 +451,7 @@ def run_judge_phase(
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--config", default="config.yaml")
+    ap.add_argument("--config", default=DEFAULT_CONFIG)
     ap.add_argument("--dry-run", action="store_true",
                     help="Parse + gen dataset, no proxy startup or network calls.")
     ap.add_argument("--resume-from", metavar="RESULT_JSON",

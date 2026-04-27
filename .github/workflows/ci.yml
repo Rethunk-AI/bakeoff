@@ -19,38 +19,38 @@ jobs:
     name: python lint + type + dry-run
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
       - name: Install uv
-        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+        uses: astral-sh/setup-uv@v8
 
       - name: Install dev deps
-        run: ~/.cargo/bin/uv sync --all-extras
+        run: uv sync --all-extras
 
       - name: Ruff
-        run: ~/.cargo/bin/uv run ruff check bench/ tests/
+        run: uv run ruff check bench/ tests/
 
       - name: Mypy
-        run: ~/.cargo/bin/uv run mypy bench/
+        run: uv run mypy bench/
 
       - name: Py compile
-        run: ~/.cargo/bin/uv run python -m compileall -q bench/ tests/
+        run: uv run python -m compileall -q bench/ tests/
 
       - name: Pytest
-        run: ~/.cargo/bin/uv run pytest
+        run: uv run pytest
 
       - name: Dry-run
-        run: ~/.cargo/bin/uv run python -m bench.runner --config config.yaml --dry-run
+        run: uv run python -m bench.runner --config config.yaml --dry-run
 
   shell:
     name: shell scripts
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Shellcheck
         run: shellcheck bin/llama-swap.sh run.sh
@@ -59,7 +59,7 @@ jobs:
     name: actionlint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Install actionlint
         run: |

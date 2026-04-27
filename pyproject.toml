@@ -6,17 +6,17 @@ requires-python = ">=3.10"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
-    "httpx>=0.27",
-    "huggingface_hub>=0.25",
-    "pyyaml>=6",
+    "httpx>=0.28.1",
+    "huggingface_hub>=1.12.0",
+    "pyyaml>=6.0.3",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "mypy>=1.10",
-    "pytest>=8",
-    "ruff>=0.5",
-    "types-PyYAML>=6",
+    "mypy>=1.20.2",
+    "pytest>=9.0.3",
+    "ruff>=0.15.12",
+    "types-PyYAML>=6.0.12.20260408",
 ]
 
 # Auto-discovery trips over the gitignored `results/` and `datasets/` output

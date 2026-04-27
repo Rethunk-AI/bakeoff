@@ -56,6 +56,9 @@ class ChatClient:
         self.timeout_s = timeout_s
         self.stream = stream
 
+    def _headers(self) -> dict[str, str]:
+        return {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+
     def chat(self, messages: list[dict[str, str]], **opts: Any) -> ChatResult:
         if self.stream:
             return self._chat_stream(messages, **opts)
@@ -63,7 +66,7 @@ class ChatClient:
 
     def _chat_blocking(self, messages: list[dict[str, str]], **opts: Any) -> ChatResult:
         url = f"{self.base_url}/chat/completions"
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = self._headers()
         body: dict[str, Any] = {"model": self.model, "messages": messages, "stream": False}
         body.update(opts)
 
@@ -97,7 +100,7 @@ class ChatClient:
 
     def _chat_stream(self, messages: list[dict[str, str]], **opts: Any) -> ChatResult:
         url = f"{self.base_url}/chat/completions"
-        headers = {"Authorization": f"Bearer {self.api_key}", "Content-Type": "application/json"}
+        headers = self._headers()
         body: dict[str, Any] = {
             "model": self.model,
             "messages": messages,

@@ -31,14 +31,12 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from bench.config import ConfigError
+
 HEALTH_ENDPOINT = "/health"
 LLAMA_IMAGE_DEFAULT = "ghcr.io/ggml-org/llama.cpp:server-vulkan"
 CONTAINER_NAME_PREFIX = "bench-llama-"
 _ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]*$")
-
-
-class ConfigError(ValueError):
-    """The bakeoff config cannot be mapped to a valid llama-swap config."""
 
 
 def container_name(model_id: str) -> str:

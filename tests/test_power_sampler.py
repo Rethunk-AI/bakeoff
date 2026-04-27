@@ -4,6 +4,7 @@ Covers the pure integration helper (`trapezoid_wh`) and the sampler
 lifecycle (`__enter__` / `__exit__`) with `sample_power` monkey-patched
 so no subprocess is spawned.
 """
+
 from __future__ import annotations
 
 import time
@@ -14,6 +15,7 @@ from bench import metrics
 from bench.metrics import PowerSampler, trapezoid_wh
 
 # --- trapezoid_wh ---------------------------------------------------------
+
 
 def test_trapezoid_empty_is_none():
     assert trapezoid_wh([]) is None
@@ -49,6 +51,7 @@ def test_trapezoid_step_function():
 
 # --- PowerSampler lifecycle ----------------------------------------------
 
+
 class _FakePower:
     def __init__(self, watts_seq: list[float]):
         self.seq = list(watts_seq)
@@ -78,6 +81,7 @@ def test_sampler_collects_samples(monkeypatch):
 def test_sampler_empty_when_sampler_fails(monkeypatch):
     def failing(_i: int = 0) -> metrics.PowerSample:
         return metrics.PowerSample(None, False)
+
     monkeypatch.setattr(metrics, "sample_power", failing)
     with PowerSampler(hz=100.0) as s:
         time.sleep(0.02)
@@ -88,8 +92,7 @@ def test_sampler_empty_when_sampler_fails(monkeypatch):
 
 def test_sampler_stop_is_quick(monkeypatch):
     # Event.wait must preempt, not leave a trailing sleep after the call.
-    monkeypatch.setattr(metrics, "sample_power",
-                        lambda i=0: metrics.PowerSample(50.0, True))
+    monkeypatch.setattr(metrics, "sample_power", lambda i=0: metrics.PowerSample(50.0, True))
     t0 = time.perf_counter()
     with PowerSampler(hz=1.0) as s:  # nominal interval = 1s
         pass  # exit immediately
@@ -104,8 +107,9 @@ def test_sampler_rectangle_fallback_on_single_sample(monkeypatch):
     # stops immediately. energy_wh should use rectangle rule (W * elapsed).
     calls = [metrics.PowerSample(120.0, True), metrics.PowerSample(None, False)]
     it = iter(calls)
-    monkeypatch.setattr(metrics, "sample_power",
-                        lambda i=0: next(it, metrics.PowerSample(None, False)))
+    monkeypatch.setattr(
+        metrics, "sample_power", lambda i=0: next(it, metrics.PowerSample(None, False))
+    )
     with PowerSampler(hz=100.0) as s:
         time.sleep(0.02)
     # Could be 1 or 2 samples depending on thread timing.

@@ -1,4 +1,5 @@
 """Unit tests for bench.config — load, validate, hash."""
+
 from __future__ import annotations
 
 import pytest
@@ -49,6 +50,7 @@ class TestLoadConfig:
 
     def test_valid(self, tmp_path):
         import yaml
+
         f = tmp_path / "ok.yaml"
         f.write_text(yaml.dump(_cfg()))
         data = load_config(f)
@@ -173,10 +175,12 @@ class TestModels:
         assert any(".id" in i.path for i in issues)
 
     def test_duplicate_model_id(self):
-        cfg = _cfg(models=[
-            {"id": "dup", "gguf": "org/repo/a.gguf"},
-            {"id": "dup", "gguf": "org/repo/b.gguf"},
-        ])
+        cfg = _cfg(
+            models=[
+                {"id": "dup", "gguf": "org/repo/a.gguf"},
+                {"id": "dup", "gguf": "org/repo/b.gguf"},
+            ]
+        )
         issues = validate_config(cfg)
         assert any("duplicate" in i.message for i in issues)
 
@@ -211,10 +215,12 @@ class TestPrompts:
         assert any(".id" in i.path for i in issues)
 
     def test_duplicate_prompt_id(self):
-        cfg = _cfg(prompts=[
-            {"id": "p1", "text": "a"},
-            {"id": "p1", "text": "b"},
-        ])
+        cfg = _cfg(
+            prompts=[
+                {"id": "p1", "text": "a"},
+                {"id": "p1", "text": "b"},
+            ]
+        )
         issues = validate_config(cfg)
         assert any("duplicate" in i.message for i in issues)
 

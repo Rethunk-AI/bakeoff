@@ -10,6 +10,7 @@ or the `--hf-enrichment` CLI flag:
   best-effort   — failures append to provenance warnings, run continues
   strict        — any HF lookup failure raises RuntimeError and aborts
 """
+
 from __future__ import annotations
 
 import platform
@@ -75,6 +76,7 @@ def _package_versions(packages: list[str]) -> dict[str, str | None]:
     for pkg in packages:
         try:
             from importlib.metadata import version as pkg_version
+
             out[pkg] = pkg_version(pkg)
         except Exception:
             out[pkg] = None
@@ -123,6 +125,7 @@ def collect(
 def _hf_model_info(repo_id: str) -> dict[str, Any]:
     """Fetch HuggingFace model info. Raises on any failure (caller handles mode)."""
     from huggingface_hub import model_info
+
     info = model_info(repo_id)
     return {
         "hf_sha": getattr(info, "sha", None),
@@ -190,14 +193,16 @@ def build_model_metadata(
         repo_id = "/".join(parts[:2]) if len(parts) >= 3 else None
         filename = parts[-1] if parts else None
         quant = _infer_quantization(filename or "") if filename else None
-        out.append({
-            "id": m.get("id"),
-            "alias": m.get("alias"),
-            "gguf": gguf,
-            "repo_id": repo_id,
-            "filename": filename,
-            "quantization": quant,
-            "ctx": m.get("ctx") or default_ctx,
-            "n_cpu_moe": m.get("n_cpu_moe"),
-        })
+        out.append(
+            {
+                "id": m.get("id"),
+                "alias": m.get("alias"),
+                "gguf": gguf,
+                "repo_id": repo_id,
+                "filename": filename,
+                "quantization": quant,
+                "ctx": m.get("ctx") or default_ctx,
+                "n_cpu_moe": m.get("n_cpu_moe"),
+            }
+        )
     return out

@@ -8,6 +8,7 @@ Emits Markdown to stdout (or --output file). Compatibility warnings are
 printed to stderr. Mismatched task/prompt/judge/seed are warnings, not
 hard failures, unless --strict is passed.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -31,23 +32,17 @@ def _compat_warnings(base: dict[str, Any], cand: dict[str, Any]) -> list[str]:
     base_tasks = _sorted_ids(base, "tasks", "id")
     cand_tasks = _sorted_ids(cand, "tasks", "id")
     if base_tasks != cand_tasks:
-        warnings.append(
-            f"task sets differ ({len(base_tasks)} base vs {len(cand_tasks)} candidate)"
-        )
+        warnings.append(f"task sets differ ({len(base_tasks)} base vs {len(cand_tasks)} candidate)")
 
     base_prompts = _sorted_ids(base.get("config") or {}, "prompts", "id")
     cand_prompts = _sorted_ids(cand.get("config") or {}, "prompts", "id")
     if base_prompts != cand_prompts:
-        warnings.append(
-            f"prompt IDs differ: base={base_prompts} candidate={cand_prompts}"
-        )
+        warnings.append(f"prompt IDs differ: base={base_prompts} candidate={cand_prompts}")
 
     base_models = _sorted_ids(base.get("config") or {}, "models", "id")
     cand_models = _sorted_ids(cand.get("config") or {}, "models", "id")
     if set(base_models) != set(cand_models):
-        warnings.append(
-            f"model ID sets differ: base={base_models} candidate={cand_models}"
-        )
+        warnings.append(f"model ID sets differ: base={base_models} candidate={cand_models}")
 
     base_mode = _detect_mode(base.get("judgements") or [])
     cand_mode = _detect_mode(cand.get("judgements") or [])
@@ -61,9 +56,7 @@ def _compat_warnings(base: dict[str, Any], cand: dict[str, Any]) -> list[str]:
         and cand_prov.get("seed") is not None
         and base_prov["seed"] != cand_prov["seed"]
     ):
-        warnings.append(
-            f"seed differs: base={base_prov['seed']} candidate={cand_prov['seed']}"
-        )
+        warnings.append(f"seed differs: base={base_prov['seed']} candidate={cand_prov['seed']}")
 
     if (
         base_prov.get("config_hash")
@@ -96,7 +89,6 @@ def _delta2(a: float | None, b: float | None, nd: int = 3) -> str:
     d = b - a
     sign = "+" if d >= 0 else ""
     return f"{sign}{d:.{nd}f}"
-
 
 
 # --- Markdown comparison output ----------------------------------------------
@@ -184,9 +176,7 @@ def compare_markdown(
         if judge_models:
             lines.append("## Judge scores (scored mode)")
             lines.append("")
-            lines.append(
-                f"| Model | Score {base_label} | Score {cand_label} | Δ score |"
-            )
+            lines.append(f"| Model | Score {base_label} | Score {cand_label} | Δ score |")
             lines.append("|---|---:|---:|---:|")
             for mid in judge_models:
                 bm = bsr["per_model"].get(mid, {})
@@ -206,9 +196,7 @@ def compare_markdown(
         if pw_models:
             lines.append("## Judge win rates (pairwise mode)")
             lines.append("")
-            lines.append(
-                f"| Model | Win rate {base_label} | Win rate {cand_label} | Δ win rate |"
-            )
+            lines.append(f"| Model | Win rate {base_label} | Win rate {cand_label} | Δ win rate |")
             lines.append("|---|---:|---:|---:|")
             for mid in pw_models:
                 bm = bpr["per_model"].get(mid, {})
@@ -254,7 +242,8 @@ def compare(
         return 1
 
     md = compare_markdown(
-        base, cand,
+        base,
+        cand,
         base_label=base_path.stem,
         cand_label=cand_path.stem,
         warnings=warns,
@@ -275,10 +264,16 @@ def main() -> int:
     )
     ap.add_argument("base", type=Path, help="Base result JSON file")
     ap.add_argument("candidate", type=Path, help="Candidate result JSON file")
-    ap.add_argument("--output", "-o", type=Path, default=None,
-                    help="Write Markdown to this file (default: stdout)")
-    ap.add_argument("--strict", action="store_true",
-                    help="Exit non-zero on any compatibility warning")
+    ap.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
+        help="Write Markdown to this file (default: stdout)",
+    )
+    ap.add_argument(
+        "--strict", action="store_true", help="Exit non-zero on any compatibility warning"
+    )
     args = ap.parse_args()
     return compare(args.base, args.candidate, strict=args.strict, output=args.output)
 

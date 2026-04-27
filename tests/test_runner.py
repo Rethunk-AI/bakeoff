@@ -5,6 +5,7 @@ dataset generation → proxy config generation) without starting a proxy or
 making any network calls. They serve as CI fixtures that catch regressions
 in non-default config branches (alternate judge modes, judge disabled, etc.).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -46,8 +47,11 @@ def _write_config(tmp_path: Path, cfg: dict) -> Path:
 
 def _run_dry(config_path: Path, capsys) -> int:
     from bench.runner import main
-    with patch("sys.argv", ["runner", "--config", str(config_path), "--dry-run"]), \
-         patch("bench.runner.write_jsonl"):
+
+    with (
+        patch("sys.argv", ["runner", "--config", str(config_path), "--dry-run"]),
+        patch("bench.runner.write_jsonl"),
+    ):
         return main()
 
 
@@ -80,10 +84,15 @@ class TestDryRunSmoke:
         assert "judge=off" in err
 
     def test_scored_judge_in_summary(self, tmp_path, capsys):
-        cfg = {**_BASE_CFG, "judge": {
-            "enabled": True, "mode": "scored",
-            "gguf": "org/repo-GGUF/judge-Q4_K_M.gguf", "ctx": 4096,
-        }}
+        cfg = {
+            **_BASE_CFG,
+            "judge": {
+                "enabled": True,
+                "mode": "scored",
+                "gguf": "org/repo-GGUF/judge-Q4_K_M.gguf",
+                "ctx": 4096,
+            },
+        }
         p = _write_config(tmp_path, cfg)
         _run_dry(p, capsys)
         err = capsys.readouterr().err

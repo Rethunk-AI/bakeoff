@@ -1,4 +1,5 @@
 """Unit tests for bench.publish result bundle workflow."""
+
 from __future__ import annotations
 
 import json
@@ -30,19 +31,21 @@ def _payload():
             {"id": "m_a", "gguf": "org/repo/model-Q4_K_M.gguf", "repo_id": "org/repo"},
         ],
         "tasks": [{"id": "t1", "domain": "qa", "user_prompt": "Question?"}],
-        "records": [{
-            "task_id": "t1",
-            "prompt_id": "plain",
-            "model_id": "m_a",
-            "text": "Answer",
-            "latency_s": 1.0,
-            "ttft_s": 0.1,
-            "tokens_per_sec": 12.0,
-            "energy_wh": None,
-            "cost_usd": None,
-            "quality_heuristic": 1.0,
-            "error": None,
-        }],
+        "records": [
+            {
+                "task_id": "t1",
+                "prompt_id": "plain",
+                "model_id": "m_a",
+                "text": "Answer",
+                "latency_s": 1.0,
+                "ttft_s": 0.1,
+                "tokens_per_sec": 12.0,
+                "energy_wh": None,
+                "cost_usd": None,
+                "quality_heuristic": 1.0,
+                "error": None,
+            }
+        ],
         "judgements": [],
     }
 

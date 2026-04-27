@@ -2,6 +2,7 @@
 
 Each task has an id, domain, user_prompt, and optional expected (for heuristic scoring).
 """
+
 from __future__ import annotations
 
 import json
@@ -23,9 +24,14 @@ _QA = [
     ("What is the capital of {country}?", "{capital}"),
 ]
 _COUNTRIES = [
-    ("France", "Paris"), ("Japan", "Tokyo"), ("Brazil", "Brasília"),
-    ("Kenya", "Nairobi"), ("Canada", "Ottawa"), ("Egypt", "Cairo"),
-    ("Australia", "Canberra"), ("Norway", "Oslo"),
+    ("France", "Paris"),
+    ("Japan", "Tokyo"),
+    ("Brazil", "Brasília"),
+    ("Kenya", "Nairobi"),
+    ("Canada", "Ottawa"),
+    ("Egypt", "Cairo"),
+    ("Australia", "Canberra"),
+    ("Norway", "Oslo"),
 ]
 
 _CODE = [
@@ -41,10 +47,22 @@ _SUMMARIZE = [
 ]
 
 _CLASSIFY = [
-    ("Classify sentiment as POSITIVE or NEGATIVE. Text: 'This product exceeded every expectation I had.' Answer with one word.", "POSITIVE"),
-    ("Classify sentiment as POSITIVE or NEGATIVE. Text: 'Total waste of money, broke on day two.' Answer with one word.", "NEGATIVE"),
-    ("Classify sentiment as POSITIVE or NEGATIVE. Text: 'Best meal I have had this year.' Answer with one word.", "POSITIVE"),
-    ("Classify sentiment as POSITIVE or NEGATIVE. Text: 'Rude staff and cold food.' Answer with one word.", "NEGATIVE"),
+    (
+        "Classify sentiment as POSITIVE or NEGATIVE. Text: 'This product exceeded every expectation I had.' Answer with one word.",
+        "POSITIVE",
+    ),
+    (
+        "Classify sentiment as POSITIVE or NEGATIVE. Text: 'Total waste of money, broke on day two.' Answer with one word.",
+        "NEGATIVE",
+    ),
+    (
+        "Classify sentiment as POSITIVE or NEGATIVE. Text: 'Best meal I have had this year.' Answer with one word.",
+        "POSITIVE",
+    ),
+    (
+        "Classify sentiment as POSITIVE or NEGATIVE. Text: 'Rude staff and cold food.' Answer with one word.",
+        "NEGATIVE",
+    ),
 ]
 
 
@@ -56,38 +74,46 @@ def generate(n: int, domains: list[str], seed: int = 42) -> list[Task]:
         dom = rng.choice(domains)
         if dom == "qa":
             country, capital = rng.choice(_COUNTRIES)
-            out.append(Task(
-                id=f"t{i:04d}",
-                domain="qa",
-                user_prompt=_QA[0][0].format(country=country),
-                expected=capital,
-                scorer="contains",
-            ))
+            out.append(
+                Task(
+                    id=f"t{i:04d}",
+                    domain="qa",
+                    user_prompt=_QA[0][0].format(country=country),
+                    expected=capital,
+                    scorer="contains",
+                )
+            )
         elif dom == "code":
-            out.append(Task(
-                id=f"t{i:04d}",
-                domain="code",
-                user_prompt=rng.choice(_CODE),
-                expected=None,
-                scorer="judge",
-            ))
+            out.append(
+                Task(
+                    id=f"t{i:04d}",
+                    domain="code",
+                    user_prompt=rng.choice(_CODE),
+                    expected=None,
+                    scorer="judge",
+                )
+            )
         elif dom == "summarize":
-            out.append(Task(
-                id=f"t{i:04d}",
-                domain="summarize",
-                user_prompt=rng.choice(_SUMMARIZE),
-                expected=None,
-                scorer="judge",
-            ))
+            out.append(
+                Task(
+                    id=f"t{i:04d}",
+                    domain="summarize",
+                    user_prompt=rng.choice(_SUMMARIZE),
+                    expected=None,
+                    scorer="judge",
+                )
+            )
         elif dom == "classify":
             prompt, label = rng.choice(_CLASSIFY)
-            out.append(Task(
-                id=f"t{i:04d}",
-                domain="classify",
-                user_prompt=prompt,
-                expected=label,
-                scorer="exact",
-            ))
+            out.append(
+                Task(
+                    id=f"t{i:04d}",
+                    domain="classify",
+                    user_prompt=prompt,
+                    expected=label,
+                    scorer="exact",
+                )
+            )
         i += 1
     return out
 

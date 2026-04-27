@@ -5,6 +5,7 @@ This module adds an explicit publication path: turn one result JSON into a
 reviewable bundle, validate that bundle, optionally attach a Sigstore
 signature, and open a publication PR against `Rethunk-AI/bakeoff-results`.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -338,20 +339,34 @@ def submit_bundle(
     if not status:
         print("[publish] no changes to submit")
         return dest
-    _run([
-        "git",
-        "-c", "user.name=Bastion Agent",
-        "-c", "user.email=bastion-agent@rethunk.tech",
-        "commit",
-        "-m", f"results: submit {safe_id}",
-    ], cwd=checkout)
+    _run(
+        [
+            "git",
+            "-c",
+            "user.name=Bastion Agent",
+            "-c",
+            "user.email=bastion-agent@rethunk.tech",
+            "commit",
+            "-m",
+            f"results: submit {safe_id}",
+        ],
+        cwd=checkout,
+    )
     _run(["git", "push", "-u", "origin", branch_name], cwd=checkout)
-    _run([
-        "gh", "pr", "create",
-        "--repo", repo,
-        "--title", f"results: submit {safe_id}",
-        "--body", f"Submit signed bakeoff result bundle `{safe_id}`.",
-    ], cwd=checkout)
+    _run(
+        [
+            "gh",
+            "pr",
+            "create",
+            "--repo",
+            repo,
+            "--title",
+            f"results: submit {safe_id}",
+            "--body",
+            f"Submit signed bakeoff result bundle `{safe_id}`.",
+        ],
+        cwd=checkout,
+    )
     return dest
 
 

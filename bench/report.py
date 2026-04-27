@@ -5,6 +5,7 @@ Judge modes supported in the rendered output:
              (wins + 0.5 * ties) / matches. Also renders a win-rate matrix.
   scored   — 1-5 rubric. Per-model mean score column in the rollup.
 """
+
 from __future__ import annotations
 
 import json
@@ -14,6 +15,7 @@ from statistics import mean, pstdev
 from typing import Any
 
 # --- Pareto helper ---------------------------------------------------------
+
 
 def _pareto_frontier(points: list[tuple[str, float, float]]) -> list[str]:
     """Return model ids on the Pareto frontier (quality vs energy).
@@ -25,10 +27,10 @@ def _pareto_frontier(points: list[tuple[str, float, float]]) -> list[str]:
     plotting order).
     """
     frontier = [
-        p for p in points
+        p
+        for p in points
         if not any(
-            q is not p and q[1] >= p[1] and q[2] <= p[2]
-            and (q[1] > p[1] or q[2] < p[2])
+            q is not p and q[1] >= p[1] and q[2] <= p[2] and (q[1] > p[1] or q[2] < p[2])
             for q in points
         )
     ]
@@ -36,6 +38,7 @@ def _pareto_frontier(points: list[tuple[str, float, float]]) -> list[str]:
 
 
 # --- percentile helpers ----------------------------------------------------
+
 
 def _percentile(xs: list[float], p: float) -> float | None:
     """Linear-interpolation percentile. p in [0, 100]. Returns None for [].
@@ -102,6 +105,7 @@ def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
 
 
 # --- judge rollups ---------------------------------------------------------
+
 
 def _detect_mode(judgements: list[dict[str, Any]]) -> str | None:
     if not judgements:
@@ -230,14 +234,13 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
 
     if mode == "scored":
         sr = _scored_rollup(judgements)
-        lines.append("| Model | N | Latency mean (s) | Tok/sec mean | Energy (Wh) | Cost (USD) | Heuristic | Judge score (mean ± sd) |")
+        lines.append(
+            "| Model | N | Latency mean (s) | Tok/sec mean | Energy (Wh) | Cost (USD) | Heuristic | Judge score (mean ± sd) |"
+        )
         lines.append("|---|---:|---:|---:|---:|---:|---:|---:|")
         for mid, r in roll.items():
             s = sr["per_model"].get(mid)
-            score_cell = (
-                f"{_fmt(s['mean'], 2)} ± {_fmt(s['stdev'], 2)} (n={s['n']})"
-                if s else "—"
-            )
+            score_cell = f"{_fmt(s['mean'], 2)} ± {_fmt(s['stdev'], 2)} (n={s['n']})" if s else "—"
             lines.append(
                 f"| {mid} | {r['n']} | {_fmt(r['latency_mean_s'])} | "
                 f"{_fmt(r['tokens_per_sec_mean'], 2)} | {_fmt(r['energy_wh_total'])} | "
@@ -246,7 +249,9 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
             )
     else:
         # pairwise (or no judge)
-        lines.append("| Model | N | Latency mean (s) | Tok/sec mean | Energy (Wh) | Cost (USD) | Heuristic |")
+        lines.append(
+            "| Model | N | Latency mean (s) | Tok/sec mean | Energy (Wh) | Cost (USD) | Heuristic |"
+        )
         lines.append("|---|---:|---:|---:|---:|---:|---:|")
         for mid, r in roll.items():
             lines.append(
@@ -310,13 +315,15 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
                 cells = []
                 for col in pr["models"]:
                     v = pr["matrix"][row][col]
-                    cells.append("—" if v is None else f"{v*100:.0f}%")
+                    cells.append("—" if v is None else f"{v * 100:.0f}%")
                 lines.append(f"| **{row}** | " + " | ".join(cells) + " |")
     elif mode == "scored":
         lines.append("## Scored rubric (1-5)")
         lines.append("")
-        lines.append("_Per-model mean score shown in the rollup above. "
-                     "Higher = judge preferred the response against an absolute rubric._")
+        lines.append(
+            "_Per-model mean score shown in the rollup above. "
+            "Higher = judge preferred the response against an absolute rubric._"
+        )
     else:
         lines.append("## Judge")
         lines.append("")
@@ -354,11 +361,11 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
         lines.append("")
         lines.append("## Pareto: quality vs energy")
         lines.append("")
-        lines.append(f"Quality axis: _{q_label}_ (higher better). "
-                     "Energy axis: total Wh (lower better).")
+        lines.append(
+            f"Quality axis: _{q_label}_ (higher better). Energy axis: total Wh (lower better)."
+        )
         lines.append("")
-        lines.append("**Frontier (left to right, ascending energy):** "
-                     + " → ".join(frontier))
+        lines.append("**Frontier (left to right, ascending energy):** " + " → ".join(frontier))
 
     path.write_text("\n".join(lines) + "\n")
 

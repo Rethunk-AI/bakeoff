@@ -12,6 +12,7 @@ or rerun_missing=False to build_pending to narrow the scope.
 Judge resume: build_pending_judge_pairs / build_pending_judge_scores compute
 the subset of judge cells not yet completed in a prior run.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -42,8 +43,11 @@ def row_key(record: dict[str, Any]) -> tuple[str, str, str]:
 
 def pairwise_key(j: dict[str, Any]) -> tuple[str, str, frozenset]:
     """Return (task_id, prompt_id, frozenset({a_model, b_model})) for a pairwise judgement."""
-    return (str(j["task_id"]), str(j["prompt_id"]),
-            frozenset({str(j["a_model"]), str(j["b_model"])}))
+    return (
+        str(j["task_id"]),
+        str(j["prompt_id"]),
+        frozenset({str(j["a_model"]), str(j["b_model"])}),
+    )
 
 
 def scored_key(j: dict[str, Any]) -> tuple[str, str, str]:
@@ -86,9 +90,7 @@ def check_compat(
     # Seed
     prov = prior.get("provenance") or {}
     if prov.get("seed") is not None and int(prov["seed"]) != seed:
-        errors.append(
-            f"seed mismatch: prior={prov['seed']} current={seed}"
-        )
+        errors.append(f"seed mismatch: prior={prov['seed']} current={seed}")
 
     # Dataset n + domains (via task ID set identity)
     prior_task_ids = _sorted_ids(prior.get("tasks") or [])
@@ -103,17 +105,13 @@ def check_compat(
     current_pids = _sorted_ids(cfg.get("prompts") or [])
     prior_pids = _sorted_ids((prior.get("config") or {}).get("prompts") or [])
     if current_pids != prior_pids:
-        errors.append(
-            f"prompt ID mismatch: prior={prior_pids} current={current_pids}"
-        )
+        errors.append(f"prompt ID mismatch: prior={prior_pids} current={current_pids}")
 
     # Model IDs
     current_mids = _sorted_ids(cfg.get("models") or [])
     prior_mids = _sorted_ids((prior.get("config") or {}).get("models") or [])
     if set(current_mids) != set(prior_mids):
-        errors.append(
-            f"model ID mismatch: prior={prior_mids} current={current_mids}"
-        )
+        errors.append(f"model ID mismatch: prior={prior_mids} current={current_mids}")
 
     return errors
 
@@ -139,12 +137,8 @@ def build_pending(
     rerun_errors=False to skip errored rows, rerun_missing=False to skip
     missing rows. filter_models/tasks/prompts restrict which IDs are considered.
     """
-    complete: set[tuple[str, str, str]] = {
-        row_key(r) for r in prior_records if not r.get("error")
-    }
-    errored: set[tuple[str, str, str]] = {
-        row_key(r) for r in prior_records if r.get("error")
-    }
+    complete: set[tuple[str, str, str]] = {row_key(r) for r in prior_records if not r.get("error")}
+    errored: set[tuple[str, str, str]] = {row_key(r) for r in prior_records if r.get("error")}
     pending: dict[str, set[tuple[str, str]]] = {}
     for m in models:
         mid = str(m["id"])

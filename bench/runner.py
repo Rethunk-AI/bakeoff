@@ -29,12 +29,12 @@ Invariants (AGENTS.md):
     runner. Running it through llama-swap keeps the timing model
     identical to the A/B phase.
 """
+
 from __future__ import annotations
 
 import argparse
 import itertools
 import json
-import os
 import random
 import subprocess
 import sys
@@ -47,7 +47,14 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
-from bench.config import DEFAULT_CONFIG, ConfigError, judge_id, load_config, resolve_models_dir, validate_config
+from bench.config import (
+    DEFAULT_CONFIG,
+    ConfigError,
+    judge_id,
+    load_config,
+    resolve_models_dir,
+    validate_config,
+)
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
@@ -77,8 +84,8 @@ LAUNCHER = HERE / "bin" / "llama-swap.sh"
 LLAMA_SWAP_CONFIG = HERE / ".cache" / "llama-swap" / "config.yaml"
 
 
-
 # --- llama-swap lifecycle ---------------------------------------------------
+
 
 def _write_proxy_config(
     bakeoff_cfg: dict[str, Any],
@@ -135,6 +142,7 @@ def _proxy_stop(proc: subprocess.Popen[bytes]) -> None:
 
 # --- Call wrapper -----------------------------------------------------------
 
+
 def call_one(
     client: ChatClient,
     system: str,
@@ -172,15 +180,18 @@ def _warmup(client: ChatClient) -> None:
     wrapper, so it never contaminates a recorded row.
     """
     try:
-        client.chat([
-            {"role": "system", "content": WARMUP_SYSTEM},
-            {"role": "user", "content": WARMUP_USER},
-        ])
+        client.chat(
+            [
+                {"role": "system", "content": WARMUP_SYSTEM},
+                {"role": "user", "content": WARMUP_USER},
+            ]
+        )
     except Exception as e:
         print(f"[warmup-err] {e}", file=sys.stderr)
 
 
 # --- Phases -----------------------------------------------------------------
+
 
 def run_model_phase(
     model_cfg: dict[str, Any],
@@ -223,29 +234,38 @@ def run_model_phase(
         if pending is not None and (str(task.id), str(prm["id"])) not in pending:
             continue
         try:
-            res, wh, usd = call_one(client, prm["system"], task.user_prompt,
-                                    gpu_i, cost_enabled, kwh, sample_hz)
-            records.append({
-                "task_id": task.id, "domain": task.domain,
-                "prompt_id": prm["id"], "model_id": mid,
-                "text": res.text,
-                "prompt_tokens": res.prompt_tokens,
-                "completion_tokens": res.completion_tokens,
-                "latency_s": res.latency_s,
-                "ttft_s": res.ttft_s,
-                "tokens_per_sec": res.tokens_per_sec,
-                "energy_wh": wh, "cost_usd": usd,
-                "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
-                "error": None,
-            })
-            print(f"[run] {mid} {prm['id']} {task.id} {res.latency_s:.2f}s",
-                  file=sys.stderr)
+            res, wh, usd = call_one(
+                client, prm["system"], task.user_prompt, gpu_i, cost_enabled, kwh, sample_hz
+            )
+            records.append(
+                {
+                    "task_id": task.id,
+                    "domain": task.domain,
+                    "prompt_id": prm["id"],
+                    "model_id": mid,
+                    "text": res.text,
+                    "prompt_tokens": res.prompt_tokens,
+                    "completion_tokens": res.completion_tokens,
+                    "latency_s": res.latency_s,
+                    "ttft_s": res.ttft_s,
+                    "tokens_per_sec": res.tokens_per_sec,
+                    "energy_wh": wh,
+                    "cost_usd": usd,
+                    "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
+                    "error": None,
+                }
+            )
+            print(f"[run] {mid} {prm['id']} {task.id} {res.latency_s:.2f}s", file=sys.stderr)
         except Exception as e:
-            records.append({
-                "task_id": task.id, "domain": task.domain,
-                "prompt_id": prm["id"], "model_id": mid,
-                "error": str(e),
-            })
+            records.append(
+                {
+                    "task_id": task.id,
+                    "domain": task.domain,
+                    "prompt_id": prm["id"],
+                    "model_id": mid,
+                    "error": str(e),
+                }
+            )
             print(f"[err] {mid} {prm['id']} {task.id}: {e}", file=sys.stderr)
     return records
 
@@ -272,8 +292,9 @@ def _run_model_phases(
         if pending is not None and not pending:
             print(f"[resume] {mid}: all cells complete, skipping", file=sys.stderr)
             continue
-        recs = run_model_phase(m, tasks, prompts, base_url, cost_cfg, timeout_s,
-                               warmup=warmup, pending=pending)
+        recs = run_model_phase(
+            m, tasks, prompts, base_url, cost_cfg, timeout_s, warmup=warmup, pending=pending
+        )
         if prior_run_id is not None:
             recs = tag_fresh(recs, prior_run_id)
         fresh.extend(recs)
@@ -296,8 +317,7 @@ def _pairwise_all_phase(
     frozenset({a,b})) keys are run; others are skipped.
     """
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {
-        (r["task_id"], r["prompt_id"], r["model_id"]): r
-        for r in records if not r.get("error")
+        (r["task_id"], r["prompt_id"], r["model_id"]): r for r in records if not r.get("error")
     }
     judgements: list[dict[str, Any]] = []
     for a_m, b_m in itertools.combinations(models, 2):
@@ -305,8 +325,18 @@ def _pairwise_all_phase(
         for task, prm in itertools.product(tasks, prompts):
             if pending_pairs is not None:
                 from bench.resume import pairwise_key as _pk
-                if _pk({"task_id": task.id, "prompt_id": prm["id"],
-                         "a_model": a_id, "b_model": b_id}) not in pending_pairs:
+
+                if (
+                    _pk(
+                        {
+                            "task_id": task.id,
+                            "prompt_id": prm["id"],
+                            "a_model": a_id,
+                            "b_model": b_id,
+                        }
+                    )
+                    not in pending_pairs
+                ):
                     continue
             a = by_key.get((task.id, prm["id"], a_id))
             b = by_key.get((task.id, prm["id"], b_id))
@@ -317,25 +347,36 @@ def _pairwise_all_phase(
                 jr = judge.chat(msgs)
                 raw_winner = parse_judge(jr.text)
                 winner = invert_winner(raw_winner) if order == "BA" else raw_winner
-                judgements.append({
-                    "mode": "pairwise",
-                    "task_id": task.id, "prompt_id": prm["id"],
-                    "a_model": a_id, "b_model": b_id,
-                    "order": order, "winner": winner,
-                    "judge_raw": jr.text,
-                })
-                print(f"[judge-pair] {a_id} vs {b_id} {task.id} {prm['id']} "
-                      f"({order}) -> {winner}", file=sys.stderr)
+                judgements.append(
+                    {
+                        "mode": "pairwise",
+                        "task_id": task.id,
+                        "prompt_id": prm["id"],
+                        "a_model": a_id,
+                        "b_model": b_id,
+                        "order": order,
+                        "winner": winner,
+                        "judge_raw": jr.text,
+                    }
+                )
+                print(
+                    f"[judge-pair] {a_id} vs {b_id} {task.id} {prm['id']} ({order}) -> {winner}",
+                    file=sys.stderr,
+                )
             except Exception as e:
-                judgements.append({
-                    "mode": "pairwise",
-                    "task_id": task.id, "prompt_id": prm["id"],
-                    "a_model": a_id, "b_model": b_id,
-                    "order": order, "winner": None,
-                    "error": str(e),
-                })
-                print(f"[judge-err] {a_id} vs {b_id} {task.id} {prm['id']}: {e}",
-                      file=sys.stderr)
+                judgements.append(
+                    {
+                        "mode": "pairwise",
+                        "task_id": task.id,
+                        "prompt_id": prm["id"],
+                        "a_model": a_id,
+                        "b_model": b_id,
+                        "order": order,
+                        "winner": None,
+                        "error": str(e),
+                    }
+                )
+                print(f"[judge-err] {a_id} vs {b_id} {task.id} {prm['id']}: {e}", file=sys.stderr)
     return judgements
 
 
@@ -353,8 +394,7 @@ def _scored_phase(
     keys in that set are run; others are skipped.
     """
     by_key: dict[tuple[str, str, str], dict[str, Any]] = {
-        (r["task_id"], r["prompt_id"], r["model_id"]): r
-        for r in records if not r.get("error")
+        (r["task_id"], r["prompt_id"], r["model_id"]): r for r in records if not r.get("error")
     }
     judgements: list[dict[str, Any]] = []
     for m in models:
@@ -368,21 +408,28 @@ def _scored_phase(
             try:
                 jr = judge.chat(judge_score_prompt(task.user_prompt, rec["text"]))
                 score = parse_score(jr.text)
-                judgements.append({
-                    "mode": "scored",
-                    "task_id": task.id, "prompt_id": prm["id"],
-                    "model_id": mid,
-                    "score": score, "judge_raw": jr.text,
-                })
-                print(f"[judge-score] {mid} {task.id} {prm['id']} -> {score}",
-                      file=sys.stderr)
+                judgements.append(
+                    {
+                        "mode": "scored",
+                        "task_id": task.id,
+                        "prompt_id": prm["id"],
+                        "model_id": mid,
+                        "score": score,
+                        "judge_raw": jr.text,
+                    }
+                )
+                print(f"[judge-score] {mid} {task.id} {prm['id']} -> {score}", file=sys.stderr)
             except Exception as e:
-                judgements.append({
-                    "mode": "scored",
-                    "task_id": task.id, "prompt_id": prm["id"],
-                    "model_id": mid,
-                    "score": None, "error": str(e),
-                })
+                judgements.append(
+                    {
+                        "mode": "scored",
+                        "task_id": task.id,
+                        "prompt_id": prm["id"],
+                        "model_id": mid,
+                        "score": None,
+                        "error": str(e),
+                    }
+                )
                 print(f"[judge-err] {mid} {task.id} {prm['id']}: {e}", file=sys.stderr)
     return judgements
 
@@ -412,12 +459,10 @@ def run_judge_phase(
         return []
     mode = judge_cfg.get("mode", "pairwise_all")
     if mode not in {"pairwise_all", "scored"}:
-        print(f"[warn] unknown judge.mode {mode!r}; skipping judge phase",
-              file=sys.stderr)
+        print(f"[warn] unknown judge.mode {mode!r}; skipping judge phase", file=sys.stderr)
         return []
     if mode == "pairwise_all" and len(models) < 2:
-        print("[warn] pairwise_all needs >= 2 models; skipping judge phase",
-              file=sys.stderr)
+        print("[warn] pairwise_all needs >= 2 models; skipping judge phase", file=sys.stderr)
         return []
     if mode == "scored" and len(models) < 1:
         return []
@@ -437,34 +482,55 @@ def run_judge_phase(
 
     if mode == "pairwise_all":
         rng = random.Random(seed)
-        return _pairwise_all_phase(judge, models, tasks, prompts, records, rng,
-                                   pending_pairs=pending_pairs)
-    return _scored_phase(judge, models, tasks, prompts, records,
-                         pending_scores=pending_scores)
+        return _pairwise_all_phase(
+            judge, models, tasks, prompts, records, rng, pending_pairs=pending_pairs
+        )
+    return _scored_phase(judge, models, tasks, prompts, records, pending_scores=pending_scores)
 
 
 # --- Entry point ------------------------------------------------------------
 
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default=DEFAULT_CONFIG)
-    ap.add_argument("--dry-run", action="store_true",
-                    help="Parse + gen dataset, no proxy startup or network calls.")
-    ap.add_argument("--resume-from", metavar="RESULT_JSON",
-                    help="Prior result JSON. Reuses complete rows, reruns errored/missing.")
-    ap.add_argument("--rerun-errors", action=argparse.BooleanOptionalAction, default=True,
-                    help="Rerun errored rows on resume (default: true).")
-    ap.add_argument("--rerun-missing", action=argparse.BooleanOptionalAction, default=True,
-                    help="Rerun missing rows on resume (default: true).")
-    ap.add_argument("--resume-models", nargs="+", metavar="MODEL_ID",
-                    help="Limit resume to these model IDs.")
-    ap.add_argument("--resume-tasks", nargs="+", metavar="TASK_ID",
-                    help="Limit resume to these task IDs.")
-    ap.add_argument("--resume-prompts", nargs="+", metavar="PROMPT_ID",
-                    help="Limit resume to these prompt IDs.")
-    ap.add_argument("--hf-enrichment", choices=["off", "best-effort", "strict"],
-                    default=None,
-                    help="HuggingFace metadata enrichment (overrides run.hf_enrichment in config).")
+    ap.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Parse + gen dataset, no proxy startup or network calls.",
+    )
+    ap.add_argument(
+        "--resume-from",
+        metavar="RESULT_JSON",
+        help="Prior result JSON. Reuses complete rows, reruns errored/missing.",
+    )
+    ap.add_argument(
+        "--rerun-errors",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Rerun errored rows on resume (default: true).",
+    )
+    ap.add_argument(
+        "--rerun-missing",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Rerun missing rows on resume (default: true).",
+    )
+    ap.add_argument(
+        "--resume-models", nargs="+", metavar="MODEL_ID", help="Limit resume to these model IDs."
+    )
+    ap.add_argument(
+        "--resume-tasks", nargs="+", metavar="TASK_ID", help="Limit resume to these task IDs."
+    )
+    ap.add_argument(
+        "--resume-prompts", nargs="+", metavar="PROMPT_ID", help="Limit resume to these prompt IDs."
+    )
+    ap.add_argument(
+        "--hf-enrichment",
+        choices=["off", "best-effort", "strict"],
+        default=None,
+        help="HuggingFace metadata enrichment (overrides run.hf_enrichment in config).",
+    )
     args = ap.parse_args()
 
     try:
@@ -564,7 +630,10 @@ def main() -> int:
         for err in compat_errors:
             print(f"[resume-warn] {err}", file=sys.stderr)
         pending_by_model = build_pending(
-            models, task_ids, prompt_ids, prior["records"],
+            models,
+            task_ids,
+            prompt_ids,
+            prior["records"],
             rerun_errors=args.rerun_errors,
             rerun_missing=args.rerun_missing,
             filter_models=set(args.resume_models) if args.resume_models else None,
@@ -584,8 +653,10 @@ def main() -> int:
                     prior_judgements, models, task_ids, prompt_ids
                 )
                 reused_judgements = [
-                    j for j in prior_judgements
-                    if j.get("mode") == "pairwise" and not j.get("error")
+                    j
+                    for j in prior_judgements
+                    if j.get("mode") == "pairwise"
+                    and not j.get("error")
                     and j.get("winner") is not None
                 ]
                 print(
@@ -598,8 +669,10 @@ def main() -> int:
                     prior_judgements, models, task_ids, prompt_ids
                 )
                 reused_judgements = [
-                    j for j in prior_judgements
-                    if j.get("mode") == "scored" and not j.get("error")
+                    j
+                    for j in prior_judgements
+                    if j.get("mode") == "scored"
+                    and not j.get("error")
                     and j.get("score") is not None
                 ]
                 print(
@@ -607,8 +680,10 @@ def main() -> int:
                     f" {len(pending_scores)} pending",
                     file=sys.stderr,
                 )
-        print(f"[resume] prior={prior_run_id} reused={n_reused} pending_cells={n_pending}",
-              file=sys.stderr)
+        print(
+            f"[resume] prior={prior_run_id} reused={n_reused} pending_cells={n_pending}",
+            file=sys.stderr,
+        )
 
     _write_proxy_config(cfg, models_dir, LLAMA_SWAP_CONFIG)
     proxy = _proxy_start(listen, LLAMA_SWAP_CONFIG, boot_timeout)
@@ -616,15 +691,27 @@ def main() -> int:
     try:
         # 3. Per-model phases (sequential — see invariant above).
         fresh_records = _run_model_phases(
-            models, tasks, prompts, base_url, cost_cfg, timeout_s, warmup,
-            pending_by_model, prior_run_id,
+            models,
+            tasks,
+            prompts,
+            base_url,
+            cost_cfg,
+            timeout_s,
+            warmup,
+            pending_by_model,
+            prior_run_id,
         )
         all_records = reused_records + fresh_records
 
         # 4. Judge phase
         fresh_judgements = run_judge_phase(
-            judge_cfg, models, tasks, prompts, all_records,
-            base_url, timeout_s,
+            judge_cfg,
+            models,
+            tasks,
+            prompts,
+            all_records,
+            base_url,
+            timeout_s,
             seed=seed,
             warmup=warmup,
             pending_pairs=pending_pairs,
@@ -658,9 +745,14 @@ def main() -> int:
 
     if out_cfg.get("emit_markdown") or out_cfg.get("emit_html"):
         from bench.report import emit_reports
-        emit_reports(payload, out_dir, ts,
-                     md=bool(out_cfg.get("emit_markdown", True)),
-                     html=bool(out_cfg.get("emit_html", True)))
+
+        emit_reports(
+            payload,
+            out_dir,
+            ts,
+            md=bool(out_cfg.get("emit_markdown", True)),
+            html=bool(out_cfg.get("emit_html", True)),
+        )
 
     return 0
 

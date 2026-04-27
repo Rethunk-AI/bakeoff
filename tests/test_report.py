@@ -1,4 +1,5 @@
 """Unit tests for bench.report pure helpers (percentiles + rollup)."""
+
 from __future__ import annotations
 
 import math
@@ -8,6 +9,7 @@ import pytest
 from bench.report import _pareto_frontier, _percentile, _rollup
 
 # --- _percentile ----------------------------------------------------------
+
 
 def test_percentile_empty_returns_none():
     assert _percentile([], 50) is None
@@ -49,11 +51,17 @@ def test_percentile_unsorted_input_does_not_mutate():
 
 # --- _rollup percentile integration --------------------------------------
 
+
 def _rec(model_id: str, latency: float, ttft: float | None = None):
     return {
-        "task_id": "t0", "prompt_id": "p", "model_id": model_id,
-        "text": "x", "latency_s": latency, "ttft_s": ttft,
-        "tokens_per_sec": 10.0, "error": None,
+        "task_id": "t0",
+        "prompt_id": "p",
+        "model_id": model_id,
+        "text": "x",
+        "latency_s": latency,
+        "ttft_s": ttft,
+        "tokens_per_sec": 10.0,
+        "error": None,
     }
 
 
@@ -91,6 +99,7 @@ def test_rollup_skips_errored_rows():
 
 # --- _pareto_frontier -----------------------------------------------------
 
+
 def test_pareto_empty():
     assert _pareto_frontier([]) == []
 
@@ -121,10 +130,10 @@ def test_pareto_three_models_mixed():
     # fast: low energy, low quality. balanced: medium. premium: best quality.
     # middling is dominated by balanced (same quality, higher energy).
     pts = [
-        ("fast",      0.50, 0.30),
-        ("balanced",  0.75, 1.00),
-        ("middling",  0.75, 1.50),
-        ("premium",   0.95, 3.00),
+        ("fast", 0.50, 0.30),
+        ("balanced", 0.75, 1.00),
+        ("middling", 0.75, 1.50),
+        ("premium", 0.95, 3.00),
     ]
     assert _pareto_frontier(pts) == ["fast", "balanced", "premium"]
 

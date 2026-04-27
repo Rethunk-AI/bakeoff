@@ -26,6 +26,7 @@ Design invariants preserved (see AGENTS.md):
 The `cmd` strings are rendered as single-line podman invocations so the
 tests can pin structure by substring match.
 """
+
 from __future__ import annotations
 
 import re
@@ -80,22 +81,38 @@ def _render_cmd(
     n_cpu_moe = entry.get("n_cpu_moe")
 
     parts: list[str] = [
-        "podman", "run", "--rm",
-        "--name", container_name(mid),
-        "--device", "/dev/dri",
-        "--security-opt", "label=disable",
-        "-p", "127.0.0.1:${PORT}:8080",
-        "-v", f"{models_dir}:/m:ro",
+        "podman",
+        "run",
+        "--rm",
+        "--name",
+        container_name(mid),
+        "--device",
+        "/dev/dri",
+        "--security-opt",
+        "label=disable",
+        "-p",
+        "127.0.0.1:${PORT}:8080",
+        "-v",
+        f"{models_dir}:/m:ro",
         image,
-        "-m", f"/m/{gguf}",
-        "-a", alias,
-        "--host", "0.0.0.0",
-        "--port", "8080",
-        "-c", str(ctx),
-        "-ub", str(ubatch),
-        "-ngl", str(ngl),
-        "-ctk", ctk,
-        "-ctv", ctv,
+        "-m",
+        f"/m/{gguf}",
+        "-a",
+        alias,
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8080",
+        "-c",
+        str(ctx),
+        "-ub",
+        str(ubatch),
+        "-ngl",
+        str(ngl),
+        "-ctk",
+        ctk,
+        "-ctv",
+        ctv,
     ]
     if flash_attn:
         parts += ["-fa", "on"]
@@ -155,8 +172,7 @@ def build(bakeoff_cfg: dict[str, Any], models_dir: str) -> dict[str, Any]:
         mid, block = _model_block(judge_entry, server_cfg, models_dir, image)
         if mid in models_out:
             raise ConfigError(
-                f"judge id {mid!r} collides with a model id — "
-                "set judge.id to a distinct value"
+                f"judge id {mid!r} collides with a model id — set judge.id to a distinct value"
             )
         models_out[mid] = block
 

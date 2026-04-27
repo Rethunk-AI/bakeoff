@@ -4,6 +4,7 @@ The network paths (`_chat_stream` / `_chat_blocking`) are not exercised here —
 those would need an httpx mock transport and are integration-flavored. These
 tests cover the pure parsers only.
 """
+
 from __future__ import annotations
 
 from bench.clients import _extract_delta, _parse_sse_chunk
@@ -45,9 +46,11 @@ def test_extract_delta_reasoning_only():
 
 
 def test_extract_delta_both():
-    c, r = _extract_delta({
-        "choices": [{"delta": {"content": "ans", "reasoning_content": "cot"}}],
-    })
+    c, r = _extract_delta(
+        {
+            "choices": [{"delta": {"content": "ans", "reasoning_content": "cot"}}],
+        }
+    )
     assert c == "ans"
     assert r == "cot"
 
@@ -67,9 +70,11 @@ def test_extract_delta_empty_delta():
 def test_extract_delta_usage_chunk_has_no_delta():
     # Final usage chunk in llama.cpp SSE stream: choices is empty array
     # with stream_options.include_usage=true.
-    c, r = _extract_delta({
-        "choices": [],
-        "usage": {"prompt_tokens": 3, "completion_tokens": 7},
-    })
+    c, r = _extract_delta(
+        {
+            "choices": [],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 7},
+        }
+    )
     assert c == ""
     assert r == ""

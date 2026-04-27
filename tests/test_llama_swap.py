@@ -5,6 +5,7 @@ tests lock the structure of the emitted config so a future llama-swap
 schema change surfaces as a clear failure instead of a silent runtime
 mismatch inside the proxy.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -47,6 +48,7 @@ def _cfg(**overrides):
 
 # --- Globals -----------------------------------------------------------------
 
+
 class TestGlobals:
     def test_health_check_timeout_wired_from_boot_timeout(self):
         cfg = _cfg()
@@ -86,6 +88,7 @@ class TestGlobals:
 
 
 # --- Per-model block ---------------------------------------------------------
+
 
 class TestModelBlock:
     def test_minimum_block_fields(self):
@@ -184,6 +187,7 @@ class TestModelBlock:
 
 # --- Judge -------------------------------------------------------------------
 
+
 class TestJudge:
     def test_judge_appended_when_enabled(self):
         cfg = _cfg()
@@ -234,6 +238,7 @@ class TestJudge:
 
 # --- Validation --------------------------------------------------------------
 
+
 class TestValidation:
     def test_duplicate_model_id_raises(self):
         cfg = _cfg()
@@ -253,20 +258,30 @@ class TestValidation:
         with pytest.raises(ConfigError, match="missing"):
             build(cfg, MODELS_DIR)
 
-    @pytest.mark.parametrize("bad_id", [
-        "has space", "slash/in/id", "-leadingdash", "has$dollar", "",
-    ])
+    @pytest.mark.parametrize(
+        "bad_id",
+        [
+            "has space",
+            "slash/in/id",
+            "-leadingdash",
+            "has$dollar",
+            "",
+        ],
+    )
     def test_bad_id_characters_rejected(self, bad_id):
         cfg = _cfg()
         cfg["models"] = [{"id": bad_id, "gguf": "org/repo/f.gguf"}]
         with pytest.raises(ConfigError):
             build(cfg, MODELS_DIR)
 
-    @pytest.mark.parametrize("gguf", [
-        "org/repo/mmproj-F16.gguf",
-        "org/repo/MMPROJ.gguf",
-        "org/repo/subdir/mmproj-Q8_0.gguf",
-    ])
+    @pytest.mark.parametrize(
+        "gguf",
+        [
+            "org/repo/mmproj-F16.gguf",
+            "org/repo/MMPROJ.gguf",
+            "org/repo/subdir/mmproj-Q8_0.gguf",
+        ],
+    )
     def test_mmproj_rejected(self, gguf):
         cfg = _cfg()
         cfg["models"] = [{"id": "bad", "gguf": gguf}]
@@ -285,6 +300,7 @@ class TestValidation:
 
 
 # --- Helpers -----------------------------------------------------------------
+
 
 class TestContainerName:
     def test_prefix_applied(self):

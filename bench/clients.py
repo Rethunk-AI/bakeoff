@@ -4,6 +4,7 @@ Streams by default so time-to-first-token (TTFT) can be measured separately
 from total latency. TTFT is the wall time between request-send and the first
 non-empty delta (either `content` or `reasoning_content`).
 """
+
 from __future__ import annotations
 
 import json
@@ -48,8 +49,14 @@ def _extract_delta(chunk: dict[str, Any]) -> tuple[str, str]:
 
 
 class ChatClient:
-    def __init__(self, base_url: str, model: str, api_key: str = "none",
-                 timeout_s: float = 120.0, stream: bool = True):
+    def __init__(
+        self,
+        base_url: str,
+        model: str,
+        api_key: str = "none",
+        timeout_s: float = 120.0,
+        stream: bool = True,
+    ):
         self.base_url = base_url.rstrip("/")
         self.model = model
         self.api_key = api_key

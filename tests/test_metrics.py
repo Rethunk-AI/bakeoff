@@ -3,6 +3,7 @@
 Nothing here boots a model or shells out; the energy-sampling helpers are
 excluded because they are the only impure functions in the module.
 """
+
 from __future__ import annotations
 
 import random
@@ -24,6 +25,7 @@ from bench.metrics import (
 )
 
 # --- score_heuristic --------------------------------------------------------
+
 
 class TestScoreHeuristic:
     def test_expected_none_returns_none(self):
@@ -70,14 +72,18 @@ class TestScoreHeuristic:
 
 # --- parse_judge ------------------------------------------------------------
 
+
 class TestParseJudge:
-    @pytest.mark.parametrize("text,expected", [
-        ("A", "A"),
-        ("B", "B"),
-        ("TIE", "TIE"),
-        ("a", "A"),  # lowercased -> upper
-        (" b ", "B"),
-    ])
+    @pytest.mark.parametrize(
+        "text,expected",
+        [
+            ("A", "A"),
+            ("B", "B"),
+            ("TIE", "TIE"),
+            ("a", "A"),  # lowercased -> upper
+            (" b ", "B"),
+        ],
+    )
     def test_bare_verdicts(self, text, expected):
         assert parse_judge(text) == expected
 
@@ -98,6 +104,7 @@ class TestParseJudge:
 
 # --- invert_winner ----------------------------------------------------------
 
+
 class TestInvertWinner:
     def test_a_inverts_to_b(self):
         assert invert_winner("A") == "B"
@@ -115,14 +122,18 @@ class TestInvertWinner:
 
 # --- parse_score ------------------------------------------------------------
 
+
 class TestParseScore:
-    @pytest.mark.parametrize("raw,expected", [
-        ("1", 1),
-        ("2", 2),
-        ("3", 3),
-        ("4", 4),
-        ("5", 5),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("1", 1),
+            ("2", 2),
+            ("3", 3),
+            ("4", 4),
+            ("5", 5),
+        ],
+    )
     def test_single_digit(self, raw, expected):
         assert parse_score(raw) == expected
 
@@ -149,6 +160,7 @@ class TestParseScore:
 
 # --- judge prompt builders --------------------------------------------------
 
+
 class TestJudgePromptBuilders:
     def test_pair_prompt_structure(self):
         msgs = judge_pair_prompt("Q?", "resp-A", "resp-B")
@@ -172,6 +184,7 @@ class TestJudgePromptBuilders:
 
 
 # --- judge_pair_randomized --------------------------------------------------
+
 
 class TestJudgePairRandomized:
     def test_order_ab_keeps_original_slots(self):
@@ -226,6 +239,7 @@ class TestJudgePairRandomized:
 
 
 # --- energy_wh / cost_usd ---------------------------------------------------
+
 
 class TestEnergyAndCost:
     def test_energy_none_watts_returns_none(self):

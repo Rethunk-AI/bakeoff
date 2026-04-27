@@ -1,4 +1,5 @@
 """Unit tests for bench.resume and runner phase-order invariants."""
+
 from __future__ import annotations
 
 import json
@@ -220,21 +221,20 @@ class TestBuildPending:
 
     def test_rerun_errors_false_skips_errored(self):
         prior = [_record("m_a", error="timeout")]
-        pending = build_pending(
-            self._models(["m_a"]), ["t1"], ["p1"], prior, rerun_errors=False
-        )
+        pending = build_pending(self._models(["m_a"]), ["t1"], ["p1"], prior, rerun_errors=False)
         assert ("t1", "p1") not in pending["m_a"]
 
     def test_rerun_missing_false_skips_missing(self):
         prior = []  # m_a has no rows at all — missing
-        pending = build_pending(
-            self._models(["m_a"]), ["t1"], ["p1"], prior, rerun_missing=False
-        )
+        pending = build_pending(self._models(["m_a"]), ["t1"], ["p1"], prior, rerun_missing=False)
         assert ("t1", "p1") not in pending["m_a"]
 
     def test_filter_models_excludes_unselected(self):
         pending = build_pending(
-            self._models(), ["t1"], ["p1"], [],
+            self._models(),
+            ["t1"],
+            ["p1"],
+            [],
             filter_models={"m_a"},
         )
         assert ("t1", "p1") in pending["m_a"]
@@ -242,7 +242,10 @@ class TestBuildPending:
 
     def test_filter_tasks_excludes_unselected(self):
         pending = build_pending(
-            self._models(["m_a"]), ["t1", "t2"], ["p1"], [],
+            self._models(["m_a"]),
+            ["t1", "t2"],
+            ["p1"],
+            [],
             filter_tasks={"t1"},
         )
         assert ("t1", "p1") in pending["m_a"]
@@ -250,7 +253,10 @@ class TestBuildPending:
 
     def test_filter_prompts_excludes_unselected(self):
         pending = build_pending(
-            self._models(["m_a"]), ["t1"], ["p1", "p2"], [],
+            self._models(["m_a"]),
+            ["t1"],
+            ["p1", "p2"],
+            [],
             filter_prompts={"p1"},
         )
         assert ("t1", "p1") in pending["m_a"]
@@ -262,15 +268,24 @@ class TestBuildPending:
 
 def _pairwise_j(a, b, task_id="t1", prompt_id="p1", winner="m_a", error=None):
     return {
-        "mode": "pairwise", "task_id": task_id, "prompt_id": prompt_id,
-        "a_model": a, "b_model": b, "winner": winner, "error": error,
+        "mode": "pairwise",
+        "task_id": task_id,
+        "prompt_id": prompt_id,
+        "a_model": a,
+        "b_model": b,
+        "winner": winner,
+        "error": error,
     }
 
 
 def _scored_j(model_id, score, task_id="t1", prompt_id="p1", error=None):
     return {
-        "mode": "scored", "task_id": task_id, "prompt_id": prompt_id,
-        "model_id": model_id, "score": score, "error": error,
+        "mode": "scored",
+        "task_id": task_id,
+        "prompt_id": prompt_id,
+        "model_id": model_id,
+        "score": score,
+        "error": error,
     }
 
 
@@ -376,6 +391,7 @@ class TestTagging:
 
 def _make_task(tid: str):
     from bench.dataset import Task
+
     return Task(id=tid, domain="qa", user_prompt="q", scorer="exact", expected="a")
 
 
@@ -388,15 +404,21 @@ class TestPhaseOrder:
 
     def _call(self, models, pending_by_model, prior_run_id=None, side_effects=None):
         from bench.runner import _run_model_phases
+
         tasks = [_make_task("t1")]
         prompts = [{"id": "p1", "system": "sys"}]
         if side_effects is None:
-            side_effects = [_stub_recs(m["id"]) for m in models
-                            if pending_by_model is None or pending_by_model.get(m["id"])]
+            side_effects = [
+                _stub_recs(m["id"])
+                for m in models
+                if pending_by_model is None or pending_by_model.get(m["id"])
+            ]
 
         with patch("bench.runner.run_model_phase", side_effect=side_effects) as mock_phase:
             result = _run_model_phases(
-                models, tasks, prompts,
+                models,
+                tasks,
+                prompts,
                 base_url="http://localhost/v1",
                 cost_cfg={},
                 timeout_s=10.0,
@@ -408,23 +430,24 @@ class TestPhaseOrder:
 
     def test_normal_run_calls_each_model_once(self):
         models = [{"id": "m_a"}, {"id": "m_b"}]
-        mock, _ = self._call(models, pending_by_model=None,
-                             side_effects=[_stub_recs("m_a"), _stub_recs("m_b")])
+        mock, _ = self._call(
+            models, pending_by_model=None, side_effects=[_stub_recs("m_a"), _stub_recs("m_b")]
+        )
         assert mock.call_count == 2
         assert mock.call_args_list[0][0][0] == {"id": "m_a"}
         assert mock.call_args_list[1][0][0] == {"id": "m_b"}
 
     def test_normal_run_preserves_config_order(self):
         models = [{"id": "m_b"}, {"id": "m_a"}]
-        mock, _ = self._call(models, pending_by_model=None,
-                             side_effects=[_stub_recs("m_b"), _stub_recs("m_a")])
+        mock, _ = self._call(
+            models, pending_by_model=None, side_effects=[_stub_recs("m_b"), _stub_recs("m_a")]
+        )
         called_ids = [c[0][0]["id"] for c in mock.call_args_list]
         assert called_ids == ["m_b", "m_a"]
 
     def test_normal_run_passes_no_pending(self):
         models = [{"id": "m_a"}]
-        mock, _ = self._call(models, pending_by_model=None,
-                             side_effects=[_stub_recs("m_a")])
+        mock, _ = self._call(models, pending_by_model=None, side_effects=[_stub_recs("m_a")])
         _, kwargs = mock.call_args
         assert kwargs.get("pending") is None
 
@@ -432,8 +455,7 @@ class TestPhaseOrder:
         models = [{"id": "m_a"}, {"id": "m_b"}]
         # m_a has no pending cells; m_b has one
         pending = {"m_a": set(), "m_b": {("t1", "p1")}}
-        mock, _ = self._call(models, pending_by_model=pending,
-                             side_effects=[_stub_recs("m_b")])
+        mock, _ = self._call(models, pending_by_model=pending, side_effects=[_stub_recs("m_b")])
         assert mock.call_count == 1
         assert mock.call_args_list[0][0][0] == {"id": "m_b"}
 
@@ -441,22 +463,24 @@ class TestPhaseOrder:
         models = [{"id": "m_a"}]
         pending_set = {("t1", "p1")}
         pending = {"m_a": pending_set}
-        mock, _ = self._call(models, pending_by_model=pending,
-                             side_effects=[_stub_recs("m_a")])
+        mock, _ = self._call(models, pending_by_model=pending, side_effects=[_stub_recs("m_a")])
         _, kwargs = mock.call_args
         assert kwargs.get("pending") == pending_set
 
     def test_resumed_tags_fresh_records(self):
         models = [{"id": "m_a"}]
         pending = {"m_a": {("t1", "p1")}}
-        _, result = self._call(models, pending_by_model=pending,
-                               prior_run_id="run-prior",
-                               side_effects=[_stub_recs("m_a")])
+        _, result = self._call(
+            models,
+            pending_by_model=pending,
+            prior_run_id="run-prior",
+            side_effects=[_stub_recs("m_a")],
+        )
         assert all(r.get("source_run_id") == "run-prior" for r in result)
 
     def test_normal_run_no_tagging(self):
         models = [{"id": "m_a"}]
-        _, result = self._call(models, pending_by_model=None,
-                               prior_run_id=None,
-                               side_effects=[_stub_recs("m_a")])
+        _, result = self._call(
+            models, pending_by_model=None, prior_run_id=None, side_effects=[_stub_recs("m_a")]
+        )
         assert "source_run_id" not in result[0]

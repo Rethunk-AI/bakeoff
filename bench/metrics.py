@@ -13,6 +13,7 @@ Energy:
     start/end average undercounts.
   - fallback: cost_usd = None when no sample succeeded.
 """
+
 from __future__ import annotations
 
 import itertools
@@ -24,6 +25,7 @@ import time
 from dataclasses import dataclass
 
 # --- Heuristic quality ------------------------------------------------------
+
 
 def score_heuristic(scorer: str, expected: str | None, text: str) -> float | None:
     if expected is None:
@@ -146,6 +148,7 @@ def parse_score(text: str, default: int = 3) -> int:
 
 # --- Energy -----------------------------------------------------------------
 
+
 @dataclass
 class PowerSample:
     watts: float | None
@@ -157,10 +160,16 @@ def _sample_nvidia(gpu_index: int) -> PowerSample:
         return PowerSample(None, False)
     try:
         out = subprocess.run(
-            ["nvidia-smi", "-i", str(gpu_index),
-             "--query-gpu=power.draw",
-             "--format=csv,noheader,nounits"],
-            capture_output=True, text=True, timeout=5,
+            [
+                "nvidia-smi",
+                "-i",
+                str(gpu_index),
+                "--query-gpu=power.draw",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode != 0:
             return PowerSample(None, False)
@@ -179,7 +188,9 @@ def _sample_rocm(gpu_index: int) -> PowerSample:
     try:
         out = subprocess.run(
             ["rocm-smi", "-d", str(gpu_index), "--showpower"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode != 0:
             return PowerSample(None, False)
@@ -212,6 +223,7 @@ def cost_usd(wh: float | None, kwh_rate: float) -> float | None:
 
 
 # --- high-frequency background sampler -------------------------------------
+
 
 def trapezoid_wh(samples: list[tuple[float, float]]) -> float | None:
     """Integrate (t_seconds, watts) pairs by the trapezoid rule -> Wh.

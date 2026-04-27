@@ -16,6 +16,7 @@ in `config.yaml` resolve without edits.
 Auth: honors `HF_TOKEN` env or a cached `hf auth login` credential. Gated
 repos (Llama, Gemma) surface a 401/403 with a pointer.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -26,8 +27,6 @@ from typing import Any
 
 import yaml
 from huggingface_hub import HfApi, hf_hub_download
-
-from bench.config import DEFAULT_CONFIG, resolve_models_dir
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
@@ -35,11 +34,12 @@ from huggingface_hub.utils import (
     RepositoryNotFoundError,
 )
 
+from bench.config import DEFAULT_CONFIG, resolve_models_dir
+
 
 def load_config(path: Path) -> dict[str, Any]:
     with path.open() as f:
         return yaml.safe_load(f)
-
 
 
 def split_gguf_path(gguf_rel: str) -> tuple[str, str]:
@@ -49,9 +49,7 @@ def split_gguf_path(gguf_rel: str) -> tuple[str, str]:
     """
     parts = gguf_rel.split("/", 2)
     if len(parts) < 3:
-        raise ValueError(
-            f"gguf path must be '<org>/<repo>/<file>.gguf' form: {gguf_rel!r}"
-        )
+        raise ValueError(f"gguf path must be '<org>/<repo>/<file>.gguf' form: {gguf_rel!r}")
     org, repo, filename = parts
     return f"{org}/{repo}", filename
 
@@ -182,14 +180,16 @@ def main() -> int:
         prog="bench.download",
         description="Fetch GGUFs from Hugging Face into the LM Studio layout.",
     )
-    ap.add_argument("--config", default=DEFAULT_CONFIG,
-                    help=f"Path to {DEFAULT_CONFIG} (for the no-arg config mode).")
-    ap.add_argument("--list", action="store_true",
-                    help="Dry-run: print what would be fetched, no download.")
-    ap.add_argument("repo_id", nargs="?",
-                    help="Ad-hoc: HF repo like org/name.")
-    ap.add_argument("filename", nargs="?",
-                    help="Ad-hoc: file within the repo (may contain '/').")
+    ap.add_argument(
+        "--config",
+        default=DEFAULT_CONFIG,
+        help=f"Path to {DEFAULT_CONFIG} (for the no-arg config mode).",
+    )
+    ap.add_argument(
+        "--list", action="store_true", help="Dry-run: print what would be fetched, no download."
+    )
+    ap.add_argument("repo_id", nargs="?", help="Ad-hoc: HF repo like org/name.")
+    ap.add_argument("filename", nargs="?", help="Ad-hoc: file within the repo (may contain '/').")
     args = ap.parse_args()
 
     if (args.repo_id is None) != (args.filename is None):

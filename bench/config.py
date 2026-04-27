@@ -4,6 +4,7 @@ Provides a single validate-before-run gate so invalid configs fail early
 with path-oriented error messages rather than at proxy startup or mid-matrix.
 Errors are aggregated so operators can fix multiple issues in one edit.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -57,6 +58,7 @@ def config_hash(cfg: dict[str, Any]) -> str:
 def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
     """Resolve models directory path from server config, expanding ~ and making absolute."""
     import os
+
     p = server_cfg.get("models_dir", "~/.lmstudio/models")
     return Path(os.path.expanduser(p)).resolve()
 
@@ -66,14 +68,24 @@ def judge_id(judge_cfg: dict[str, Any]) -> str:
     return str(judge_cfg.get("id") or "judge")
 
 
-def _check_id(item: dict[str, Any], item_idx: int, field_name: str, path_prefix: str,
-              seen_ids: set[str], issues: list[ValidationIssue]) -> None:
+def _check_id(
+    item: dict[str, Any],
+    item_idx: int,
+    field_name: str,
+    path_prefix: str,
+    seen_ids: set[str],
+    issues: list[ValidationIssue],
+) -> None:
     """Check ID presence and uniqueness; report issues."""
     item_id = item.get("id")
     if not item_id:
         issues.append(ValidationIssue(f"{path_prefix}[{item_idx}].id", "required"))
     elif item_id in seen_ids:
-        issues.append(ValidationIssue(f"{path_prefix}[{item_idx}].id", f"duplicate {field_name} id {item_id!r}"))
+        issues.append(
+            ValidationIssue(
+                f"{path_prefix}[{item_idx}].id", f"duplicate {field_name} id {item_id!r}"
+            )
+        )
     else:
         seen_ids.add(str(item_id))
 
@@ -81,17 +93,21 @@ def _check_id(item: dict[str, Any], item_idx: int, field_name: str, path_prefix:
 def _check_gguf_shape(gguf: str, path: str, issues: list[ValidationIssue]) -> None:
     basename = gguf.rsplit("/", 1)[-1]
     if basename.lower().startswith("mmproj"):
-        issues.append(ValidationIssue(
-            path,
-            f"{basename!r} is an mmproj vision projector, not a standalone text model",
-        ))
+        issues.append(
+            ValidationIssue(
+                path,
+                f"{basename!r} is an mmproj vision projector, not a standalone text model",
+            )
+        )
         return
     parts = gguf.split("/")
     if len(parts) < 3 or not parts[-1].endswith(".gguf"):
-        issues.append(ValidationIssue(
-            path,
-            f"expected '<org>/<repo>/<file>.gguf' form, got {gguf!r}",
-        ))
+        issues.append(
+            ValidationIssue(
+                path,
+                f"expected '<org>/<repo>/<file>.gguf' form, got {gguf!r}",
+            )
+        )
 
 
 def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
@@ -160,8 +176,10 @@ def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
 
         jid = judge_id(judge)
         if jid in seen_model_ids:
-            err("judge.id",
-                f"judge id {jid!r} collides with a model id; set judge.id to a distinct value")
+            err(
+                "judge.id",
+                f"judge id {jid!r} collides with a model id; set judge.id to a distinct value",
+            )
 
     # Server — positive numeric fields
     server = cfg.get("server") or {}

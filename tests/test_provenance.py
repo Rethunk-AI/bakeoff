@@ -1,4 +1,5 @@
 """Unit tests for bench.provenance."""
+
 from __future__ import annotations
 
 from types import SimpleNamespace
@@ -17,16 +18,19 @@ from bench.provenance import (
 
 
 class TestInferQuantization:
-    @pytest.mark.parametrize("filename,expected", [
-        ("model-Q4_K_M.gguf", "Q4_K_M"),
-        ("model-IQ3_XS.gguf", "IQ3_XS"),
-        ("model-Q8_0.gguf", "Q8_0"),
-        ("model-BF16.gguf", "BF16"),
-        ("model-F16.gguf", "F16"),
-        ("model-Q5_K_S.gguf", "Q5_K_S"),
-        ("no-quant-info.gguf", None),
-        ("", None),
-    ])
+    @pytest.mark.parametrize(
+        "filename,expected",
+        [
+            ("model-Q4_K_M.gguf", "Q4_K_M"),
+            ("model-IQ3_XS.gguf", "IQ3_XS"),
+            ("model-Q8_0.gguf", "Q8_0"),
+            ("model-BF16.gguf", "BF16"),
+            ("model-F16.gguf", "F16"),
+            ("model-Q5_K_S.gguf", "Q5_K_S"),
+            ("no-quant-info.gguf", None),
+            ("", None),
+        ],
+    )
     def test_known_patterns(self, filename, expected):
         assert _infer_quantization(filename) == expected
 
@@ -38,7 +42,8 @@ class TestBuildModelMetadata:
     def _cfg(self, models=None, server_ctx=4096):
         return {
             "server": {"ctx": server_ctx, "image": "ghcr.io/ggml-org/llama.cpp:server-vulkan"},
-            "models": models or [
+            "models": models
+            or [
                 {"id": "m_a", "alias": "alpha", "gguf": "org/repo/model-Q4_K_M.gguf"},
             ],
         }
@@ -94,23 +99,36 @@ class TestCollect:
         }
 
     def test_returns_required_keys(self, tmp_path):
-        with patch("bench.provenance._git_info") as git_mock, \
-             patch("bench.provenance._podman_version", return_value="4.9.0"), \
-             patch("bench.provenance._llama_swap_version", return_value="0.0.8"), \
-             patch("bench.provenance._package_versions", return_value={"httpx": "0.27.0"}):
+        with (
+            patch("bench.provenance._git_info") as git_mock,
+            patch("bench.provenance._podman_version", return_value="4.9.0"),
+            patch("bench.provenance._llama_swap_version", return_value="0.0.8"),
+            patch("bench.provenance._package_versions", return_value={"httpx": "0.27.0"}),
+        ):
             git_mock.return_value = {"sha": "abc1234", "branch": "main", "dirty": False}
             prov = collect(self._cfg(), seed=42, repo_root=tmp_path)
 
-        for key in ("git", "config_hash", "seed", "python", "platform",
-                    "packages", "podman_version", "llama_swap_version",
-                    "server_image", "warnings"):
+        for key in (
+            "git",
+            "config_hash",
+            "seed",
+            "python",
+            "platform",
+            "packages",
+            "podman_version",
+            "llama_swap_version",
+            "server_image",
+            "warnings",
+        ):
             assert key in prov
 
     def test_git_sha_present(self, tmp_path):
-        with patch("bench.provenance._git_info") as git_mock, \
-             patch("bench.provenance._podman_version", return_value=None), \
-             patch("bench.provenance._llama_swap_version", return_value=None), \
-             patch("bench.provenance._package_versions", return_value={}):
+        with (
+            patch("bench.provenance._git_info") as git_mock,
+            patch("bench.provenance._podman_version", return_value=None),
+            patch("bench.provenance._llama_swap_version", return_value=None),
+            patch("bench.provenance._package_versions", return_value={}),
+        ):
             git_mock.return_value = {"sha": "deadbeef", "branch": "main", "dirty": True}
             prov = collect(self._cfg(), seed=99, repo_root=tmp_path)
 
@@ -119,20 +137,24 @@ class TestCollect:
         assert prov["seed"] == 99
 
     def test_missing_git_adds_warning(self, tmp_path):
-        with patch("bench.provenance._git_info") as git_mock, \
-             patch("bench.provenance._podman_version", return_value=None), \
-             patch("bench.provenance._llama_swap_version", return_value=None), \
-             patch("bench.provenance._package_versions", return_value={}):
+        with (
+            patch("bench.provenance._git_info") as git_mock,
+            patch("bench.provenance._podman_version", return_value=None),
+            patch("bench.provenance._llama_swap_version", return_value=None),
+            patch("bench.provenance._package_versions", return_value={}),
+        ):
             git_mock.return_value = {"sha": None, "branch": None, "dirty": False}
             prov = collect(self._cfg(), seed=0, repo_root=tmp_path)
 
         assert any("git" in w for w in prov["warnings"])
 
     def test_missing_podman_adds_warning(self, tmp_path):
-        with patch("bench.provenance._git_info") as git_mock, \
-             patch("bench.provenance._podman_version", return_value=None), \
-             patch("bench.provenance._llama_swap_version", return_value="1.0"), \
-             patch("bench.provenance._package_versions", return_value={}):
+        with (
+            patch("bench.provenance._git_info") as git_mock,
+            patch("bench.provenance._podman_version", return_value=None),
+            patch("bench.provenance._llama_swap_version", return_value="1.0"),
+            patch("bench.provenance._package_versions", return_value={}),
+        ):
             git_mock.return_value = {"sha": "abc", "branch": "main", "dirty": False}
             prov = collect(self._cfg(), seed=0, repo_root=tmp_path)
 
@@ -140,10 +162,12 @@ class TestCollect:
 
     def test_config_hash_stable(self, tmp_path):
         cfg = self._cfg()
-        with patch("bench.provenance._git_info") as git_mock, \
-             patch("bench.provenance._podman_version", return_value="4.0"), \
-             patch("bench.provenance._llama_swap_version", return_value="0.8"), \
-             patch("bench.provenance._package_versions", return_value={}):
+        with (
+            patch("bench.provenance._git_info") as git_mock,
+            patch("bench.provenance._podman_version", return_value="4.0"),
+            patch("bench.provenance._llama_swap_version", return_value="0.8"),
+            patch("bench.provenance._package_versions", return_value={}),
+        ):
             git_mock.return_value = {"sha": "abc", "branch": "main", "dirty": False}
             p1 = collect(cfg, seed=42, repo_root=tmp_path)
             p2 = collect(cfg, seed=42, repo_root=tmp_path)
@@ -152,10 +176,12 @@ class TestCollect:
         assert len(p1["config_hash"]) == 16
 
     def test_server_image_captured(self, tmp_path):
-        with patch("bench.provenance._git_info") as git_mock, \
-             patch("bench.provenance._podman_version", return_value="4.0"), \
-             patch("bench.provenance._llama_swap_version", return_value="0.8"), \
-             patch("bench.provenance._package_versions", return_value={}):
+        with (
+            patch("bench.provenance._git_info") as git_mock,
+            patch("bench.provenance._podman_version", return_value="4.0"),
+            patch("bench.provenance._llama_swap_version", return_value="0.8"),
+            patch("bench.provenance._package_versions", return_value={}),
+        ):
             git_mock.return_value = {"sha": "abc", "branch": "main", "dirty": False}
             prov = collect(self._cfg(), seed=42, repo_root=tmp_path)
 
@@ -185,12 +211,15 @@ class TestEnrichModelMetadata:
 
     def test_best_effort_adds_hf_fields(self):
         fake = _fake_info()
-        with patch("bench.provenance._hf_model_info", return_value={
-            "hf_sha": fake.sha,
-            "hf_tags": list(fake.tags),
-            "hf_pipeline_tag": fake.pipeline_tag,
-            "hf_private": fake.private,
-        }):
+        with patch(
+            "bench.provenance._hf_model_info",
+            return_value={
+                "hf_sha": fake.sha,
+                "hf_tags": list(fake.tags),
+                "hf_pipeline_tag": fake.pipeline_tag,
+                "hf_private": fake.private,
+            },
+        ):
             result = enrich_model_metadata(_meta(), mode="best-effort", warnings=[])
         assert result[0]["hf_sha"] == "abc123"
         assert "gguf" in result[0]["hf_tags"]
@@ -204,14 +233,22 @@ class TestEnrichModelMetadata:
         assert "hf_sha" not in result[0]
 
     def test_strict_mode_raises_on_failure(self):
-        with patch("bench.provenance._hf_model_info", side_effect=Exception("timeout")), \
-             pytest.raises(RuntimeError, match="HuggingFace lookup failed"):
+        with (
+            patch("bench.provenance._hf_model_info", side_effect=Exception("timeout")),
+            pytest.raises(RuntimeError, match="HuggingFace lookup failed"),
+        ):
             enrich_model_metadata(_meta(), mode="strict", warnings=[])
 
     def test_strict_mode_succeeds_when_lookup_works(self):
-        with patch("bench.provenance._hf_model_info", return_value={
-            "hf_sha": "xyz", "hf_tags": [], "hf_pipeline_tag": None, "hf_private": False,
-        }):
+        with patch(
+            "bench.provenance._hf_model_info",
+            return_value={
+                "hf_sha": "xyz",
+                "hf_tags": [],
+                "hf_pipeline_tag": None,
+                "hf_private": False,
+            },
+        ):
             result = enrich_model_metadata(_meta(), mode="strict", warnings=[])
         assert result[0]["hf_sha"] == "xyz"
 

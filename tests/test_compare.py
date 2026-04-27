@@ -1,4 +1,5 @@
 """Unit tests for bench.compare."""
+
 from __future__ import annotations
 
 import json
@@ -8,34 +9,61 @@ from bench.compare import _compat_warnings, _delta, compare, compare_markdown, l
 # --- Fixture helpers ---------------------------------------------------------
 
 
-def _record(model_id, task_id="t1", prompt_id="p1", latency_s=1.0,
-            tokens_per_sec=100.0, quality_heuristic=0.8,
-            energy_wh=0.01, cost_usd=0.001, error=None):
+def _record(
+    model_id,
+    task_id="t1",
+    prompt_id="p1",
+    latency_s=1.0,
+    tokens_per_sec=100.0,
+    quality_heuristic=0.8,
+    energy_wh=0.01,
+    cost_usd=0.001,
+    error=None,
+):
     return {
-        "model_id": model_id, "task_id": task_id, "prompt_id": prompt_id,
-        "latency_s": latency_s, "ttft_s": None,
-        "tokens_per_sec": tokens_per_sec, "quality_heuristic": quality_heuristic,
-        "energy_wh": energy_wh, "cost_usd": cost_usd,
+        "model_id": model_id,
+        "task_id": task_id,
+        "prompt_id": prompt_id,
+        "latency_s": latency_s,
+        "ttft_s": None,
+        "tokens_per_sec": tokens_per_sec,
+        "quality_heuristic": quality_heuristic,
+        "energy_wh": energy_wh,
+        "cost_usd": cost_usd,
         "error": error,
     }
 
 
 def _pairwise_judgement(winner, a="m_a", b="m_b", task_id="t1", prompt_id="p1"):
     return {
-        "mode": "pairwise", "task_id": task_id, "prompt_id": prompt_id,
-        "a_model": a, "b_model": b, "winner": winner, "order": "AB",
+        "mode": "pairwise",
+        "task_id": task_id,
+        "prompt_id": prompt_id,
+        "a_model": a,
+        "b_model": b,
+        "winner": winner,
+        "order": "AB",
     }
 
 
 def _scored_judgement(model_id, score, task_id="t1", prompt_id="p1"):
     return {
-        "mode": "scored", "task_id": task_id, "prompt_id": prompt_id,
-        "model_id": model_id, "score": score,
+        "mode": "scored",
+        "task_id": task_id,
+        "prompt_id": prompt_id,
+        "model_id": model_id,
+        "score": score,
     }
 
 
-def _payload(models=("m_a", "m_b"), records=None, judgements=None,
-             run_id="run-1", seed=42, config_hash="abc123"):
+def _payload(
+    models=("m_a", "m_b"),
+    records=None,
+    judgements=None,
+    run_id="run-1",
+    seed=42,
+    config_hash="abc123",
+):
     cfg = {
         "models": [{"id": m} for m in models],
         "prompts": [{"id": "p1"}],
@@ -150,23 +178,35 @@ class TestCompareMarkdown:
         assert "Warning" not in md
 
     def test_scored_judge_section(self):
-        base = _payload(judgements=[
-            _scored_judgement("m_a", 4), _scored_judgement("m_b", 3),
-        ])
-        cand = _payload(judgements=[
-            _scored_judgement("m_a", 5), _scored_judgement("m_b", 2),
-        ])
+        base = _payload(
+            judgements=[
+                _scored_judgement("m_a", 4),
+                _scored_judgement("m_b", 3),
+            ]
+        )
+        cand = _payload(
+            judgements=[
+                _scored_judgement("m_a", 5),
+                _scored_judgement("m_b", 2),
+            ]
+        )
         md = compare_markdown(base, cand)
         assert "scored mode" in md
         assert "+1.00" in md
 
     def test_pairwise_judge_section(self):
-        base = _payload(judgements=[
-            _pairwise_judgement("m_a"), _pairwise_judgement("m_a"),
-        ])
-        cand = _payload(judgements=[
-            _pairwise_judgement("m_b"), _pairwise_judgement("m_b"),
-        ])
+        base = _payload(
+            judgements=[
+                _pairwise_judgement("m_a"),
+                _pairwise_judgement("m_a"),
+            ]
+        )
+        cand = _payload(
+            judgements=[
+                _pairwise_judgement("m_b"),
+                _pairwise_judgement("m_b"),
+            ]
+        )
         md = compare_markdown(base, cand)
         assert "pairwise mode" in md
 
@@ -191,12 +231,16 @@ class TestCompareMarkdown:
         assert "m_b" in md
 
     def test_null_energy_handled(self):
-        base = _payload(records=[
-            _record("m_a", energy_wh=None, cost_usd=None),
-        ])
-        cand = _payload(records=[
-            _record("m_a", energy_wh=None, cost_usd=None),
-        ])
+        base = _payload(
+            records=[
+                _record("m_a", energy_wh=None, cost_usd=None),
+            ]
+        )
+        cand = _payload(
+            records=[
+                _record("m_a", energy_wh=None, cost_usd=None),
+            ]
+        )
         md = compare_markdown(base, cand)
         assert "—" in md
 

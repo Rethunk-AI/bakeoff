@@ -24,27 +24,27 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-          cache: pip
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
 
       - name: Install dev deps
-        run: |
-          python -m pip install --upgrade pip
-          pip install -e ".[dev]"
+        run: ~/.cargo/bin/uv sync --all-extras
 
       - name: Ruff
-        run: ruff check bench/ tests/
+        run: ~/.cargo/bin/uv run ruff check bench/ tests/
 
       - name: Mypy
-        run: mypy bench/
+        run: ~/.cargo/bin/uv run mypy bench/
 
       - name: Py compile
-        run: python -m compileall -q bench/ tests/
+        run: ~/.cargo/bin/uv run python -m compileall -q bench/ tests/
 
       - name: Pytest
-        run: pytest
+        run: ~/.cargo/bin/uv run pytest
 
       - name: Dry-run
-        run: python -m bench.runner --config config.yaml --dry-run
+        run: ~/.cargo/bin/uv run python -m bench.runner --config config.yaml --dry-run
 
   shell:
     name: shell scripts

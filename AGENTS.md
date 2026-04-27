@@ -19,6 +19,7 @@ bench/
   download.py        huggingface_hub fetcher; writes `<models_dir>/<repo_id>/<filename>`
   llama_swap.py      pure config generator: bakeoff config.yaml → llama-swap proxy config
   metrics.py         heuristic scorers + judge prompts + nvidia-smi / rocm-smi power sampling
+  publish.py         validate/package/sign/submit result bundles for bakeoff-results
   runner.py          start proxy → warmup + matrix per model → judge → stop proxy
   report.py          JSON + Markdown + single-file HTML dashboard (Chart.js via CDN)
 run.sh               uv venv + uv pip install + pinned llama-swap bootstrap + uv run;
@@ -56,6 +57,9 @@ datasets/ results/   generated artifacts (gitignored)
 - Backend container flags (image args, ctx, ngl, etc.) are rendered into `cmd` strings inside `bench/llama_swap.py`. Changes there are covered by `tests/test_llama_swap.py` — keep the structural assertions current.
 - Bumping the pinned `llama-swap` version means updating `LLAMA_SWAP_VERSION` **and** the matching per-platform SHA256 constants in `run.sh`. A mismatch aborts the bootstrap; never silence the check.
 - Every new scorer/judge mode must preserve the JSON record shape in `results/run-<ts>.json` — the HTML dashboard reads it verbatim.
+- Publication is explicit: `bench.publish` packages a completed result for
+  `Rethunk-AI/bakeoff-results`; normal benchmark runs still leave `results/`
+  gitignored and local.
 - Python env: `uv`. No `python -m venv`, no bare `pip`.
 - Match style in touched files; no drive-by refactors.
 

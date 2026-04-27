@@ -182,6 +182,37 @@ Only one model loads at a time (see [AGENTS § Design invariants](AGENTS.md#desi
 - **`results/run-<ts>.md`** — per-model rollup. Pairwise mode adds W/L/T table + N×N win-rate matrix. Scored mode adds a `mean ± sd` column.
 - **`results/run-<ts>.html`** — dashboard (open in browser). Matrix + overall win-rate chart in pairwise mode, mean-score chart in scored mode.
 
+## Publishing results
+
+`results/` stays gitignored. Publication is an explicit operator action that
+packages one run into a reviewable bundle for `Rethunk-AI/bakeoff-results`.
+
+```sh
+uv run python -m bench.publish validate results/run-<ts>.json
+uv run python -m bench.publish package results/run-<ts>.json --output-dir /tmp/bakeoff-bundle
+uv run python -m bench.publish validate /tmp/bakeoff-bundle
+uv run python -m bench.publish submit /tmp/bakeoff-bundle --dry-run
+```
+
+Bundle layout:
+
+- `result.json` — canonical result payload.
+- `manifest.json` — schema version, hashes, run metadata, and signature metadata.
+- `summary.md` — generated Markdown rollup.
+- `dashboard.html` — generated single-file HTML dashboard.
+- `signature.sigstore.json` — optional Sigstore bundle when packaged with `--sign`.
+
+Use `--sign` only when `cosign` is installed and you are ready for the OIDC
+identity used by Sigstore/Rekor to appear in public transparency records:
+
+```sh
+uv run python -m bench.publish package results/run-<ts>.json --sign
+```
+
+Submission copies the bundle into a branch in `Rethunk-AI/bakeoff-results` and
+opens a review PR. The results repository CI owns schema/hash/signature checks
+and static leaderboard generation.
+
 ## Troubleshooting
 
 | Symptom | Cause / fix |

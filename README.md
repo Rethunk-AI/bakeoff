@@ -41,7 +41,7 @@ Matrix: `tasks × prompt_variants × models`.
 ```
 config.yaml          the contract
 bin/llama-swap.sh    proxy launcher (up / down / sweep / wait)
-bench/               clients · dataset · download · llama_swap · metrics · runner · report
+bench/               clients · dataset · download · llama_swap · metrics · publish · runner · report
 run.sh               uv venv + install + pinned llama-swap bootstrap + run
 .cache/              vendored llama-swap binary + generated proxy config (gitignored)
 datasets/            generated inputs (gitignored)

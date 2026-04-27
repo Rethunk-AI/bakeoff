@@ -61,13 +61,9 @@ def _compat_warnings(base: dict[str, Any], cand: dict[str, Any]) -> list[str]:
         and cand_prov.get("seed") is not None
         and base_prov["seed"] != cand_prov["seed"]
     ):
-<<<<<<< HEAD
-        warnings.append(f"seed differs: base={base_prov['seed']} candidate={cand_prov['seed']}")
-=======
         warnings.append(
             f"seed differs: base={base_prov['seed']} candidate={cand_prov['seed']}"
         )
->>>>>>> 029e297 (fix(compare): clear lint blockers)
 
     if (
         base_prov.get("config_hash")
@@ -222,15 +218,6 @@ def compare_markdown(
                 cm = cpr["per_model"].get(mid, {})
                 bwr = bm.get("win_rate")
                 cwr = cm.get("win_rate")
-<<<<<<< HEAD
-                base_win_rate = bwr * 100 if bwr is not None else None
-                cand_win_rate = cwr * 100 if cwr is not None else None
-                lines.append(
-                    f"| {mid} "
-                    f"| {_fmt(base_win_rate, 1)}% "
-                    f"| {_fmt(cand_win_rate, 1)}% "
-                    f"| {_delta2(base_win_rate, cand_win_rate, 1)}% |"
-=======
                 bwr_pct = bwr * 100 if bwr is not None else None
                 cwr_pct = cwr * 100 if cwr is not None else None
                 lines.append(
@@ -238,7 +225,6 @@ def compare_markdown(
                     f"| {_fmt(bwr_pct, 1)}% "
                     f"| {_fmt(cwr_pct, 1)}% "
                     f"| {_delta2(bwr_pct, cwr_pct, 1)}% |"
->>>>>>> 029e297 (fix(compare): clear lint blockers)
                 )
             lines.append("")
 

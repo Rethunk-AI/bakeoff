@@ -22,6 +22,13 @@ SCHEMA_VERSION = "bakeoff-results/v1"
 DEFAULT_RESULTS_REPO = "Rethunk-AI/bakeoff-results"
 SAFE_ID_RE = re.compile(r"[^A-Za-z0-9_.-]+")
 
+# Bundle file names
+RESULT_JSON = "result.json"
+MANIFEST_JSON = "manifest.json"
+SUMMARY_MD = "summary.md"
+DASHBOARD_HTML = "dashboard.html"
+SIGNATURE_SIGSTORE_JSON = "signature.sigstore.json"
+
 
 class PublishError(ValueError):
     """Raised for validation and publication errors."""
@@ -209,19 +216,19 @@ def validate_path(path: Path) -> list[str]:
 def _emit_reports(payload: dict[str, Any], bundle_dir: Path) -> None:
     from bench.report import emit_html, emit_markdown
 
-    emit_markdown(payload, bundle_dir / "summary.md")
-    emit_html(payload, bundle_dir / "dashboard.html")
+    emit_markdown(payload, bundle_dir / SUMMARY_MD)
+    emit_html(payload, bundle_dir / DASHBOARD_HTML)
 
 
 def _build_manifest(bundle_dir: Path, payload: dict[str, Any], signed: bool) -> dict[str, Any]:
     files = {}
-    for rel in ("result.json", "summary.md", "dashboard.html"):
+    for rel in (RESULT_JSON, SUMMARY_MD, DASHBOARD_HTML):
         path = bundle_dir / rel
         if path.is_file():
             files[rel] = {"sha256": _sha256_file(path)}
-    sig_path = bundle_dir / "signature.sigstore.json"
+    sig_path = bundle_dir / SIGNATURE_SIGSTORE_JSON
     if sig_path.is_file():
-        files["signature.sigstore.json"] = {"sha256": _sha256_file(sig_path)}
+        files[SIGNATURE_SIGSTORE_JSON] = {"sha256": _sha256_file(sig_path)}
 
     prov = payload.get("provenance") or {}
     cfg = payload.get("config") or {}
@@ -236,16 +243,16 @@ def _build_manifest(bundle_dir: Path, payload: dict[str, Any], signed: bool) -> 
         "files": files,
         "signature": {
             "kind": "sigstore-bundle",
-            "path": "signature.sigstore.json" if sig_path.is_file() else None,
-            "signed_file": "result.json",
+            "path": SIGNATURE_SIGSTORE_JSON if sig_path.is_file() else None,
+            "signed_file": RESULT_JSON,
             "required": signed,
         },
     }
 
 
 def _sign_result(bundle_dir: Path, cosign: str) -> None:
-    result = bundle_dir / "result.json"
-    bundle = bundle_dir / "signature.sigstore.json"
+    result = bundle_dir / RESULT_JSON
+    bundle = bundle_dir / SIGNATURE_SIGSTORE_JSON
     cmd = [cosign, "sign-blob", str(result), "--bundle", str(bundle), "--yes"]
     subprocess.run(cmd, check=True)
 
@@ -268,12 +275,12 @@ def package_result(
         raise PublishError(f"{bundle_dir} exists; pass --force to overwrite")
     bundle_dir.mkdir(parents=True, exist_ok=True)
 
-    _write_json(bundle_dir / "result.json", payload)
+    _write_json(bundle_dir / RESULT_JSON, payload)
     _emit_reports(payload, bundle_dir)
-    _write_json(bundle_dir / "manifest.json", _build_manifest(bundle_dir, payload, signed=sign))
+    _write_json(bundle_dir / MANIFEST_JSON, _build_manifest(bundle_dir, payload, signed=sign))
     if sign:
         _sign_result(bundle_dir, cosign)
-        _write_json(bundle_dir / "manifest.json", _build_manifest(bundle_dir, payload, signed=True))
+        _write_json(bundle_dir / MANIFEST_JSON, _build_manifest(bundle_dir, payload, signed=True))
 
     errors = validate_bundle(bundle_dir)
     if errors:
@@ -297,7 +304,7 @@ def submit_bundle(
     if errors:
         raise PublishError("invalid bundle:\n- " + "\n- ".join(errors))
 
-    manifest = _load_json(bundle_dir / "manifest.json")
+    manifest = _load_json(bundle_dir / MANIFEST_JSON)
     run_id = str(manifest["run_id"])
     safe_id = _sanitize_id(run_id)
     dest = checkout / "submissions" / safe_id

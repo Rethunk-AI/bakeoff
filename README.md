@@ -50,11 +50,4 @@ results/             run-<ts>.json / .md / .html (gitignored)
 
 Per-module breakdown with behavior notes: [`AGENTS.md` § Layout](AGENTS.md#layout).
 
-## Quick start
-
-```sh
-./run.sh fetch    # pull GGUFs referenced in config.yaml from Hugging Face
-./run.sh          # dataset + all phases + reports
-```
-
 For prerequisites, configuration, and troubleshooting see [HUMANS.md](HUMANS.md).

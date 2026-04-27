@@ -16,7 +16,7 @@ This spec does not add schema-generation tooling, migrate `config.yaml` to anoth
 
 ## Design
 
-Introduce a small `bench.config` module with `ConfigError`, `ValidationIssue`, `load_config`, and `validate_config` helpers. The runner should call this module immediately after loading YAML, before dataset generation or llama-swap config generation. The llama-swap generator can keep defensive checks, but user-facing validation errors should point to config paths such as `models[1].gguf`.
+Introduce a small `bench.config` module with `ConfigError`, `ValidationIssue`, `load_config`, and `validate_config` helpers. The runner should call this module immediately after loading YAML, before dataset generation or llama-swap config generation. Llama-swap retains internal consistency checks; runner-level validation handles user-facing errors with clear config-path formatting such as `models[1].gguf`.
 
 Validation should cover required sections, duplicate IDs, valid judge modes, positive numeric fields, non-empty `models` and `prompts`, `mmproj-*` rejection, prompt IDs, output settings, and dataset domains. Errors should be aggregated when practical so operators can fix multiple config issues in one edit.
 

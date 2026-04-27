@@ -53,6 +53,18 @@ def config_hash(cfg: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()[:16]
 
 
+def _check_id(item: dict[str, Any], item_idx: int, field_name: str, path_prefix: str,
+              seen_ids: set[str], issues: list[ValidationIssue]) -> None:
+    """Check ID presence and uniqueness; report issues."""
+    item_id = item.get("id")
+    if not item_id:
+        issues.append(ValidationIssue(f"{path_prefix}[{item_idx}].id", "required"))
+    elif item_id in seen_ids:
+        issues.append(ValidationIssue(f"{path_prefix}[{item_idx}].id", f"duplicate {field_name} id {item_id!r}"))
+    else:
+        seen_ids.add(str(item_id))
+
+
 def _check_gguf_shape(gguf: str, path: str, issues: list[ValidationIssue]) -> None:
     basename = gguf.rsplit("/", 1)[-1]
     if basename.lower().startswith("mmproj"):
@@ -107,14 +119,8 @@ def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
     models = cfg.get("models") or []
     seen_model_ids: set[str] = set()
     for i, m in enumerate(models):
+        _check_id(m, i, "model", "models", seen_model_ids, issues)
         prefix = f"models[{i}]"
-        mid = m.get("id")
-        if not mid:
-            err(f"{prefix}.id", "required")
-        elif mid in seen_model_ids:
-            err(f"{prefix}.id", f"duplicate model id {mid!r}")
-        else:
-            seen_model_ids.add(str(mid))
 
         gguf = m.get("gguf")
         if not gguf:
@@ -126,13 +132,7 @@ def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
     prompts = cfg.get("prompts") or []
     seen_pids: set[str] = set()
     for i, p in enumerate(prompts):
-        pid = p.get("id")
-        if not pid:
-            err(f"prompts[{i}].id", "required")
-        elif pid in seen_pids:
-            err(f"prompts[{i}].id", f"duplicate prompt id {pid!r}")
-        else:
-            seen_pids.add(str(pid))
+        _check_id(p, i, "prompt", "prompts", seen_pids, issues)
 
     # Judge
     judge = cfg.get("judge") or {}

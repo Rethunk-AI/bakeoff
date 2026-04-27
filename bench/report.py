@@ -58,6 +58,11 @@ def _percentile(xs: list[float], p: float) -> float | None:
 # --- numeric rollup from records -------------------------------------------
 
 
+def _fmt(v: float | None, nd: int = 3) -> str:
+    """Format float to N decimal places, or em-dash if None."""
+    return "—" if v is None else f"{v:.{nd}f}"
+
+
 def _extract_field(rows: list[dict[str, Any]], key: str) -> list[float]:
     """Extract non-None values for a key from a list of dicts."""
     return [r[key] for r in rows if r.get(key) is not None]

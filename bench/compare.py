@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from bench.report import _detect_mode, _pairwise_rollup, _rollup, _scored_rollup
+from bench.report import _detect_mode, _fmt, _pairwise_rollup, _rollup, _scored_rollup
 
 # --- Compatibility check -----------------------------------------------------
 
@@ -97,9 +97,6 @@ def _delta2(a: float | None, b: float | None, nd: int = 3) -> str:
     sign = "+" if d >= 0 else ""
     return f"{sign}{d:.{nd}f}"
 
-
-def _fmt(v: float | None, nd: int = 3) -> str:
-    return "—" if v is None else f"{v:.{nd}f}"
 
 
 # --- Markdown comparison output ----------------------------------------------

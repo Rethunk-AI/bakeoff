@@ -27,6 +27,14 @@ class ResumeError(ValueError):
     """Raised when a prior result cannot be used for resume."""
 
 
+# --- ID extraction -----------------------------------------------------------
+
+
+def _sorted_ids(items: list[dict[str, Any]]) -> list[str]:
+    """Extract and sort string IDs from a list of dicts."""
+    return sorted(str(item["id"]) for item in items)
+
+
 # --- Stable row keys ---------------------------------------------------------
 
 
@@ -86,7 +94,7 @@ def check_compat(
         )
 
     # Dataset n + domains (via task ID set identity)
-    prior_task_ids = sorted(str(t.get("id", "")) for t in prior.get("tasks") or [])
+    prior_task_ids = _sorted_ids(prior.get("tasks") or [])
     current_task_ids = sorted(task_ids)
     if prior_task_ids != current_task_ids:
         errors.append(
@@ -95,20 +103,16 @@ def check_compat(
         )
 
     # Prompt IDs
-    current_pids = sorted(str(p["id"]) for p in cfg.get("prompts") or [])
-    prior_pids = sorted(
-        str(p["id"]) for p in (prior.get("config") or {}).get("prompts") or []
-    )
+    current_pids = _sorted_ids(cfg.get("prompts") or [])
+    prior_pids = _sorted_ids((prior.get("config") or {}).get("prompts") or [])
     if current_pids != prior_pids:
         errors.append(
             f"prompt ID mismatch: prior={prior_pids} current={current_pids}"
         )
 
     # Model IDs
-    current_mids = sorted(str(m["id"]) for m in cfg.get("models") or [])
-    prior_mids = sorted(
-        str(m["id"]) for m in (prior.get("config") or {}).get("models") or []
-    )
+    current_mids = _sorted_ids(cfg.get("models") or [])
+    prior_mids = _sorted_ids((prior.get("config") or {}).get("models") or [])
     if set(current_mids) != set(prior_mids):
         errors.append(
             f"model ID mismatch: prior={prior_mids} current={current_mids}"

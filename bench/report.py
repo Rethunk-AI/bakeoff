@@ -192,9 +192,6 @@ def _scored_rollup(judgements: list[dict[str, Any]]) -> dict[str, Any]:
 
 # --- markdown --------------------------------------------------------------
 
-def _fmt(v: float | None, nd: int = 3) -> str:
-    return "—" if v is None else f"{v:.{nd}f}"
-
 
 def emit_markdown(payload: dict[str, Any], path: Path) -> None:
     roll = _rollup(payload["records"])

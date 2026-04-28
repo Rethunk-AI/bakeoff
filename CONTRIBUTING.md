@@ -13,7 +13,7 @@ content here; we deliberately keep it in one place.
   model in VRAM at a time, judge runs as its own phase, energy-as-cost, etc.
   Violating these silently will get a PR bounced.
 - **The contract:** [`config.yaml`](config.yaml). Every new knob goes here
-  first, then gets wired through `runner.py` / `serve.sh`. Don't hard-code.
+  first, then gets wired through `runner.py` / `llama-swap.sh`. Don't hard-code.
 
 ## Setup
 

@@ -22,7 +22,7 @@ Please include:
 ## In scope
 
 - Command injection or path traversal via `config.yaml` or CLI flags
-- Container escape or privilege escalation from `bin/serve.sh`
+- Container escape or privilege escalation from `bin/llama-swap.sh`
 - Arbitrary code execution via a malicious GGUF path or model alias
 - SSRF or request forgery from the HTTP client in `bench/clients.py`
 - Credential leakage (logs, results artifacts)

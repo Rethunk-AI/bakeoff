@@ -38,20 +38,23 @@ dataset:
 # gguf paths are RELATIVE to server.models_dir.
 # First two entries are A and B for the pairwise judge.
 # Skip mmproj-* files (vision projectors, not standalone text models).
+# See QUEUE.md for the full P0/P1/P2 testing queue.
 models:
+  # P0 — dense sub-15B baseline
   - id: qwen3_5_9b_q4
     alias: "qwen3.5-9b-q4"
     gguf: "lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf"
     ctx: 4096                 # override server.ctx per model if needed
 
+  # P0 — small-active-param MoE (3B active / 35B total)
   - id: qwen3_6_35b_a3b_q4
     alias: "qwen3.6-35b-a3b-q4"
     gguf: "lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf"
     ctx: 4096
-    # MoE with 3B active params. Uncomment to spill experts to CPU if OOM:
+    # Uncomment to spill experts to CPU if OOM:
     # n_cpu_moe: 999
 
-# Alternative cross-family pair (swap in):
+# Alternative cross-family pair (swap in, also P0):
 # - id: gemma_4_31b_q4
 #   alias: "gemma-4-31b-q4"
 #   gguf: "lmstudio-community/gemma-4-31B-it-GGUF/gemma-4-31B-it-Q4_K_M.gguf"

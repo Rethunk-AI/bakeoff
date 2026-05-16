@@ -71,7 +71,18 @@ def _extract_field(rows: list[dict[str, Any]], key: str) -> list[float]:
     return [r[key] for r in rows if r.get(key) is not None]
 
 
-def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+def _rollup(
+    records: list[dict[str, Any]],
+    kwh_rate: float | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Aggregate per-record metrics into per-model rollup dicts.
+
+    cost_usd_total is derived at display time from energy_wh_total × kwh_rate
+    rather than being stored per-record. Legacy result files that carry
+    cost_usd on each record are still handled: if stored values are present
+    they are summed directly; if absent and kwh_rate is known the cost is
+    derived from the aggregated energy.
+    """
     by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
     for r in records:
         if r.get("error"):
@@ -84,8 +95,19 @@ def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
         ttft = _extract_field(rows, "ttft_s")
         tps = _extract_field(rows, "tokens_per_sec")
         wh = _extract_field(rows, "energy_wh")
-        usd = _extract_field(rows, "cost_usd")
         qh = _extract_field(rows, "quality_heuristic")
+        energy_total = sum(wh) if wh else None
+
+        # cost_usd: use stored per-record values when present (legacy runs);
+        # otherwise derive from total energy × kwh_rate at display time.
+        stored_usd = _extract_field(rows, "cost_usd")
+        if stored_usd:
+            cost_total: float | None = sum(stored_usd)
+        elif energy_total is not None and kwh_rate is not None:
+            cost_total = energy_total / 1000.0 * kwh_rate
+        else:
+            cost_total = None
+
         out[mid] = {
             "n": len(rows),
             "latency_mean_s": mean(lat) if lat else None,
@@ -97,8 +119,8 @@ def _rollup(records: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
             "ttft_p95_s": _percentile(ttft, 95),
             "ttft_p99_s": _percentile(ttft, 99),
             "tokens_per_sec_mean": mean(tps) if tps else None,
-            "energy_wh_total": sum(wh) if wh else None,
-            "cost_usd_total": sum(usd) if usd else None,
+            "energy_wh_total": energy_total,
+            "cost_usd_total": cost_total,
             "quality_heuristic_mean": mean(qh) if qh else None,
         }
     return out
@@ -197,8 +219,17 @@ def _scored_rollup(judgements: list[dict[str, Any]]) -> dict[str, Any]:
 # --- markdown --------------------------------------------------------------
 
 
+def _kwh_rate(payload: dict[str, Any]) -> float | None:
+    """Extract kwh_rate_usd from payload config if cost is enabled."""
+    cost = (payload.get("config") or {}).get("cost") or {}
+    if not cost.get("enabled"):
+        return None
+    rate = cost.get("kwh_rate_usd")
+    return float(rate) if rate is not None else None
+
+
 def emit_markdown(payload: dict[str, Any], path: Path) -> None:
-    roll = _rollup(payload["records"])
+    roll = _rollup(payload["records"], kwh_rate=_kwh_rate(payload))
     judgements = payload.get("judgements") or []
     mode = _detect_mode(judgements)
 
@@ -452,24 +483,36 @@ function percentile(xs, p) {{
   return s[lo] + (s[hi] - s[lo]) * (k - lo);
 }}
 
+// cost_usd is no longer stored per record; derive from energy at display time.
+// Legacy result files that carry cost_usd are still handled (stored values
+// are summed directly; derivation is used only when no stored values present).
+const _kwh_rate = data.config?.cost?.enabled ? (data.config?.cost?.kwh_rate_usd ?? null) : null;
+
 function rollup(records) {{
   const by = {{}};
   for (const r of records) {{
     if (r.error) continue;
     const k = r.model_id;
-    by[k] ??= {{n:0, lat:[], ttft:[], tps:[], wh:[], usd:[], qh:[]}};
+    by[k] ??= {{n:0, lat:[], ttft:[], tps:[], wh:[], storedUsd:[], qh:[]}};
     by[k].n++;
     if (r.latency_s != null) by[k].lat.push(r.latency_s);
     if (r.ttft_s != null) by[k].ttft.push(r.ttft_s);
     if (r.tokens_per_sec) by[k].tps.push(r.tokens_per_sec);
     if (r.energy_wh != null) by[k].wh.push(r.energy_wh);
-    if (r.cost_usd != null) by[k].usd.push(r.cost_usd);
+    if (r.cost_usd != null) by[k].storedUsd.push(r.cost_usd);
     if (r.quality_heuristic != null) by[k].qh.push(r.quality_heuristic);
   }}
   const mean = a => a.length ? a.reduce((s,x)=>s+x,0)/a.length : null;
   const sum  = a => a.length ? a.reduce((s,x)=>s+x,0) : null;
   const out = {{}};
   for (const [k,v] of Object.entries(by)) {{
+    const energy_total = sum(v.wh);
+    let cost_total = null;
+    if (v.storedUsd.length) {{
+      cost_total = sum(v.storedUsd);  // legacy: per-record stored value
+    }} else if (energy_total != null && _kwh_rate != null) {{
+      cost_total = energy_total / 1000 * _kwh_rate;  // derived at display time
+    }}
     out[k] = {{
       n: v.n,
       latency_mean_s: mean(v.lat),
@@ -481,8 +524,8 @@ function rollup(records) {{
       ttft_p95_s: percentile(v.ttft, 95),
       ttft_p99_s: percentile(v.ttft, 99),
       tokens_per_sec_mean: mean(v.tps),
-      energy_wh_total: sum(v.wh),
-      cost_usd_total: sum(v.usd),
+      energy_wh_total: energy_total,
+      cost_usd_total: cost_total,
       quality_heuristic_mean: mean(v.qh),
     }};
   }}

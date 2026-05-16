@@ -59,7 +59,6 @@ from bench.config import (
 from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
-    cost_usd,
     detect_hardware_id,
     flops_per_token,
     invert_winner,
@@ -156,14 +155,16 @@ def call_one(
     cost_enabled: bool,
     kwh_rate: float,
     sample_hz: float = 10.0,
-) -> tuple[ChatResult, float | None, float | None, float | None, float | None, float | None, float | None]:
+) -> tuple[ChatResult, float | None, float | None, float | None, float | None, float | None]:
     """Run one inference call.
 
-    Returns (result, energy_wh, cost_usd, peak_vram_mb, mean_sm_pct,
+    Returns (result, energy_wh, peak_vram_mb, mean_sm_pct,
              cpu_time_user_ms, cpu_time_sys_ms).
 
-    The PowerSampler always runs (even when cost_enabled=False) so VRAM and
-    SM utilization are captured. CPU timing via getrusage brackets the call.
+    cost_usd is not returned — it is a derived value computed at display time
+    from energy_wh × kwh_rate. The PowerSampler always runs so VRAM and SM
+    utilization are captured regardless of cost_enabled. CPU timing via
+    getrusage brackets the call.
     """
     messages = [
         {"role": "system", "content": system},
@@ -179,11 +180,8 @@ def call_one(
     cpu_user_ms = (ru_after.ru_utime - ru_before.ru_utime) * 1000.0
     cpu_sys_ms = (ru_after.ru_stime - ru_before.ru_stime) * 1000.0
 
-    if not cost_enabled:
-        return res, None, None, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms
-    wh = sampler.energy_wh
-    usd = cost_usd(wh, kwh_rate)
-    return res, wh, usd, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms
+    wh = sampler.energy_wh if cost_enabled else None
+    return res, wh, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms
 
 
 WARMUP_SYSTEM = "You are a helpful assistant. Answer concisely."
@@ -264,7 +262,7 @@ def run_model_phase(
         if pending is not None and (str(task.id), str(prm["id"])) not in pending:
             continue
         try:
-            res, wh, usd, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms = call_one(
+            res, wh, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms = call_one(
                 client, prm["system"], task.user_prompt, gpu_i, cost_enabled, kwh, sample_hz
             )
             records.append(
@@ -281,7 +279,6 @@ def run_model_phase(
                     "ttft_s": res.ttft_s,
                     "tokens_per_sec": res.tokens_per_sec,
                     "energy_wh": wh,
-                    "cost_usd": usd,
                     "peak_vram_mb": peak_vram,
                     "gpu_sm_utilization_pct": mean_sm,
                     "cpu_time_user_ms": cpu_user_ms,

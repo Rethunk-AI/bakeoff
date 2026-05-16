@@ -203,6 +203,107 @@ def detect_hardware_id(gpu_index: int = 0) -> str | None:
     return _detect_nvidia_name(gpu_index) or _detect_rocm_name(gpu_index)
 
 
+# FP16 (or BF16 where noted) theoretical peak TFLOPS, keyed by slug substrings.
+# Matched by substring so slugified vendor prefixes don't block lookup.
+# Source: vendor datasheets / official specs.
+_TFLOPS_TABLE: list[tuple[str, float]] = [
+    # NVIDIA Ada Lovelace
+    ("rtx-4090", 82.6),
+    ("rtx-4080-super", 52.2),
+    ("rtx-4080", 48.7),
+    ("rtx-4070-ti-super", 40.0),
+    ("rtx-4070-ti", 40.1),
+    ("rtx-4070-super", 35.5),
+    ("rtx-4070", 29.1),
+    ("rtx-4060-ti", 22.1),
+    ("rtx-4060", 15.1),
+    # NVIDIA Ampere
+    ("rtx-3090-ti", 40.0),
+    ("rtx-3090", 35.6),
+    ("rtx-3080-ti", 34.1),
+    ("rtx-3080", 29.8),
+    ("rtx-3070-ti", 21.7),
+    ("rtx-3070", 20.3),
+    ("rtx-3060-ti", 16.2),
+    ("rtx-3060", 12.7),
+    # NVIDIA Data Center
+    ("a100", 77.0),
+    ("h100", 198.9),
+    ("h200", 198.9),
+    # AMD RDNA 4
+    ("rx-9070-xt", 95.9),
+    ("rx-9070", 71.7),
+    # AMD RDNA 3
+    ("rx-7900-xtx", 61.4),
+    ("rx-7900-xt", 51.6),
+    ("rx-7900-gre", 45.9),
+    ("rx-7800-xt", 37.4),
+    ("rx-7700-xt", 27.0),
+    ("rx-7600", 21.7),
+    # AMD Strix Halo / Phoenix APU (integrated; BF16)
+    ("890m", 39.0),
+    ("780m", 8.9),
+    # Apple M-series (MPS)
+    ("m4-max", 54.8),
+    ("m4-pro", 27.2),
+    ("m4", 11.0),
+    ("m3-max", 49.0),
+    ("m3-pro", 18.4),
+    ("m3", 7.7),
+    ("m2-ultra", 54.8),
+    ("m2-max", 27.2),
+    ("m2-pro", 13.6),
+    ("m2", 6.8),
+    ("m1-ultra", 21.0),
+    ("m1-max", 10.4),
+    ("m1-pro", 6.2),
+    ("m1", 2.6),
+]
+
+
+def lookup_peak_tflops(hardware_id: str) -> float | None:
+    """Return known FP16/BF16 peak TFLOPS for a hardware slug, or None.
+
+    Matches by substring so partial slugs (e.g. 'rtx-4090') match even
+    when the full detected name contains vendor prefixes.
+    Uses the most specific (longest key) matching entry.
+    """
+    best: tuple[str, float] | None = None
+    for key, tflops in _TFLOPS_TABLE:
+        if key in hardware_id:
+            if best is None or len(key) > len(best[0]):
+                best = (key, tflops)
+    return best[1] if best else None
+
+
+# --- TFLOPS utilization computation -----------------------------------------
+
+
+def flops_per_token(num_params: int, num_active_params: int | None = None) -> int:
+    """Theoretical FLOPs per output token.
+
+    Dense: 2 × num_params.
+    MoE:   2 × num_active_params (active experts only).
+    """
+    active = num_active_params if num_active_params is not None else num_params
+    return 2 * active
+
+
+def tflops_utilization_pct(
+    tokens_per_sec: float,
+    flops_per_tok: int,
+    peak_tflops: float,
+) -> float:
+    """Fraction of peak GPU TFLOPS consumed by inference, as a percentage.
+
+    tokens_per_sec × flops_per_tok gives effective FLOP/s; dividing by
+    peak_tflops × 1e12 normalises to hardware capacity.
+    """
+    if peak_tflops <= 0:
+        return 0.0
+    return (tokens_per_sec * flops_per_tok) / (peak_tflops * 1e12) * 100.0
+
+
 # --- Energy and hardware metrics --------------------------------------------
 
 

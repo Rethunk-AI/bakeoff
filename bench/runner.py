@@ -36,6 +36,7 @@ import argparse
 import itertools
 import json
 import random
+import resource
 import subprocess
 import sys
 import time
@@ -60,12 +61,15 @@ from bench.metrics import (
     PowerSampler,
     cost_usd,
     detect_hardware_id,
+    flops_per_token,
     invert_winner,
     judge_pair_randomized,
     judge_score_prompt,
+    lookup_peak_tflops,
     parse_judge,
     parse_score,
     score_heuristic,
+    tflops_utilization_pct,
 )
 from bench.provenance import build_model_metadata, enrich_model_metadata
 from bench.provenance import collect as collect_provenance
@@ -152,25 +156,34 @@ def call_one(
     cost_enabled: bool,
     kwh_rate: float,
     sample_hz: float = 10.0,
-) -> tuple[ChatResult, float | None, float | None, float | None, float | None]:
-    """Run one inference call, returning (result, energy_wh, cost_usd, peak_vram_mb, mean_sm_pct).
+) -> tuple[ChatResult, float | None, float | None, float | None, float | None, float | None, float | None]:
+    """Run one inference call.
 
-    When cost_enabled=False the sampler is still run so VRAM and SM
-    utilization are captured; energy_wh and cost_usd are set to None.
+    Returns (result, energy_wh, cost_usd, peak_vram_mb, mean_sm_pct,
+             cpu_time_user_ms, cpu_time_sys_ms).
+
+    The PowerSampler always runs (even when cost_enabled=False) so VRAM and
+    SM utilization are captured. CPU timing via getrusage brackets the call.
     """
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
+    ru_before = resource.getrusage(resource.RUSAGE_SELF)
     with PowerSampler(hz=sample_hz, gpu_index=gpu_index) as sampler:
         res = client.chat(messages)
+    ru_after = resource.getrusage(resource.RUSAGE_SELF)
+
     peak_vram = sampler.peak_vram_mb
     mean_sm = sampler.mean_sm_pct
+    cpu_user_ms = (ru_after.ru_utime - ru_before.ru_utime) * 1000.0
+    cpu_sys_ms = (ru_after.ru_stime - ru_before.ru_stime) * 1000.0
+
     if not cost_enabled:
-        return res, None, None, peak_vram, mean_sm
+        return res, None, None, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms
     wh = sampler.energy_wh
     usd = cost_usd(wh, kwh_rate)
-    return res, wh, usd, peak_vram, mean_sm
+    return res, wh, usd, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms
 
 
 WARMUP_SYSTEM = "You are a helpful assistant. Answer concisely."
@@ -210,6 +223,7 @@ def run_model_phase(
     warmup: bool = True,
     pending: set[tuple[str, str]] | None = None,
     hardware_id: str | None = None,
+    peak_tflops: float | None = None,
 ) -> list[dict[str, Any]]:
     """Run every (task x prompt) cell for one model against the proxy.
 
@@ -237,12 +251,20 @@ def run_model_phase(
     gpu_i = int(cost_cfg.get("gpu_index", 0))
     sample_hz = float(cost_cfg.get("sample_hz", 10.0))
 
+    # TFLOPS utilization: needs per-model param counts + hardware peak.
+    num_params: int | None = model_cfg.get("num_params")
+    num_active: int | None = model_cfg.get("num_active_params")
+    fpt: int | None = (
+        flops_per_token(num_params, num_active) if num_params is not None else None
+    )
+    _peak_tflops = peak_tflops
+
     records: list[dict[str, Any]] = []
     for task, prm in itertools.product(tasks, prompts):
         if pending is not None and (str(task.id), str(prm["id"])) not in pending:
             continue
         try:
-            res, wh, usd, peak_vram, mean_sm = call_one(
+            res, wh, usd, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms = call_one(
                 client, prm["system"], task.user_prompt, gpu_i, cost_enabled, kwh, sample_hz
             )
             records.append(
@@ -262,10 +284,20 @@ def run_model_phase(
                     "cost_usd": usd,
                     "peak_vram_mb": peak_vram,
                     "gpu_sm_utilization_pct": mean_sm,
+                    "cpu_time_user_ms": cpu_user_ms,
+                    "cpu_time_sys_ms": cpu_sys_ms,
+                    "flops_per_token_theoretical": fpt,
+                    "tflops_utilization_pct": None,  # filled below when possible
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
                     "error": None,
                 }
             )
+            # Compute TFLOPS utilization when we have all inputs.
+            rec = records[-1]
+            if fpt is not None and res.tokens_per_sec is not None and _peak_tflops is not None:
+                rec["tflops_utilization_pct"] = tflops_utilization_pct(
+                    res.tokens_per_sec, fpt, _peak_tflops
+                )
             print(f"[run] {mid} {prm['id']} {task.id} {res.latency_s:.2f}s", file=sys.stderr)
         except Exception as e:
             records.append(
@@ -292,6 +324,7 @@ def _run_model_phases(
     pending_by_model: dict[str, set[tuple[str, str]]] | None,
     prior_run_id: str | None,
     hardware_id: str | None = None,
+    peak_tflops: float | None = None,
 ) -> list[dict[str, Any]]:
     """Iterate per-model-sequentially, honouring resume pending sets.
 
@@ -314,6 +347,7 @@ def _run_model_phases(
             warmup=warmup,
             pending=pending,
             hardware_id=hardware_id,
+            peak_tflops=peak_tflops,
         )
         if prior_run_id is not None:
             recs = tag_fresh(recs, prior_run_id)
@@ -573,10 +607,18 @@ def main() -> int:
     out_cfg = cfg.get("output", {})
     hardware_cfg = cfg.get("hardware", {})
     gpu_index = int((cfg.get("cost") or {}).get("gpu_index", 0))
-    # Auto-detect from GPU tooling; config fallback only when detection fails.
+    # Auto-detect hardware identity from GPU tooling; config is fallback only.
     hardware_id: str | None = detect_hardware_id(gpu_index) or hardware_cfg.get("id") or None
+    # Peak TFLOPS: table lookup on detected id first, then config value.
+    peak_tflops: float | None = None
     if hardware_id:
-        print(f"[hardware] id={hardware_id}", file=sys.stderr)
+        peak_tflops = lookup_peak_tflops(hardware_id)
+    if peak_tflops is None:
+        cfg_tflops = hardware_cfg.get("peak_tflops")
+        if cfg_tflops is not None:
+            peak_tflops = float(cfg_tflops)
+    if hardware_id:
+        print(f"[hardware] id={hardware_id} peak_tflops={peak_tflops}", file=sys.stderr)
 
     ts = time.strftime("%Y%m%d-%H%M%S")
     out_dir = Path(out_cfg.get("dir", "results"))
@@ -727,6 +769,7 @@ def main() -> int:
             pending_by_model,
             prior_run_id,
             hardware_id=hardware_id,
+            peak_tflops=peak_tflops,
         )
         all_records = reused_records + fresh_records
 

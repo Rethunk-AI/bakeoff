@@ -15,13 +15,16 @@ from bench.metrics import (
     JUDGE_SCORE_SYSTEM,
     cost_usd,
     energy_wh,
+    flops_per_token,
     invert_winner,
     judge_pair_prompt,
     judge_pair_randomized,
     judge_score_prompt,
+    lookup_peak_tflops,
     parse_judge,
     parse_score,
     score_heuristic,
+    tflops_utilization_pct,
 )
 
 # --- score_heuristic --------------------------------------------------------
@@ -265,3 +268,53 @@ class TestEnergyAndCost:
 
     def test_cost_zero_rate(self):
         assert cost_usd(500.0, 0.0) == 0.0
+
+
+# --- TFLOPS utilization -----------------------------------------------------
+
+
+class TestFlopsPerToken:
+    def test_dense_model(self):
+        # 2 × 7B params
+        assert flops_per_token(7_000_000_000) == 14_000_000_000
+
+    def test_moe_uses_active_params(self):
+        # MoE with 3B active out of 35B total
+        assert flops_per_token(35_000_000_000, 3_000_000_000) == 6_000_000_000
+
+    def test_no_active_falls_back_to_total(self):
+        assert flops_per_token(9_000_000_000, None) == 18_000_000_000
+
+
+class TestTflopsUtilization:
+    def test_basic(self):
+        # 40 tok/s × 14B flops/tok = 560 GFLOPs; / 82.6 TFLOPS ≈ 0.678%
+        result = tflops_utilization_pct(40.0, 14_000_000_000, 82.6)
+        assert result == pytest.approx((40.0 * 14e9) / (82.6e12) * 100, rel=1e-4)
+
+    def test_zero_peak_tflops_returns_zero(self):
+        assert tflops_utilization_pct(100.0, 14_000_000_000, 0.0) == 0.0
+
+    def test_full_utilization(self):
+        # tokens_per_sec = peak_tflops × 1e12 / flops_per_token → 100%
+        peak = 10.0
+        fpt = 1_000_000_000
+        tokens = (peak * 1e12) / fpt
+        assert tflops_utilization_pct(tokens, fpt, peak) == pytest.approx(100.0, rel=1e-6)
+
+
+class TestLookupPeakTflops:
+    def test_rtx_4090(self):
+        assert lookup_peak_tflops("nvidia-geforce-rtx-4090") == pytest.approx(82.6)
+
+    def test_strix_halo(self):
+        # Strix Halo slug contains "890m"
+        assert lookup_peak_tflops("amd-radeon-graphics-890m") == pytest.approx(39.0)
+
+    def test_unknown_returns_none(self):
+        assert lookup_peak_tflops("unknown-widget-9000") is None
+
+    def test_most_specific_match_wins(self):
+        # "rtx-4080-super" is longer than "rtx-4080" and should win
+        result = lookup_peak_tflops("nvidia-geforce-rtx-4080-super")
+        assert result == pytest.approx(52.2)

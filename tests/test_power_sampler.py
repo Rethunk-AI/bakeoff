@@ -115,3 +115,75 @@ def test_sampler_rectangle_fallback_on_single_sample(monkeypatch):
     # Could be 1 or 2 samples depending on thread timing.
     assert s.energy_wh is not None
     assert s.energy_wh >= 0.0
+
+
+# --- combined GPU sampler (VRAM + SM utilization) -------------------------
+
+
+def _fake_combined(watts: float, vram: float, sm: float):
+    """Return a factory that always yields a successful GpuSample."""
+
+    def _f(gpu_index: int = 0) -> metrics.GpuSample:
+        return metrics.GpuSample(watts=watts, vram_mb=vram, sm_pct=sm, ok=True)
+
+    return _f
+
+
+def test_sampler_combined_populates_vram_and_sm(monkeypatch):
+    monkeypatch.setattr(metrics, "_sample_gpu_combined", _fake_combined(80.0, 4096.0, 75.0))
+    with PowerSampler(hz=200.0, gpu_index=0) as s:
+        time.sleep(0.05)
+    assert len(s.samples) >= 1
+    assert len(s.vram_samples) >= 1
+    assert len(s.sm_samples) >= 1
+    assert s.peak_vram_mb is not None
+    assert s.peak_vram_mb >= 4096.0
+    assert s.mean_sm_pct is not None
+    assert 70.0 <= s.mean_sm_pct <= 80.0
+
+
+def test_sampler_combined_peak_vram_is_max(monkeypatch):
+    # Simulate VRAM climbing during inference.
+    readings = [
+        metrics.GpuSample(80.0, 2000.0, 60.0, True),
+        metrics.GpuSample(80.0, 5000.0, 70.0, True),
+        metrics.GpuSample(80.0, 3000.0, 65.0, True),
+    ]
+    it = iter(readings)
+
+    def _f(gpu_index: int = 0) -> metrics.GpuSample:
+        return next(it, readings[-1])
+
+    monkeypatch.setattr(metrics, "_sample_gpu_combined", _f)
+    with PowerSampler(hz=1000.0, gpu_index=0) as s:
+        time.sleep(0.02)
+    assert s.peak_vram_mb is not None
+    assert s.peak_vram_mb == pytest.approx(5000.0)
+
+
+def test_sampler_combined_null_when_combined_and_power_both_fail(monkeypatch):
+    monkeypatch.setattr(
+        metrics, "_sample_gpu_combined", lambda i=0: metrics.GpuSample(None, None, None, False)
+    )
+    monkeypatch.setattr(
+        metrics, "sample_power", lambda i=0: metrics.PowerSample(None, False)
+    )
+    with PowerSampler(hz=100.0) as s:
+        time.sleep(0.02)
+    assert s.peak_vram_mb is None
+    assert s.mean_sm_pct is None
+    assert s.energy_wh is None
+
+
+def test_sampler_combined_falls_back_to_power_for_watts(monkeypatch):
+    # Combined fails (e.g. ROCm host), but sample_power succeeds for energy.
+    monkeypatch.setattr(
+        metrics, "_sample_gpu_combined", lambda i=0: metrics.GpuSample(None, None, None, False)
+    )
+    monkeypatch.setattr(metrics, "sample_power", lambda i=0: metrics.PowerSample(50.0, True))
+    with PowerSampler(hz=200.0) as s:
+        time.sleep(0.05)
+    assert len(s.samples) >= 1
+    assert s.energy_wh is not None
+    assert s.peak_vram_mb is None
+    assert s.mean_sm_pct is None

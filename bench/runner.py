@@ -59,6 +59,7 @@ from bench.dataset import Task, generate, write_jsonl
 from bench.metrics import (
     PowerSampler,
     cost_usd,
+    detect_hardware_id,
     invert_winner,
     judge_pair_randomized,
     judge_score_prompt,
@@ -151,19 +152,25 @@ def call_one(
     cost_enabled: bool,
     kwh_rate: float,
     sample_hz: float = 10.0,
-) -> tuple[ChatResult, float | None, float | None]:
+) -> tuple[ChatResult, float | None, float | None, float | None, float | None]:
+    """Run one inference call, returning (result, energy_wh, cost_usd, peak_vram_mb, mean_sm_pct).
+
+    When cost_enabled=False the sampler is still run so VRAM and SM
+    utilization are captured; energy_wh and cost_usd are set to None.
+    """
     messages = [
         {"role": "system", "content": system},
         {"role": "user", "content": user},
     ]
-    if not cost_enabled:
-        res = client.chat(messages)
-        return res, None, None
     with PowerSampler(hz=sample_hz, gpu_index=gpu_index) as sampler:
         res = client.chat(messages)
+    peak_vram = sampler.peak_vram_mb
+    mean_sm = sampler.mean_sm_pct
+    if not cost_enabled:
+        return res, None, None, peak_vram, mean_sm
     wh = sampler.energy_wh
     usd = cost_usd(wh, kwh_rate)
-    return res, wh, usd
+    return res, wh, usd, peak_vram, mean_sm
 
 
 WARMUP_SYSTEM = "You are a helpful assistant. Answer concisely."
@@ -202,6 +209,7 @@ def run_model_phase(
     timeout_s: float,
     warmup: bool = True,
     pending: set[tuple[str, str]] | None = None,
+    hardware_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Run every (task x prompt) cell for one model against the proxy.
 
@@ -234,7 +242,7 @@ def run_model_phase(
         if pending is not None and (str(task.id), str(prm["id"])) not in pending:
             continue
         try:
-            res, wh, usd = call_one(
+            res, wh, usd, peak_vram, mean_sm = call_one(
                 client, prm["system"], task.user_prompt, gpu_i, cost_enabled, kwh, sample_hz
             )
             records.append(
@@ -243,6 +251,7 @@ def run_model_phase(
                     "domain": task.domain,
                     "prompt_id": prm["id"],
                     "model_id": mid,
+                    "hardware_id": hardware_id,
                     "text": res.text,
                     "prompt_tokens": res.prompt_tokens,
                     "completion_tokens": res.completion_tokens,
@@ -251,6 +260,8 @@ def run_model_phase(
                     "tokens_per_sec": res.tokens_per_sec,
                     "energy_wh": wh,
                     "cost_usd": usd,
+                    "peak_vram_mb": peak_vram,
+                    "gpu_sm_utilization_pct": mean_sm,
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
                     "error": None,
                 }
@@ -280,6 +291,7 @@ def _run_model_phases(
     warmup: bool,
     pending_by_model: dict[str, set[tuple[str, str]]] | None,
     prior_run_id: str | None,
+    hardware_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Iterate per-model-sequentially, honouring resume pending sets.
 
@@ -293,7 +305,15 @@ def _run_model_phases(
             print(f"[resume] {mid}: all cells complete, skipping", file=sys.stderr)
             continue
         recs = run_model_phase(
-            m, tasks, prompts, base_url, cost_cfg, timeout_s, warmup=warmup, pending=pending
+            m,
+            tasks,
+            prompts,
+            base_url,
+            cost_cfg,
+            timeout_s,
+            warmup=warmup,
+            pending=pending,
+            hardware_id=hardware_id,
         )
         if prior_run_id is not None:
             recs = tag_fresh(recs, prior_run_id)
@@ -551,6 +571,12 @@ def main() -> int:
     cost_cfg = cfg.get("cost", {})
     judge_cfg = cfg.get("judge", {})
     out_cfg = cfg.get("output", {})
+    hardware_cfg = cfg.get("hardware", {})
+    gpu_index = int((cfg.get("cost") or {}).get("gpu_index", 0))
+    # Auto-detect from GPU tooling; config fallback only when detection fails.
+    hardware_id: str | None = detect_hardware_id(gpu_index) or hardware_cfg.get("id") or None
+    if hardware_id:
+        print(f"[hardware] id={hardware_id}", file=sys.stderr)
 
     ts = time.strftime("%Y%m%d-%H%M%S")
     out_dir = Path(out_cfg.get("dir", "results"))
@@ -700,6 +726,7 @@ def main() -> int:
             warmup,
             pending_by_model,
             prior_run_id,
+            hardware_id=hardware_id,
         )
         all_records = reused_records + fresh_records
 

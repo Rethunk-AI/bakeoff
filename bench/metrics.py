@@ -146,12 +146,79 @@ def parse_score(text: str, default: int = 3) -> int:
     return int(matches[-1])
 
 
-# --- Energy -----------------------------------------------------------------
+# --- Hardware detection -----------------------------------------------------
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def _slugify(name: str) -> str:
+    return _SLUG_RE.sub("-", name.lower()).strip("-")
+
+
+def _detect_nvidia_name(gpu_index: int) -> str | None:
+    if shutil.which("nvidia-smi") is None:
+        return None
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", "-i", str(gpu_index), "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if out.returncode != 0:
+            return None
+        name = out.stdout.strip().splitlines()[0].strip()
+        return _slugify(name) if name else None
+    except Exception:
+        return None
+
+
+_ROCM_PRODUCT_RE = re.compile(r"Card\s+series\s*:\s*(.+)", re.IGNORECASE)
+_ROCM_PRODUCT_ALT_RE = re.compile(r"Product Name\s*:\s*(.+)", re.IGNORECASE)
+
+
+def _detect_rocm_name(gpu_index: int) -> str | None:
+    if shutil.which("rocm-smi") is None:
+        return None
+    try:
+        out = subprocess.run(
+            ["rocm-smi", "-d", str(gpu_index), "--showproductname"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if out.returncode != 0:
+            return None
+        for pat in (_ROCM_PRODUCT_RE, _ROCM_PRODUCT_ALT_RE):
+            m = pat.search(out.stdout)
+            if m:
+                return _slugify(m.group(1).strip())
+        return None
+    except Exception:
+        return None
+
+
+def detect_hardware_id(gpu_index: int = 0) -> str | None:
+    """Return a canonical slug for the detected GPU (e.g. 'nvidia-geforce-rtx-4090').
+
+    Tries nvidia-smi first, then rocm-smi. Returns None when neither tool
+    is available or the device name cannot be parsed.
+    """
+    return _detect_nvidia_name(gpu_index) or _detect_rocm_name(gpu_index)
+
+
+# --- Energy and hardware metrics --------------------------------------------
 
 
 @dataclass
 class PowerSample:
     watts: float | None
+    ok: bool
+
+
+@dataclass
+class GpuSample:
+    """Combined per-tick GPU reading: power, VRAM, and SM utilization."""
+
+    watts: float | None
+    vram_mb: float | None
+    sm_pct: float | None
     ok: bool
 
 
@@ -177,6 +244,40 @@ def _sample_nvidia(gpu_index: int) -> PowerSample:
         return PowerSample(float(val), True)
     except Exception:
         return PowerSample(None, False)
+
+
+def _sample_gpu_combined(gpu_index: int) -> GpuSample:
+    """Query power.draw, memory.used, and utilization.gpu in one nvidia-smi call.
+
+    Cheaper than three separate calls. Returns GpuSample(ok=False) when
+    nvidia-smi is absent or the query fails (e.g. ROCm-only host).
+    """
+    if shutil.which("nvidia-smi") is None:
+        return GpuSample(None, None, None, False)
+    try:
+        out = subprocess.run(
+            [
+                "nvidia-smi",
+                "-i",
+                str(gpu_index),
+                "--query-gpu=power.draw,memory.used,utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=5,
+        )
+        if out.returncode != 0:
+            return GpuSample(None, None, None, False)
+        parts = out.stdout.strip().splitlines()[0].strip().split(",")
+        if len(parts) < 3:
+            return GpuSample(None, None, None, False)
+        watts = float(parts[0].strip())
+        vram = float(parts[1].strip())
+        sm = float(parts[2].strip())
+        return GpuSample(watts, vram, sm, True)
+    except Exception:
+        return GpuSample(None, None, None, False)
 
 
 _ROCM_POWER_RE = re.compile(r"([0-9]+(?:\.[0-9]+)?)\s*W", re.IGNORECASE)
@@ -246,12 +347,17 @@ class PowerSampler:
     """Background sampler. `with PowerSampler(hz=10, gpu_index=0) as s: ...`.
 
     On `__exit__`, stops the thread and exposes:
-      - `samples`: list[(t_rel_s, watts)] taken while active.
-      - `energy_wh`: trapezoidal integral of the samples.
+      - `samples`: list[(t_rel_s, watts)] for energy integration.
+      - `vram_samples`: list[(t_rel_s, vram_mb)] — peak across the call.
+      - `sm_samples`: list[(t_rel_s, sm_pct)] — mean across the call.
+      - `energy_wh`: trapezoidal integral of the watt samples.
       - `mean_watts`: simple mean of sampled wattages (diagnostic).
+      - `peak_vram_mb`: max VRAM observed (None when NVML unavailable).
+      - `mean_sm_pct`: mean SM utilization (None when NVML unavailable).
 
-    Safe to use when no power source is available: `sampler.samples` will
-    be empty and `energy_wh` None. Never raises from the thread.
+    Uses a single combined nvidia-smi call per tick (power + VRAM + SM
+    utilization) when NVML is available; falls back to watts-only ROCm path
+    otherwise. Safe when no GPU tool is available: all null, no exception.
     """
 
     def __init__(self, hz: float = 10.0, gpu_index: int = 0):
@@ -261,12 +367,29 @@ class PowerSampler:
         self._thread: threading.Thread | None = None
         self._t0: float = 0.0
         self.samples: list[tuple[float, float]] = []
+        self.vram_samples: list[tuple[float, float]] = []
+        self.sm_samples: list[tuple[float, float]] = []
+
+    def _tick(self) -> None:
+        """One sampling tick: try combined NVML first, fall back to watts-only."""
+        t = time.perf_counter() - self._t0
+        gs = _sample_gpu_combined(self.gpu_index)
+        if gs.ok:
+            if gs.watts is not None:
+                self.samples.append((t, gs.watts))
+            if gs.vram_mb is not None:
+                self.vram_samples.append((t, gs.vram_mb))
+            if gs.sm_pct is not None:
+                self.sm_samples.append((t, gs.sm_pct))
+        else:
+            # ROCm or other watts-only path.
+            ps = sample_power(self.gpu_index)
+            if ps.ok and ps.watts is not None:
+                self.samples.append((t, ps.watts))
 
     def _run(self) -> None:
         while not self._stop.is_set():
-            ps = sample_power(self.gpu_index)
-            if ps.ok and ps.watts is not None:
-                self.samples.append((time.perf_counter() - self._t0, ps.watts))
+            self._tick()
             # Event.wait lets stop() preempt mid-interval; avoids trailing
             # sleep after the call already returned.
             if self._stop.wait(self.interval_s):
@@ -277,9 +400,18 @@ class PowerSampler:
         self._stop.clear()
         # Prime with one immediate sample so very short calls still have
         # a reading; the thread then continues at interval_s.
-        ps = sample_power(self.gpu_index)
-        if ps.ok and ps.watts is not None:
-            self.samples.append((0.0, ps.watts))
+        gs = _sample_gpu_combined(self.gpu_index)
+        if gs.ok:
+            if gs.watts is not None:
+                self.samples.append((0.0, gs.watts))
+            if gs.vram_mb is not None:
+                self.vram_samples.append((0.0, gs.vram_mb))
+            if gs.sm_pct is not None:
+                self.sm_samples.append((0.0, gs.sm_pct))
+        else:
+            ps = sample_power(self.gpu_index)
+            if ps.ok and ps.watts is not None:
+                self.samples.append((0.0, ps.watts))
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
         return self
@@ -305,3 +437,15 @@ class PowerSampler:
         if not self.samples:
             return None
         return sum(w for _, w in self.samples) / len(self.samples)
+
+    @property
+    def peak_vram_mb(self) -> float | None:
+        if not self.vram_samples:
+            return None
+        return max(v for _, v in self.vram_samples)
+
+    @property
+    def mean_sm_pct(self) -> float | None:
+        if not self.sm_samples:
+            return None
+        return sum(v for _, v in self.sm_samples) / len(self.sm_samples)

@@ -91,6 +91,15 @@ judge:
   gguf: "lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf"
   ctx: 8192                   # pairwise prompt contains both responses
 
+# ---------- Hardware --------------------------------------------------------
+# Identifies the test host and provides GPU peak TFLOPS for efficiency
+# calculations (tflops_utilization_pct). Both fields are optional — omit
+# when unknown. peak_tflops is theoretical peak at the relevant precision
+# (FP16 for most local inference; BF16 for Strix Halo).
+hardware:
+  id: "amd-8060s"           # short string written into every run record
+  peak_tflops: 39.0         # Strix Halo (Radeon 890M) theoretical FP16 peak
+
 # ---------- Cost ------------------------------------------------------------
 # Energy-based. NVIDIA: nvidia-smi power.draw. AMD: rocm-smi --showpower.
 # On Strix Halo APU with broken libdrm_amdgpu.so, expect cost_usd: null.

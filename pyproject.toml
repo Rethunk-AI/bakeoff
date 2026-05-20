@@ -13,10 +13,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
-    "mypy>=1.20.2",
+    "mypy>=2.1.0",
     "pytest>=9.0.3",
-    "ruff>=0.15.12",
-    "types-PyYAML>=6.0.12.20260408",
+    "ruff>=0.15.13",
+    "types-PyYAML>=6.0.12.20260518",
 ]
 
 # Auto-discovery trips over the gitignored `results/` and `datasets/` output
@@ -39,7 +39,10 @@ select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
 "bench/dataset.py" = ["E501"]   # fixture prompts are intentionally long
-"bench/report.py"  = ["RUF001", "E501"] # intentional × in UI strings; long literal HTML/table rows
+"bench/metrics.py" = ["RUF002", "RUF003"]  # × in formulas/docstrings by design
+"bench/report.py"  = ["RUF001", "RUF002", "RUF003", "E501"]  # × in UI strings; long rows
+"bench/runner.py"  = ["RUF002"]  # × in docstrings by design
+"tests/test_metrics.py" = ["RUF003"]  # × in formula comments by design
 
 # --- Mypy ------------------------------------------------------------------
 [tool.mypy]

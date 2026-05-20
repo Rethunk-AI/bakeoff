@@ -415,6 +415,20 @@ def sample_power(gpu_index: int = 0) -> PowerSample:
     return _sample_rocm(gpu_index)
 
 
+def gpu_weighted_seconds(wall_seconds: float, mean_sm_pct: float | None) -> float | None:
+    """Utilization-weighted GPU time (Path 2 timing).
+
+    Computed as wall_clock_seconds × mean(gpu_sm_utilization_pct / 100).
+    Returns None when SM utilization data is unavailable (non-NVML hosts).
+    This is distinct from gpu_event_seconds (Path 1), which is derived from
+    cudaEventElapsedTime() / hipEventElapsedTime() via the CUDA/ROCm event API
+    and is None until that path is wired.
+    """
+    if mean_sm_pct is None:
+        return None
+    return wall_seconds * (mean_sm_pct / 100.0)
+
+
 def energy_wh(avg_watts: float | None, seconds: float) -> float | None:
     if avg_watts is None:
         return None

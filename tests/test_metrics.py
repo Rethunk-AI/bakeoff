@@ -16,6 +16,7 @@ from bench.metrics import (
     cost_usd,
     energy_wh,
     flops_per_token,
+    gpu_weighted_seconds,
     invert_winner,
     judge_pair_prompt,
     judge_pair_randomized,
@@ -318,3 +319,28 @@ class TestLookupPeakTflops:
         # "rtx-4080-super" is longer than "rtx-4080" and should win
         result = lookup_peak_tflops("nvidia-geforce-rtx-4080-super")
         assert result == pytest.approx(52.2)
+
+
+# --- gpu_weighted_seconds ----------------------------------------------------
+
+
+class TestGpuWeightedSeconds:
+    def test_none_sm_pct_returns_none(self):
+        # Path 2 is unavailable when NVML is not present; must propagate None.
+        assert gpu_weighted_seconds(10.0, None) is None
+
+    def test_full_utilization_equals_wall_seconds(self):
+        # 100% SM utilization: weighted time equals wall clock time.
+        assert gpu_weighted_seconds(5.0, 100.0) == pytest.approx(5.0)
+
+    def test_zero_utilization_returns_zero(self):
+        # 0% SM: GPU did nothing, weighted time is zero.
+        assert gpu_weighted_seconds(5.0, 0.0) == pytest.approx(0.0)
+
+    def test_half_utilization(self):
+        # 50% SM over 10 s wall → 5.0 s weighted.
+        assert gpu_weighted_seconds(10.0, 50.0) == pytest.approx(5.0)
+
+    def test_fractional_utilization(self):
+        # 75% SM over 8 s wall → 6.0 s weighted.
+        assert gpu_weighted_seconds(8.0, 75.0) == pytest.approx(6.0)

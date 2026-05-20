@@ -61,6 +61,7 @@ from bench.metrics import (
     PowerSampler,
     detect_hardware_id,
     flops_per_token,
+    gpu_weighted_seconds,
     invert_winner,
     judge_pair_randomized,
     judge_score_prompt,
@@ -279,6 +280,14 @@ def run_model_phase(
                     "energy_wh": wh,
                     "peak_vram_mb": peak_vram,
                     "gpu_sm_utilization_pct": mean_sm,
+                    # Path 1: kernel wall time from cudaEventElapsedTime() /
+                    # hipEventElapsedTime(). None until the CUDA/ROCm event API
+                    # path is wired; the field exists now so the schema is stable.
+                    "gpu_event_seconds": None,
+                    # Path 2: utilization-weighted GPU time.
+                    # wall_clock_seconds × mean(gpu_sm_utilization_pct / 100).
+                    # None when SM utilization is unavailable (non-NVML hosts).
+                    "gpu_weighted_seconds": gpu_weighted_seconds(res.latency_s, mean_sm),
                     "cpu_time_user_ms": cpu_user_ms,
                     "cpu_time_sys_ms": cpu_sys_ms,
                     "flops_per_token_theoretical": fpt,

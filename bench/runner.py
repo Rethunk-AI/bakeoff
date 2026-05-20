@@ -252,9 +252,7 @@ def run_model_phase(
     # TFLOPS utilization: needs per-model param counts + hardware peak.
     num_params: int | None = model_cfg.get("num_params")
     num_active: int | None = model_cfg.get("num_active_params")
-    fpt: int | None = (
-        flops_per_token(num_params, num_active) if num_params is not None else None
-    )
+    fpt: int | None = flops_per_token(num_params, num_active) if num_params is not None else None
     _peak_tflops = peak_tflops
 
     records: list[dict[str, Any]] = []

@@ -165,9 +165,7 @@ def test_sampler_combined_null_when_combined_and_power_both_fail(monkeypatch):
     monkeypatch.setattr(
         metrics, "_sample_gpu_combined", lambda i=0: metrics.GpuSample(None, None, None, False)
     )
-    monkeypatch.setattr(
-        metrics, "sample_power", lambda i=0: metrics.PowerSample(None, False)
-    )
+    monkeypatch.setattr(metrics, "sample_power", lambda i=0: metrics.PowerSample(None, False))
     with PowerSampler(hz=100.0) as s:
         time.sleep(0.02)
     assert s.peak_vram_mb is None

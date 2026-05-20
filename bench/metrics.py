@@ -161,7 +161,9 @@ def _detect_nvidia_name(gpu_index: int) -> str | None:
     try:
         out = subprocess.run(
             ["nvidia-smi", "-i", str(gpu_index), "--query-gpu=name", "--format=csv,noheader"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode != 0:
             return None
@@ -181,7 +183,9 @@ def _detect_rocm_name(gpu_index: int) -> str | None:
     try:
         out = subprocess.run(
             ["rocm-smi", "-d", str(gpu_index), "--showproductname"],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True,
+            text=True,
+            timeout=5,
         )
         if out.returncode != 0:
             return None
@@ -270,9 +274,8 @@ def lookup_peak_tflops(hardware_id: str) -> float | None:
     """
     best: tuple[str, float] | None = None
     for key, tflops in _TFLOPS_TABLE:
-        if key in hardware_id:
-            if best is None or len(key) > len(best[0]):
-                best = (key, tflops)
+        if key in hardware_id and (best is None or len(key) > len(best[0])):
+            best = (key, tflops)
     return best[1] if best else None
 
 

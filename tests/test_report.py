@@ -58,9 +58,9 @@ def _rec(model_id: str, latency: float, ttft: float | None = None):
         "prompt_id": "p",
         "model_id": model_id,
         "text": "x",
-        "latency_s": latency,
-        "ttft_s": ttft,
-        "tokens_per_sec": 10.0,
+        "wall_clock_seconds": latency,
+        "seconds_to_first_token": ttft,
+        "tokens_per_second": 10.0,
         "error": None,
     }
 

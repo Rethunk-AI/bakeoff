@@ -91,9 +91,9 @@ def _rollup(
 
     out: dict[str, dict[str, Any]] = {}
     for mid, rows in by_model.items():
-        lat = _extract_field(rows, "latency_s")
-        ttft = _extract_field(rows, "ttft_s")
-        tps = _extract_field(rows, "tokens_per_sec")
+        lat = _extract_field(rows, "wall_clock_seconds")
+        ttft = _extract_field(rows, "seconds_to_first_token")
+        tps = _extract_field(rows, "tokens_per_second")
         wh = _extract_field(rows, "energy_wh")
         qh = _extract_field(rows, "quality_heuristic")
         energy_total = sum(wh) if wh else None
@@ -495,9 +495,9 @@ function rollup(records) {{
     const k = r.model_id;
     by[k] ??= {{n:0, lat:[], ttft:[], tps:[], wh:[], storedUsd:[], qh:[]}};
     by[k].n++;
-    if (r.latency_s != null) by[k].lat.push(r.latency_s);
-    if (r.ttft_s != null) by[k].ttft.push(r.ttft_s);
-    if (r.tokens_per_sec) by[k].tps.push(r.tokens_per_sec);
+    if (r.wall_clock_seconds != null) by[k].lat.push(r.wall_clock_seconds);
+    if (r.seconds_to_first_token != null) by[k].ttft.push(r.seconds_to_first_token);
+    if (r.tokens_per_second) by[k].tps.push(r.tokens_per_second);
     if (r.energy_wh != null) by[k].wh.push(r.energy_wh);
     if (r.cost_usd != null) by[k].storedUsd.push(r.cost_usd);
     if (r.quality_heuristic != null) by[k].qh.push(r.quality_heuristic);

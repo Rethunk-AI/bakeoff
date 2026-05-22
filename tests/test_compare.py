@@ -13,8 +13,8 @@ def _record(
     model_id,
     task_id="t1",
     prompt_id="p1",
-    latency_s=1.0,
-    tokens_per_sec=100.0,
+    wall_clock_seconds=1.0,
+    tokens_per_second=100.0,
     quality_heuristic=0.8,
     energy_wh=0.01,
     cost_usd=0.001,
@@ -24,9 +24,9 @@ def _record(
         "model_id": model_id,
         "task_id": task_id,
         "prompt_id": prompt_id,
-        "latency_s": latency_s,
-        "ttft_s": None,
-        "tokens_per_sec": tokens_per_sec,
+        "wall_clock_seconds": wall_clock_seconds,
+        "seconds_to_first_token": None,
+        "tokens_per_second": tokens_per_second,
         "quality_heuristic": quality_heuristic,
         "energy_wh": energy_wh,
         "cost_usd": cost_usd,
@@ -147,13 +147,13 @@ class TestDelta:
 class TestCompareMarkdown:
     def _base(self):
         return _payload(
-            records=[_record("m_a", latency_s=1.0), _record("m_b", latency_s=2.0)],
+            records=[_record("m_a", wall_clock_seconds=1.0), _record("m_b", wall_clock_seconds=2.0)],
         )
 
     def _cand(self):
         return _payload(
             run_id="run-2",
-            records=[_record("m_a", latency_s=0.8), _record("m_b", latency_s=2.2)],
+            records=[_record("m_a", wall_clock_seconds=0.8), _record("m_b", wall_clock_seconds=2.2)],
         )
 
     def test_header_present(self):

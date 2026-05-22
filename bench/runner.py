@@ -160,7 +160,7 @@ def call_one(
     """Run one inference call.
 
     Returns (result, energy_wh, peak_vram_mb, mean_sm_pct,
-             cpu_time_user_ms, cpu_time_sys_ms).
+             cpu_seconds_user, cpu_seconds_sys).
 
     cost_usd is not returned — it is a derived value computed at display time
     from energy_wh × kwh_rate. The PowerSampler always runs so VRAM and SM
@@ -274,9 +274,9 @@ def run_model_phase(
                     "text": res.text,
                     "prompt_tokens": res.prompt_tokens,
                     "completion_tokens": res.completion_tokens,
-                    "latency_s": res.latency_s,
-                    "ttft_s": res.ttft_s,
-                    "tokens_per_sec": res.tokens_per_sec,
+                    "wall_clock_seconds": res.latency_s,
+                    "seconds_to_first_token": res.ttft_s,
+                    "tokens_per_second": res.tokens_per_sec,
                     "energy_wh": wh,
                     "peak_vram_mb": peak_vram,
                     "gpu_sm_utilization_pct": mean_sm,
@@ -288,8 +288,8 @@ def run_model_phase(
                     # wall_clock_seconds × mean(gpu_sm_utilization_pct / 100).
                     # None when SM utilization is unavailable (non-NVML hosts).
                     "gpu_weighted_seconds": gpu_weighted_seconds(res.latency_s, mean_sm),
-                    "cpu_time_user_ms": cpu_user_ms,
-                    "cpu_time_sys_ms": cpu_sys_ms,
+                    "cpu_seconds_user": cpu_user_ms / 1000.0,
+                    "cpu_seconds_sys": cpu_sys_ms / 1000.0,
                     "flops_per_token_theoretical": fpt,
                     "tflops_utilization_pct": None,  # filled below when possible
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),

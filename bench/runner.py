@@ -813,8 +813,31 @@ def main() -> int:
         "judgements": judgements,
         "resumed_from": prior_run_id,
     }
+
+    # Config-gated Ed25519 signing.
+    # Enable by adding a `signing` stanza to config.yaml:
+    #
+    #   signing:
+    #     enabled: true
+    #     key_path: "~/.bakeoff/runner_key.pem"   # Ed25519 private key PEM
+    #     runner_id: "amd-8060s"                   # defaults to hardware.id if omitted
+    signing_cfg = cfg.get("signing", {})
+    if signing_cfg.get("enabled"):
+        from bench.signing import load_private_key, sign_result
+
+        key_path = Path(signing_cfg["key_path"]).expanduser()
+        runner_id = (
+            signing_cfg.get("runner_id")
+            or (cfg.get("hardware") or {}).get("id")
+            or "unknown-runner"
+        )
+        private_key = load_private_key(key_path)
+        output = sign_result(payload, private_key, runner_id)
+    else:
+        output = payload
+
     with out_json.open("w") as f:
-        json.dump(payload, f, indent=2)
+        json.dump(output, f, indent=2)
     print(f"[out] {out_json}", file=sys.stderr)
 
     if out_cfg.get("emit_markdown") or out_cfg.get("emit_html"):

@@ -157,3 +157,14 @@ CREATE TABLE run_model_metrics (
     gflops_per_token FLOAT,          -- theoretical GFLOPs per forward pass token
     PRIMARY KEY (run_id, prompt_id, model_id)
 );
+
+-- ---------------------------------------------------------------------------
+-- runners
+-- One row per registered runner. public_key is base64-encoded Ed25519 public key.
+-- ---------------------------------------------------------------------------
+CREATE TABLE runners (
+    runner_id     TEXT PRIMARY KEY,
+    public_key    TEXT NOT NULL,
+    registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    description   TEXT
+);

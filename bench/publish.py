@@ -9,6 +9,7 @@ signature, and open a publication PR against `Rethunk-AI/bakeoff-results`.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import re
@@ -18,6 +19,8 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from bench.signing import SigningError, verify_result
 
 SCHEMA_VERSION = "bakeoff-results/v1"
 DEFAULT_RESULTS_REPO = "Rethunk-AI/bakeoff-results"
@@ -62,6 +65,41 @@ def _sha256_file(path: Path) -> str:
 
 def _utc_now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _load_public_key_b64(path: Path) -> str:
+    """Load an Ed25519 public key from *path* as a base64 string.
+
+    Accepts either:
+    - A PEM-encoded public key file (``BEGIN PUBLIC KEY`` header).
+    - A plain text file whose stripped content is the raw base64 public key.
+    """
+    raw = path.read_bytes()
+    if b"BEGIN" in raw:
+        # PEM format — extract raw bytes and re-encode
+        from cryptography.hazmat.primitives.serialization import (
+            Encoding,
+            PublicFormat,
+            load_pem_public_key,
+        )
+
+        pub = load_pem_public_key(raw)
+        raw_bytes = pub.public_bytes(encoding=Encoding.Raw, format=PublicFormat.Raw)
+        return base64.b64encode(raw_bytes).decode()
+    # Plain base64 text
+    return raw.decode().strip()
+
+
+def _verify_signature(data: dict[str, Any], public_key_b64: str | None) -> dict[str, Any]:
+    """If *data* is a signed envelope, verify and unwrap. Else pass through."""
+    if "sig" in data and "result" in data:
+        if public_key_b64 is None:
+            raise PublishError("result is signed but no public key provided for verification")
+        try:
+            return verify_result(data, public_key_b64)
+        except SigningError as e:
+            raise PublishError(f"signature verification failed: {e}") from e
+    return data
 
 
 def _sanitize_id(raw: str) -> str:
@@ -208,10 +246,14 @@ def validate_bundle(bundle_dir: Path) -> list[str]:
     return errors
 
 
-def validate_path(path: Path) -> list[str]:
+def validate_path(path: Path, public_key_b64: str | None = None) -> list[str]:
     if path.is_dir():
         return validate_bundle(path)
-    return validate_result_payload(_load_json(path))
+    try:
+        payload = _verify_signature(_load_json(path), public_key_b64)
+    except PublishError as e:
+        return [str(e)]
+    return validate_result_payload(payload)
 
 
 def _emit_reports(payload: dict[str, Any], bundle_dir: Path) -> None:
@@ -265,8 +307,9 @@ def package_result(
     force: bool = False,
     sign: bool = False,
     cosign: str = "cosign",
+    public_key_b64: str | None = None,
 ) -> Path:
-    payload = _load_json(result_path)
+    payload = _verify_signature(_load_json(result_path), public_key_b64)
     errors = validate_result_payload(payload)
     if errors:
         raise PublishError("invalid result:\n- " + "\n- ".join(errors))
@@ -382,6 +425,13 @@ def main(argv: list[str] | None = None) -> int:
 
     v = sub.add_parser("validate", help="Validate a result JSON file or packaged bundle directory")
     v.add_argument("path", type=Path)
+    v.add_argument(
+        "--public-key",
+        type=Path,
+        default=None,
+        metavar="KEY_FILE",
+        help="Path to Ed25519 public key (PEM or base64 text) for verifying signed envelopes",
+    )
 
     p = sub.add_parser("package", help="Create a publication bundle from a result JSON file")
     p.add_argument("result", type=Path)
@@ -389,6 +439,13 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--force", action="store_true")
     p.add_argument("--sign", action="store_true", help="Sign result.json with cosign sign-blob")
     p.add_argument("--cosign", default="cosign")
+    p.add_argument(
+        "--public-key",
+        type=Path,
+        default=None,
+        metavar="KEY_FILE",
+        help="Path to Ed25519 public key (PEM or base64 text) for verifying signed envelopes",
+    )
 
     s = sub.add_parser("submit", help="Submit a packaged bundle to the results repository")
     s.add_argument("bundle", type=Path)
@@ -400,18 +457,21 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     try:
         if args.cmd == "validate":
-            errors = validate_path(args.path)
+            pub_key_b64 = _load_public_key_b64(args.public_key) if args.public_key else None
+            errors = validate_path(args.path, pub_key_b64)
             if errors:
                 return _print_errors(errors)
             print(f"[publish] valid: {args.path}")
             return 0
         if args.cmd == "package":
+            pub_key_b64 = _load_public_key_b64(args.public_key) if args.public_key else None
             out = package_result(
                 args.result,
                 args.output_dir,
                 force=args.force,
                 sign=args.sign,
                 cosign=args.cosign,
+                public_key_b64=pub_key_b64,
             )
             print(f"[publish] bundle: {out}")
             return 0

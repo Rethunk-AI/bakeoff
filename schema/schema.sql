@@ -215,3 +215,17 @@ CREATE TABLE system_software (
     driver_version     TEXT,     -- GPU driver (CUDA, ROCm, Vulkan)
     runtime_version    TEXT      -- llama.cpp build or container tag
 );
+
+-- ---------------------------------------------------------------------------
+-- gpu_hardware
+-- One row per physical GPU slot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE gpu_hardware (
+    gpu_hardware_id    SERIAL PRIMARY KEY,
+    gpu_model          TEXT NOT NULL,
+    vram_mb            INT,
+    interface_type_id  INT REFERENCES interface_type,
+    tflops_fp16        FLOAT,
+    tflops_fp32        FLOAT,
+    tflops_bf16        FLOAT
+);

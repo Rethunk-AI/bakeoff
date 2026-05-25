@@ -48,6 +48,7 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
+from bench.hardware import collect_hardware_context
 from bench.config import (
     DEFAULT_CONFIG,
     ConfigError,
@@ -757,6 +758,12 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # Collect hardware context once before proxy startup so it doesn't
+    # interfere with GPU power/VRAM sampling during the benchmark.
+    hardware_context = collect_hardware_context()
+    if any(v is not None for v in hardware_context.values()):
+        print(f"[hardware-ctx] {hardware_context}", file=sys.stderr)
+
     _write_proxy_config(cfg, models_dir, LLAMA_SWAP_CONFIG)
     proxy = _proxy_start(listen, LLAMA_SWAP_CONFIG, boot_timeout)
 
@@ -812,6 +819,7 @@ def main() -> int:
         "records": all_records,
         "judgements": judgements,
         "resumed_from": prior_run_id,
+        "hardware": hardware_context,
     }
 
     # Config-gated Ed25519 signing.

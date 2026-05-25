@@ -190,3 +190,28 @@ INSERT INTO interface_type (name) VALUES
     ('USB4'),
     ('eGPU'),
     ('integrated');
+
+-- ---------------------------------------------------------------------------
+-- system_hardware
+-- Host machine hardware snapshot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE system_hardware (
+    system_hardware_id SERIAL PRIMARY KEY,
+    cpu_model          TEXT,
+    cpu_cores          INT,
+    cpu_threads        INT,
+    ram_gb             FLOAT,
+    motherboard        TEXT
+);
+
+-- ---------------------------------------------------------------------------
+-- system_software
+-- Host OS / driver snapshot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE system_software (
+    system_software_id SERIAL PRIMARY KEY,
+    os_name            TEXT,
+    os_version         TEXT,
+    driver_version     TEXT,     -- GPU driver (CUDA, ROCm, Vulkan)
+    runtime_version    TEXT      -- llama.cpp build or container tag
+);

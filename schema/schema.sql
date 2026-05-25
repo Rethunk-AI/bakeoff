@@ -168,3 +168,25 @@ CREATE TABLE runners (
     registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     description   TEXT
 );
+
+-- ---------------------------------------------------------------------------
+-- interface_type
+-- GPU interface / interconnect bus types.
+-- ---------------------------------------------------------------------------
+CREATE TABLE interface_type (
+    interface_type_id SERIAL PRIMARY KEY,
+    name              TEXT NOT NULL UNIQUE   -- 'PCIe 4.0 x16', 'PCIe 5.0 x16', 'NVLink 4', 'Thunderbolt 4', etc.
+);
+
+-- Seed canonical values
+INSERT INTO interface_type (name) VALUES
+    ('PCIe 3.0 x16'),
+    ('PCIe 4.0 x16'),
+    ('PCIe 5.0 x16'),
+    ('NVLink 3'),
+    ('NVLink 4'),
+    ('Thunderbolt 3'),
+    ('Thunderbolt 4'),
+    ('USB4'),
+    ('eGPU'),
+    ('integrated');

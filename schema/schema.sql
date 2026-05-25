@@ -229,3 +229,14 @@ CREATE TABLE gpu_hardware (
     tflops_fp32        FLOAT,
     tflops_bf16        FLOAT
 );
+
+-- ---------------------------------------------------------------------------
+-- system_gpu_link
+-- Many-to-many: which GPUs are in which system snapshot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE system_gpu_link (
+    system_hardware_id INT NOT NULL REFERENCES system_hardware,
+    gpu_hardware_id    INT NOT NULL REFERENCES gpu_hardware,
+    slot_index         INT NOT NULL DEFAULT 0,
+    PRIMARY KEY (system_hardware_id, gpu_hardware_id, slot_index)
+);

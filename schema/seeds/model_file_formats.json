@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "table": "model_file_formats",
+  "description": "Model weight file formats. New values require admin review before insertion (#13).",
+  "rows": [
+    {"name": "GGUF",        "description": "GGUF format — llama.cpp native, self-contained"},
+    {"name": "SafeTensors", "description": "HuggingFace SafeTensors format"},
+    {"name": "PyTorch",     "description": "PyTorch .pt / .pth checkpoint"},
+    {"name": "ONNX",        "description": "Open Neural Network Exchange format"},
+    {"name": "ExLlamaV2",   "description": "ExLlamaV2 quantized format"},
+    {"name": "MLX",         "description": "Apple MLX framework format"}
+  ]
+}

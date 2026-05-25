@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "table": "model_architectures",
+  "description": "Model architecture types. New values require admin review before insertion (#13).",
+  "rows": [
+    {"name": "Dense",  "description": "Standard transformer with all parameters active per token"},
+    {"name": "MoE",    "description": "Mixture of Experts — subset of parameters active per token"},
+    {"name": "SSM",    "description": "State Space Model (e.g. Mamba)"},
+    {"name": "Hybrid", "description": "Mixed architecture combining MoE and Dense layers"}
+  ]
+}

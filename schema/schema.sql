@@ -240,3 +240,17 @@ CREATE TABLE system_gpu_link (
     slot_index         INT NOT NULL DEFAULT 0,
     PRIMARY KEY (system_hardware_id, gpu_hardware_id, slot_index)
 );
+
+-- ---------------------------------------------------------------------------
+-- run_hardware_metrics
+-- Hardware context for a run (one row per run).
+-- ---------------------------------------------------------------------------
+CREATE TABLE run_hardware_metrics (
+    run_id             UUID PRIMARY KEY REFERENCES runs,
+    system_hardware_id INT REFERENCES system_hardware,
+    system_software_id INT REFERENCES system_software,
+    gpu_hardware_id    INT REFERENCES gpu_hardware,   -- primary GPU
+    peak_vram_mb       INT,
+    power_limit_w      FLOAT,
+    measured_tflops    FLOAT
+);

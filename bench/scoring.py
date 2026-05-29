@@ -22,7 +22,7 @@ try:
 except ImportError:  # pragma: no cover — real import used in production
     from collections import Counter
 
-    def _dominant_failure_code(codes: list[str]) -> str | None:  # type: ignore[misc]
+    def _dominant_failure_code(codes: list[str]) -> str | None:
         """Minimal fallback: most-common code; None for empty input."""
         if not codes:
             return None
@@ -132,7 +132,7 @@ def model_rollup(
         status = "incomplete"
 
     # --- dominant_failure_code
-    failure_codes = [_failure_code(r) for r in failed if _failure_code(r) is not None]
+    failure_codes = [c for c in (_failure_code(r) for r in failed) if c is not None]
     dominant = _dominant_failure_code(failure_codes) if failure_codes else None
 
     # --- floor score

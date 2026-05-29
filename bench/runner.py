@@ -340,8 +340,8 @@ def run_model_phase(
                     # wall_clock_seconds x mean(gpu_sm_utilization_pct / 100).
                     # None when SM utilization is unavailable (non-NVML hosts).
                     "gpu_weighted_seconds": gpu_weighted_seconds(res.latency_s, mean_sm),
-                    "cpu_seconds_user": cpu_user_ms / 1000.0,
-                    "cpu_seconds_sys": cpu_sys_ms / 1000.0,
+                    "cpu_seconds_user": (cpu_user_ms / 1000.0) if cpu_user_ms is not None else None,
+                    "cpu_seconds_sys": (cpu_sys_ms / 1000.0) if cpu_sys_ms is not None else None,
                     "flops_per_token_theoretical": fpt,
                     "tflops_utilization_pct": None,  # filled below when possible
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),

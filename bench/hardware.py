@@ -129,7 +129,7 @@ def _cpu_info() -> dict[str, Any]:
 def _ram_gb() -> float | None:
     """Return total RAM in GB via psutil; None if psutil is unavailable."""
     try:
-        import psutil  # type: ignore[import]
+        import psutil
 
         return round(psutil.virtual_memory().total / (1024**3), 2)
     except Exception:

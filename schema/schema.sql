@@ -178,6 +178,11 @@ CREATE TABLE task_categories (
     description TEXT
 );
 
+-- Seed: dumb_model floor tier (Rethunk-AI/bakeoff#23)
+INSERT INTO task_categories (name, description)
+    VALUES ('dumb_model', 'Minimal-capability floor suite: deterministic scorers only.')
+    ON CONFLICT (name) DO NOTHING;
+
 -- ---------------------------------------------------------------------------
 -- tasks
 -- Tiered: parent_id IS NULL = top-level suite; non-null = sub-task.
@@ -250,6 +255,11 @@ CREATE TABLE runs (
     runner_id       TEXT REFERENCES runners   -- null = standalone run, no queue registration (#13)
 );
 
+-- Extend runs: run-level completeness status (Rethunk-AI/bakeoff#23)
+ALTER TABLE runs
+    ADD COLUMN IF NOT EXISTS run_status TEXT
+        CHECK (run_status IN ('complete', 'incomplete', 'failed'));
+
 -- ---------------------------------------------------------------------------
 -- run_queue (#13)
 -- Operational queue for model test jobs. DB-authoritative; files in queue/
@@ -297,6 +307,11 @@ CREATE TABLE run_model_metrics (
     gflops_per_token FLOAT,
     PRIMARY KEY (run_id, prompt_id, model_id)
 );
+
+-- Extend run_model_metrics: structured failure detail (Rethunk-AI/bakeoff#23)
+ALTER TABLE run_model_metrics
+    ADD COLUMN IF NOT EXISTS failure_detail TEXT;
+-- (failure_reason already exists; its values now conform to the failure_code taxonomy)
 
 -- ---------------------------------------------------------------------------
 -- interface_type (#17)

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "table": "interface_type",
+  "description": "GPU host-interface bus types. Admin-controlled enum; new values require admin review before insertion (#17, #22). Rows carry only `name` — the interface_type table has no description column.",
+  "rows": [
+    {"name": "PCIe 3.0 x16"},
+    {"name": "PCIe 4.0 x16"},
+    {"name": "PCIe 5.0 x16"},
+    {"name": "NVLink 3"},
+    {"name": "NVLink 4"},
+    {"name": "Thunderbolt 3"},
+    {"name": "Thunderbolt 4"},
+    {"name": "USB4"},
+    {"name": "eGPU"},
+    {"name": "integrated"}
+  ]
+}

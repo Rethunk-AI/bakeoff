@@ -10,7 +10,6 @@ import unittest
 
 from bench.scoring import cell_score, model_rollup, run_status_from_scores
 
-
 # ---------------------------------------------------------------------------
 # Helpers to build synthetic records
 # ---------------------------------------------------------------------------
@@ -106,7 +105,7 @@ class TestWorkedExample(unittest.TestCase):
 
     # middling-model: C=10, A=10, S=5.5, partial_score=0.55, completeness=1.00
     def test_middling_model_partial_score(self):
-        # 10 cells; 5×1.0 + 5×0.1 = 5.5
+        # 10 cells; 5x1.0 + 5x0.1 = 5.5
         records = [_ok(1.0)] * 5 + [_ok(0.1)] * 5
         r = self._rollup(records)
         self.assertEqual(r["cells_attempted"], 10)
@@ -117,7 +116,7 @@ class TestWorkedExample(unittest.TestCase):
     # partial-model: C=10, A=6, S=5.4, partial_score=0.54, completeness=0.60
     def test_partial_model_partial_score(self):
         # 6 attempted (scores sum 5.4) + 4 not in main_records (just absent)
-        # Use: 5×1.0 + 1×0.4 = 5.4, but only 6 records supplied; C=10
+        # Use: 5x1.0 + 1x0.4 = 5.4, but only 6 records supplied; C=10
         records = [_ok(1.0)] * 5 + [_ok(0.4)]
         r = self._rollup(records)
         self.assertEqual(r["cells_attempted"], 6)

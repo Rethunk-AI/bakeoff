@@ -189,7 +189,10 @@ def validate_result_payload(payload: dict[str, Any]) -> list[str]:
     # Optional new fields — validate type when present but never require them.
     run_status = payload.get("run_status")
     if run_status is not None and run_status not in ("complete", "incomplete", "failed"):
-        errors.append(f"run_status: must be 'complete', 'incomplete', or 'failed' when present (got {run_status!r})")
+        errors.append(
+            "run_status: must be 'complete', 'incomplete', or 'failed' when present"
+            f" (got {run_status!r})"
+        )
     model_scores = payload.get("model_scores")
     if model_scores is not None and not isinstance(model_scores, list):
         errors.append("model_scores: must be a list when present")
@@ -271,7 +274,9 @@ def _emit_reports(payload: dict[str, Any], bundle_dir: Path) -> None:
     emit_html(payload, bundle_dir / DASHBOARD_HTML)
 
 
-_SCORE_SUMMARY_KEYS = ("model_id", "status", "partial_score", "floor_score", "dominant_failure_code")
+_SCORE_SUMMARY_KEYS = (
+    "model_id", "status", "partial_score", "floor_score", "dominant_failure_code"
+)
 
 
 def _build_model_scores_summary(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
@@ -279,7 +284,9 @@ def _build_model_scores_summary(payload: dict[str, Any]) -> list[dict[str, Any]]
     raw = payload.get("model_scores")
     if not isinstance(raw, list):
         return None
-    return [{k: entry.get(k) for k in _SCORE_SUMMARY_KEYS} for entry in raw if isinstance(entry, dict)]
+    return [
+        {k: entry.get(k) for k in _SCORE_SUMMARY_KEYS} for entry in raw if isinstance(entry, dict)
+    ]
 
 
 def _build_manifest(bundle_dir: Path, payload: dict[str, Any], signed: bool) -> dict[str, Any]:
@@ -489,10 +496,7 @@ def main(argv: list[str] | None = None) -> int:
                 return _print_errors(errors)
             if getattr(args, "strict", False):
                 # Load the payload (or manifest for bundles) to check optional fields.
-                if args.path.is_dir():
-                    result_path = args.path / RESULT_JSON
-                else:
-                    result_path = args.path
+                result_path = args.path / RESULT_JSON if args.path.is_dir() else args.path
                 try:
                     payload = _load_json(result_path)
                     if "sig" in payload and "result" in payload:
@@ -501,7 +505,9 @@ def main(argv: list[str] | None = None) -> int:
                     payload = {}
                 missing = [f for f in ("run_status", "model_scores") if payload.get(f) is None]
                 for field in missing:
-                    print(f"[publish] warning: {field} absent in payload (--strict)", file=sys.stderr)
+                    print(
+                        f"[publish] warning: {field} absent in payload (--strict)", file=sys.stderr
+                    )
             print(f"[publish] valid: {args.path}")
             return 0
         if args.cmd == "package":

@@ -141,8 +141,12 @@ class TestScoreAssembly:
         for i in range(4):
             records.append(self._main_ok("good", f"t{i}", 1.0))
         # partial: 2 ok (1.0 each) + 2 timeouts -> attempted 2, S=2, partial 0.5
-        records += [self._main_ok("partial", "t0", 1.0), self._main_ok("partial", "t1", 1.0),
-                    self._main_fail("partial", "t2", "timeout"), self._main_fail("partial", "t3", "timeout")]
+        records += [
+            self._main_ok("partial", "t0", 1.0),
+            self._main_ok("partial", "t1", 1.0),
+            self._main_fail("partial", "t2", "timeout"),
+            self._main_fail("partial", "t3", "timeout"),
+        ]
         # dead: 4 load_failure -> attempted 0, partial 0, failed
         for i in range(4):
             records.append(self._main_fail("dead", f"t{i}", "load_failure"))
@@ -169,8 +173,10 @@ class TestScoreAssembly:
         from bench.dataset import load_floor_tasks
         p = tmp_path / "floor.jsonl"
         p.write_text(
-            '{"id": "d0", "domain": "arithmetic", "user_prompt": "2+2?", "expected": "4", "scorer": "exact"}\n'
-            '{"id": "d1", "domain": "qa", "user_prompt": "capital of France?", "expected": "Paris", "scorer": "exact", "tier": "dumb_model"}\n',
+            '{"id": "d0", "domain": "arithmetic", "user_prompt": "2+2?",'
+            ' "expected": "4", "scorer": "exact"}\n'
+            '{"id": "d1", "domain": "qa", "user_prompt": "capital of France?",'
+            ' "expected": "Paris", "scorer": "exact", "tier": "dumb_model"}\n',
             encoding="utf-8",
         )
         tasks = load_floor_tasks(p)

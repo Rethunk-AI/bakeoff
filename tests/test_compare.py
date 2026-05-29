@@ -147,13 +147,19 @@ class TestDelta:
 class TestCompareMarkdown:
     def _base(self):
         return _payload(
-            records=[_record("m_a", wall_clock_seconds=1.0), _record("m_b", wall_clock_seconds=2.0)],
+            records=[
+                _record("m_a", wall_clock_seconds=1.0),
+                _record("m_b", wall_clock_seconds=2.0),
+            ],
         )
 
     def _cand(self):
         return _payload(
             run_id="run-2",
-            records=[_record("m_a", wall_clock_seconds=0.8), _record("m_b", wall_clock_seconds=2.2)],
+            records=[
+                _record("m_a", wall_clock_seconds=0.8),
+                _record("m_b", wall_clock_seconds=2.2),
+            ],
         )
 
     def test_header_present(self):

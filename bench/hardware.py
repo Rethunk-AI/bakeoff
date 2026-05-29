@@ -7,6 +7,7 @@ None; collect_hardware_context() never raises.
 
 from __future__ import annotations
 
+import contextlib
 import platform
 import re
 import subprocess
@@ -45,15 +46,11 @@ def _nvidia_info() -> dict[str, Any]:
     if len(parts) >= 1 and parts[0]:
         result["gpu_model"] = parts[0]
     if len(parts) >= 2:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             result["vram_mb"] = int(float(parts[1]))
-        except (ValueError, TypeError):
-            pass
     if len(parts) >= 3:
-        try:
+        with contextlib.suppress(ValueError, TypeError):
             result["power_limit_w"] = float(parts[2])
-        except (ValueError, TypeError):
-            pass
     if len(parts) >= 4 and parts[3]:
         result["driver_version"] = parts[3]
     return result
@@ -78,11 +75,9 @@ def _rocm_info() -> dict[str, Any]:
             if "Total Memory" in line or "vram" in line.lower():
                 m = re.search(r"(\d+)", line)
                 if m:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         # rocm-smi reports in bytes; convert to MB
                         result["vram_mb"] = int(m.group(1)) // (1024 * 1024)
-                    except (ValueError, TypeError):
-                        pass
                     break
 
     power_out = _run("rocm-smi", "--showpower")
@@ -91,10 +86,8 @@ def _rocm_info() -> dict[str, Any]:
             if "Power Cap" in line or "power" in line.lower():
                 m = re.search(r"([\d.]+)", line)
                 if m:
-                    try:
+                    with contextlib.suppress(ValueError, TypeError):
                         result["power_limit_w"] = float(m.group(1))
-                    except (ValueError, TypeError):
-                        pass
                     break
 
     return result

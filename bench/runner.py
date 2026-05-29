@@ -48,7 +48,6 @@ import yaml
 
 from bench import llama_swap
 from bench.clients import ChatClient, ChatResult
-from bench.hardware import collect_hardware_context
 from bench.config import (
     DEFAULT_CONFIG,
     ConfigError,
@@ -59,7 +58,7 @@ from bench.config import (
 )
 from bench.dataset import Task, generate, load_floor_tasks, write_jsonl
 from bench.failure import classify as classify_failure
-from bench.scoring import model_rollup, run_status_from_scores
+from bench.hardware import collect_hardware_context
 from bench.metrics import (
     PowerSampler,
     detect_hardware_id,
@@ -86,6 +85,7 @@ from bench.resume import (
     tag_fresh,
     tag_reused,
 )
+from bench.scoring import model_rollup, run_status_from_scores
 
 HERE = Path(__file__).resolve().parent.parent
 LAUNCHER = HERE / "bin" / "llama-swap.sh"
@@ -337,7 +337,7 @@ def run_model_phase(
                     # path is wired; the field exists now so the schema is stable.
                     "gpu_event_seconds": None,
                     # Path 2: utilization-weighted GPU time.
-                    # wall_clock_seconds × mean(gpu_sm_utilization_pct / 100).
+                    # wall_clock_seconds x mean(gpu_sm_utilization_pct / 100).
                     # None when SM utilization is unavailable (non-NVML hosts).
                     "gpu_weighted_seconds": gpu_weighted_seconds(res.latency_s, mean_sm),
                     "cpu_seconds_user": cpu_user_ms / 1000.0,

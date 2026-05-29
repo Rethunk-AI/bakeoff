@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 
 from bench.publish import (
-    SCHEMA_VERSION,
     _SCORE_SUMMARY_KEYS,
+    SCHEMA_VERSION,
     main,
     package_result,
     submit_bundle,

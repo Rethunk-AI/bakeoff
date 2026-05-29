@@ -40,7 +40,7 @@ def cell_score(record: dict) -> float:
     Priority order (spec §2):
     1. Non-null ``error`` or ``failure_code`` → 0.0 (hard failure).
     2. ``quality_heuristic`` is a float in [0, 1] → that value.
-    3. ``judge_score`` (1–5 int/float) present → ``(judge_score - 1) / 4.0``
+    3. ``judge_score`` (1-5 int/float) present → ``(judge_score - 1) / 4.0``
        clamped to [0, 1].
     4. Fallthrough → 0.0.
     """
@@ -53,7 +53,7 @@ def cell_score(record: dict) -> float:
     if isinstance(qh, (int, float)) and 0.0 <= float(qh) <= 1.0:
         return float(qh)
 
-    # Rule 3: judge score (1–5 rubric)
+    # Rule 3: judge score (1-5 rubric)
     js = record.get("judge_score")
     if js is not None:
         normalised = (float(js) - 1.0) / 4.0
@@ -114,17 +114,11 @@ def model_rollup(
     cells_failed = len(failed)
 
     # --- completeness
-    if cells_total == 0:
-        completeness = 0.0
-    else:
-        completeness = cells_attempted / cells_total
+    completeness = 0.0 if cells_total == 0 else cells_attempted / cells_total
 
     # --- partial_score: S(m) / C  (divide by C, not by attempted)
     score_sum = sum(cell_score(r) for r in attempted)
-    if cells_total == 0:
-        partial_score = 0.0
-    else:
-        partial_score = max(0.0, min(1.0, score_sum / cells_total))
+    partial_score = 0.0 if cells_total == 0 else max(0.0, min(1.0, score_sum / cells_total))
 
     # --- status
     has_load_failure = any(

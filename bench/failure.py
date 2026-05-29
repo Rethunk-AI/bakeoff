@@ -38,7 +38,8 @@ infra_error:
     also: httpx.ConnectError type
 
 refusal (checked via is_refusal()):
-    /\\b(I (cannot|can't|won't|am unable|am not able)|I'm sorry|as an AI|I do not feel comfortable)\\b/
+    /\\b(I (cannot|can't|won't|am unable|am not able)|I'm sorry|as an AI
+    |I do not feel comfortable)\\b/
 
 malformed_output:
     /malformed|could not parse|unparseable|invalid json/
@@ -229,7 +230,7 @@ def dominant_failure_code(codes: list[str]) -> str | None:
 def _get_httpx_timeout_types() -> tuple[type, ...]:
     """Return httpx timeout exception types, or empty tuple if httpx unavailable."""
     try:
-        import httpx  # noqa: PLC0415
+        import httpx
 
         return (httpx.ReadTimeout, httpx.TimeoutException)
     except ImportError:
@@ -239,7 +240,7 @@ def _get_httpx_timeout_types() -> tuple[type, ...]:
 def _get_httpx_connect_types() -> tuple[type, ...]:
     """Return httpx connect exception types, or empty tuple if httpx unavailable."""
     try:
-        import httpx  # noqa: PLC0415
+        import httpx
 
         return (httpx.ConnectError,)
     except ImportError:

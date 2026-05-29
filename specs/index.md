@@ -6,6 +6,7 @@ Implementation specs for the bakeoff benchmark.
 
 | Spec | Status | Summary |
 |------|--------|---------|
+| [disk-persistence-layer](active/disk-persistence-layer/spec.md) | In Progress | Directory-per-table JSON store, model descriptor reader/validator, and opt-in disk-backed run queue. |
 
 ## Done
 

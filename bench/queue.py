@@ -225,9 +225,19 @@ def claim(runner_id: str) -> dict[str, Any] | None:
         except OSError:
             continue
 
-        # Step 2: mutate the record in place on the lock path.
+        # Step 2: re-verify precondition, mutate, write back to lock path.
+        # Guard: a late-scheduled thread may win os.rename(src, its_lock) AFTER
+        # a previous winner has already restored src with status=CLAIMED. Reading
+        # status from the lock file and backing off if it is not PENDING makes
+        # the claim monotonic: once any thread sets CLAIMED, every straggler
+        # that grabs src sees non-PENDING, restores it, and returns None.
         try:
             data = _read_json(lock)
+            if data.get("status") != _STATUS_PENDING:
+                # Someone else already claimed and restored this item.
+                with contextlib.suppress(OSError):
+                    os.rename(lock, src)  # put it back for others
+                continue
             now_str = _utc_now()
             data["status"] = _STATUS_CLAIMED
             data["claimed_by"] = runner_id
@@ -251,8 +261,9 @@ def claim(runner_id: str) -> dict[str, Any] | None:
             raise
 
         # Step 3: atomic commit — rename lock back to src; src now has CLAIMED.
-        # Any concurrent thread that tries os.rename(src, its_lock) between
-        # step 1 and now gets FileNotFoundError because src doesn't exist.
+        # src is absent from step 1 through here, so concurrent renames fail
+        # with FileNotFoundError. The post-rename PENDING guard (step 2) catches
+        # the rare straggler that wins a rename of an already-CLAIMED src.
         os.rename(lock, src)
 
         return data

@@ -8,6 +8,7 @@ complete), then critical edges: fail retry with backoff, retry exhaustion
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -253,17 +254,30 @@ def test_reap_does_not_affect_fresh_claims():
 
 
 def test_concurrent_claim_exactly_one_winner():
-    """Two threads claiming the same single item must produce exactly one winner."""
-    queue.enqueue(_item())
+    """16 threads racing to claim a single item — exactly one must win.
 
-    winners: list[dict] = []
+    This tests the rename-as-mutex + post-rename PENDING guard that prevents
+    late-scheduled threads from re-claiming an already-CLAIMED record.
+    Run this assertion many times within the test to surface intermittent races.
+    """
+    workers = 16
+    rounds = 20
 
-    def try_claim(runner_id: str) -> dict | None:
-        return queue.claim(runner_id)
+    for round_num in range(rounds):
+        queue.enqueue(_item())
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as ex:
-        futs = [ex.submit(try_claim, f"runner-{i}") for i in range(8)]
-        results = [f.result() for f in concurrent.futures.as_completed(futs)]
+        def try_claim(runner_id: str) -> dict | None:
+            return queue.claim(runner_id)
 
-    winners = [r for r in results if r is not None]
-    assert len(winners) == 1, f"Expected exactly 1 winner, got {len(winners)}"
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = [ex.submit(try_claim, f"runner-{i}") for i in range(workers)]
+            results = [f.result() for f in concurrent.futures.as_completed(futs)]
+
+        winners = [r for r in results if r is not None]
+        assert len(winners) == 1, (
+            f"Round {round_num}: expected exactly 1 winner, got {len(winners)}"
+        )
+        # Clean up the claimed item so it doesn't pollute the next round.
+        if winners:
+            with contextlib.suppress(Exception):
+                queue.complete(winners[0]["queue_id"])

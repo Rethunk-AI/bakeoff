@@ -186,6 +186,14 @@ def validate_result_payload(payload: dict[str, Any]) -> list[str]:
         if not item.get("gguf"):
             errors.append(f"model_metadata[{i}].gguf: required")
 
+    # Optional new fields — validate type when present but never require them.
+    run_status = payload.get("run_status")
+    if run_status is not None and run_status not in ("complete", "incomplete", "failed"):
+        errors.append(f"run_status: must be 'complete', 'incomplete', or 'failed' when present (got {run_status!r})")
+    model_scores = payload.get("model_scores")
+    if model_scores is not None and not isinstance(model_scores, list):
+        errors.append("model_scores: must be a list when present")
+
     return errors
 
 
@@ -263,6 +271,17 @@ def _emit_reports(payload: dict[str, Any], bundle_dir: Path) -> None:
     emit_html(payload, bundle_dir / DASHBOARD_HTML)
 
 
+_SCORE_SUMMARY_KEYS = ("model_id", "status", "partial_score", "floor_score", "dominant_failure_code")
+
+
+def _build_model_scores_summary(payload: dict[str, Any]) -> list[dict[str, Any]] | None:
+    """Project model_scores to the 5-key manifest summary shape, or None if absent."""
+    raw = payload.get("model_scores")
+    if not isinstance(raw, list):
+        return None
+    return [{k: entry.get(k) for k in _SCORE_SUMMARY_KEYS} for entry in raw if isinstance(entry, dict)]
+
+
 def _build_manifest(bundle_dir: Path, payload: dict[str, Any], signed: bool) -> dict[str, Any]:
     files = {}
     for rel in (RESULT_JSON, SUMMARY_MD, DASHBOARD_HTML):
@@ -283,6 +302,8 @@ def _build_manifest(bundle_dir: Path, payload: dict[str, Any], signed: bool) -> 
         "config_hash": prov.get("config_hash"),
         "judge_mode": (cfg.get("judge") or {}).get("mode"),
         "model_ids": [m.get("id") for m in (cfg.get("models") or []) if isinstance(m, dict)],
+        "run_status": payload.get("run_status"),
+        "model_scores_summary": _build_model_scores_summary(payload),
         "files": files,
         "signature": {
             "kind": "sigstore-bundle",
@@ -432,6 +453,11 @@ def main(argv: list[str] | None = None) -> int:
         metavar="KEY_FILE",
         help="Path to Ed25519 public key (PEM or base64 text) for verifying signed envelopes",
     )
+    v.add_argument(
+        "--strict",
+        action="store_true",
+        help="Warn (not error) when optional new fields run_status / model_scores are absent",
+    )
 
     p = sub.add_parser("package", help="Create a publication bundle from a result JSON file")
     p.add_argument("result", type=Path)
@@ -461,6 +487,21 @@ def main(argv: list[str] | None = None) -> int:
             errors = validate_path(args.path, pub_key_b64)
             if errors:
                 return _print_errors(errors)
+            if getattr(args, "strict", False):
+                # Load the payload (or manifest for bundles) to check optional fields.
+                if args.path.is_dir():
+                    result_path = args.path / RESULT_JSON
+                else:
+                    result_path = args.path
+                try:
+                    payload = _load_json(result_path)
+                    if "sig" in payload and "result" in payload:
+                        payload = payload["result"]
+                except PublishError:
+                    payload = {}
+                missing = [f for f in ("run_status", "model_scores") if payload.get(f) is None]
+                for field in missing:
+                    print(f"[publish] warning: {field} absent in payload (--strict)", file=sys.stderr)
             print(f"[publish] valid: {args.path}")
             return 0
         if args.cmd == "package":

@@ -325,6 +325,24 @@ Resume behaviour:
 
 Compatibility warnings are printed to stderr when the prior and current configs differ (seed, task set, prompt IDs, model IDs). Warnings do not abort the run.
 
+## Disk persistence (`BAKEOFF_DATA_DIR`)
+
+The store, descriptor, and queue modules write structured JSON records to a local data directory. The location is controlled by the `BAKEOFF_DATA_DIR` environment variable:
+
+```sh
+export BAKEOFF_DATA_DIR=/data/bakeoff   # override; default is ~/.local/share/bakeoff
+```
+
+Layout under that directory:
+
+```
+models/<uuid>.json          model descriptors (seeded manually or via bench.descriptor)
+run_queue/pending/          queue items awaiting a runner (ephemeral)
+run_queue/completed/        finished/failed queue items
+```
+
+The standalone benchmark runner (`./run.sh` / `bench.runner`) does **not** read from or write to this directory by default. The store and queue are opt-in overlays for multi-runner scenarios.
+
 ## More detail
 
 - **Design choices & invariants:** [`AGENTS.md`](AGENTS.md)

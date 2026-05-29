@@ -15,14 +15,18 @@ config.yaml          single source of truth (server, models, prompts, dataset, j
 bin/llama-swap.sh    llama-swap launcher: up (sweep stragglers + exec binary) / down / sweep / wait
 bench/
   clients.py         httpx OpenAI-compat client; prefers `content`, falls back to `reasoning_content`
+  constants.py       project-wide UUID5 namespace constants (BAKEOFF_MODEL_NAMESPACE, BAKEOFF_CREATOR_NAMESPACE)
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
+  descriptor.py      model descriptor reader/validator/persister (seed JSON → models/ store); schema_version gate
   download.py        huggingface_hub fetcher; writes `<models_dir>/<repo_id>/<filename>`
   hardware.py        best-effort hardware context collector (GPU/CPU/RAM/OS); feeds run_hardware_metrics
   llama_swap.py      pure config generator: bakeoff config.yaml → llama-swap proxy config
   metrics.py         heuristic scorers + judge prompts + nvidia-smi / rocm-smi power sampling
   publish.py         validate/package/sign/submit result bundles for bakeoff-results
+  queue.py           opt-in disk-backed run queue (pending/ + completed/); claim is rename-as-mutex
   runner.py          start proxy → warmup + matrix per model → judge → stop proxy
   report.py          JSON + Markdown + single-file HTML dashboard (Chart.js via CDN)
+  store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR; audit stamping; UUID5 helpers
 run.sh               uv venv + uv pip install + pinned llama-swap bootstrap + uv run;
                      `fetch` subcommand → bench.download
 .cache/              vendored llama-swap binary + generated proxy config (gitignored)
@@ -39,6 +43,8 @@ datasets/ results/   generated artifacts (gitignored)
 - **Pairwise order randomized per call** (seeded from `run.seed`); swapped verdicts inverted before counting. Every judgement records `order: "AB" | "BA"`. Mitigates 5-15% positional bias.
 - **Cost axis is energy, not tokens.** `nvidia-smi --query-gpu=power.draw` or `rocm-smi --showpower` sampled during the call. Neither available → `energy_wh` / `cost_usd` set to `null`. Do not substitute latency.
 - **`mmproj-*` files are vision projectors, not standalone models.** Never list under `models:`. The generator rejects them outright.
+- **Disk-persistence layer is directory-per-table, UUID-filename JSON.** `bench/store.py` owns all atomic I/O under `BAKEOFF_DATA_DIR` (env-configurable; default `~/.local/share/bakeoff`). `schema_version` is a plain integer (currently 1); missing or unexpected values are hard errors. `run_queue/` is the only ephemeral sub-tree. The standalone runner (`bench/runner.py`) does not interact with the store or queue by default — the queue is strictly opt-in.
+- **No database in `bench/`.** `schema/schema.sql` is forward-looking DDL with no runtime consumer yet. Never add psycopg/sqlite imports to any `bench/` module.
 
 ## Hardware caveats
 

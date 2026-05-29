@@ -113,3 +113,71 @@ class TestDryRunSmoke:
         p = _write_config(tmp_path, cfg)
         rc = _run_dry(p, capsys)
         assert rc == 0
+
+
+class TestScoreAssembly:
+    """Pure post-hoc rollup (no proxy/network) — Rethunk-AI/bakeoff#23."""
+
+    def _main_ok(self, mid, task_id, q):
+        return {"model_id": mid, "task_id": task_id, "prompt_id": "plain",
+                "tier": "main", "quality_heuristic": q, "failure_code": None,
+                "error": None}
+
+    def _main_fail(self, mid, task_id, code):
+        return {"model_id": mid, "task_id": task_id, "prompt_id": "plain",
+                "tier": "main", "failure_code": code, "error": code}
+
+    def _floor(self, mid, task_id, passed):
+        return {"model_id": mid, "task_id": task_id, "prompt_id": "floor",
+                "tier": "dumb_model", "quality_heuristic": 1.0 if passed else 0.0,
+                "failure_code": None, "error": None}
+
+    def test_assemble_partial_incomplete_and_failed(self):
+        from bench.runner import assemble_model_scores
+        models = [{"id": "good"}, {"id": "partial"}, {"id": "dead"}]
+        # cells_total = 4 main cells per model
+        records = []
+        # good: 4/4 attempted, all 1.0 -> partial 1.0, complete
+        for i in range(4):
+            records.append(self._main_ok("good", f"t{i}", 1.0))
+        # partial: 2 ok (1.0 each) + 2 timeouts -> attempted 2, S=2, partial 0.5
+        records += [self._main_ok("partial", "t0", 1.0), self._main_ok("partial", "t1", 1.0),
+                    self._main_fail("partial", "t2", "timeout"), self._main_fail("partial", "t3", "timeout")]
+        # dead: 4 load_failure -> attempted 0, partial 0, failed
+        for i in range(4):
+            records.append(self._main_fail("dead", f"t{i}", "load_failure"))
+        # floor: dead passes 6/... give it 3 floor cells, 2 pass
+        records += [self._floor("dead", "f0", True), self._floor("dead", "f1", True),
+                    self._floor("dead", "f2", False)]
+
+        scores, run_status = assemble_model_scores(models, records, cells_total=4)
+        by = {s["model_id"]: s for s in scores}
+        assert by["good"]["status"] == "complete"
+        assert by["good"]["partial_score"] == 1.0
+        assert by["partial"]["status"] == "incomplete"
+        assert abs(by["partial"]["partial_score"] - 0.5) < 1e-9
+        assert by["partial"]["dominant_failure_code"] == "timeout"
+        assert by["dead"]["status"] == "failed"
+        assert by["dead"]["partial_score"] == 0.0
+        assert by["dead"]["dominant_failure_code"] == "load_failure"
+        # floor score for dead = 2/3
+        assert abs(by["dead"]["floor_score"] - (2 / 3)) < 1e-9
+        # run-level status = worst across models = failed
+        assert run_status == "failed"
+
+    def test_floor_loader_roundtrip(self, tmp_path):
+        from bench.dataset import load_floor_tasks
+        p = tmp_path / "floor.jsonl"
+        p.write_text(
+            '{"id": "d0", "domain": "arithmetic", "user_prompt": "2+2?", "expected": "4", "scorer": "exact"}\n'
+            '{"id": "d1", "domain": "qa", "user_prompt": "capital of France?", "expected": "Paris", "scorer": "exact", "tier": "dumb_model"}\n',
+            encoding="utf-8",
+        )
+        tasks = load_floor_tasks(p)
+        assert len(tasks) == 2
+        assert all(t.tier == "dumb_model" for t in tasks)
+        assert tasks[0].expected == "4"
+
+    def test_floor_loader_absent_file_returns_empty(self, tmp_path):
+        from bench.dataset import load_floor_tasks
+        assert load_floor_tasks(tmp_path / "nope.jsonl") == []

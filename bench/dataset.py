@@ -18,6 +18,7 @@ class Task:
     user_prompt: str
     expected: str | None = None
     scorer: str = "judge"  # "judge" | "exact" | "contains" | "regex"
+    tier: str = "main"  # "main" | "dumb_model" (minimal-capability floor suite)
 
 
 _QA = [
@@ -123,3 +124,31 @@ def write_jsonl(tasks: list[Task], path: Path) -> None:
     with path.open("w") as f:
         for t in tasks:
             f.write(json.dumps(asdict(t)) + "\n")
+
+
+# Fixed, version-pinned minimal-capability floor suite (Rethunk-AI/bakeoff#23).
+# Committed to the repo (datasets/dumb_model_tasks.jsonl) rather than generated,
+# so prompts never drift between runs. Loaded as Task objects with tier set.
+DUMB_MODEL_TASKS_PATH = Path(__file__).resolve().parents[1] / "datasets" / "dumb_model_tasks.jsonl"
+
+_FLOOR_TASK_FIELDS = {"id", "domain", "user_prompt", "expected", "scorer", "tier"}
+
+
+def load_floor_tasks(path: Path | None = None) -> list[Task]:
+    """Load the fixed dumb_model floor tasks. Returns [] if the file is absent.
+
+    Each line is a JSON object with the Task fields; `tier` defaults to
+    "dumb_model" for this suite regardless of whether the file sets it."""
+    src = path or DUMB_MODEL_TASKS_PATH
+    if not src.is_file():
+        return []
+    tasks: list[Task] = []
+    for line in src.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        raw = json.loads(line)
+        fields = {k: v for k, v in raw.items() if k in _FLOOR_TASK_FIELDS}
+        fields.setdefault("tier", "dumb_model")
+        tasks.append(Task(**fields))
+    return tasks

@@ -57,7 +57,9 @@ from bench.config import (
     resolve_models_dir,
     validate_config,
 )
-from bench.dataset import Task, generate, write_jsonl
+from bench.dataset import Task, generate, load_floor_tasks, write_jsonl
+from bench.failure import classify as classify_failure
+from bench.scoring import model_rollup, run_status_from_scores
 from bench.metrics import (
     PowerSampler,
     detect_hardware_id,
@@ -224,6 +226,7 @@ def run_model_phase(
     pending: set[tuple[str, str]] | None = None,
     hardware_id: str | None = None,
     peak_tflops: float | None = None,
+    floor_tasks: list[Task] | None = None,
 ) -> list[dict[str, Any]]:
     """Run every (task x prompt) cell for one model against the proxy.
 
@@ -232,6 +235,13 @@ def run_model_phase(
 
     When `pending` is provided, only (task_id, prompt_id) pairs in that
     set are executed; all others are silently skipped.
+
+    When `floor_tasks` is provided, the minimal-capability ("dumb_model")
+    floor suite runs FIRST, while this model is already loaded — so it adds
+    no extra swap (invariant: exactly N swaps per run) and a model that
+    later crashes the main matrix still has a floor score if it booted at
+    all (Rethunk-AI/bakeoff#23). Floor cells use a single fixed prompt
+    (prompt_id "floor", empty system) and deterministic scorers only.
     """
     mid = model_cfg["id"]
     print(f"[phase] {mid}", file=sys.stderr)
@@ -258,6 +268,47 @@ def run_model_phase(
     _peak_tflops = peak_tflops
 
     records: list[dict[str, Any]] = []
+
+    # Minimal-capability floor suite — runs first, within this single model
+    # load (no extra swap). Single fixed prompt, deterministic scorers, binary
+    # per-cell score. See run-level docstring + Rethunk-AI/bakeoff#23.
+    for ft in floor_tasks or []:
+        try:
+            res, _wh, _vram, _sm, _cu, _cs = call_one(
+                client, "", ft.user_prompt, gpu_i, False, kwh, sample_hz
+            )
+            records.append(
+                {
+                    "task_id": ft.id,
+                    "domain": ft.domain,
+                    "prompt_id": "floor",
+                    "model_id": mid,
+                    "hardware_id": hardware_id,
+                    "tier": "dumb_model",
+                    "text": res.text,
+                    "wall_clock_seconds": res.latency_s,
+                    "quality_heuristic": score_heuristic(ft.scorer, ft.expected, res.text),
+                    "failure_code": None,
+                    "failure_detail": None,
+                    "error": None,
+                }
+            )
+            print(f"[floor] {mid} {ft.id}", file=sys.stderr)
+        except Exception as e:
+            records.append(
+                {
+                    "task_id": ft.id,
+                    "domain": ft.domain,
+                    "prompt_id": "floor",
+                    "model_id": mid,
+                    "tier": "dumb_model",
+                    "failure_code": classify_failure(e),
+                    "failure_detail": str(e),
+                    "error": str(e),
+                }
+            )
+            print(f"[floor-err] {mid} {ft.id}: {e}", file=sys.stderr)
+
     for task, prm in itertools.product(tasks, prompts):
         if pending is not None and (str(task.id), str(prm["id"])) not in pending:
             continue
@@ -294,6 +345,9 @@ def run_model_phase(
                     "flops_per_token_theoretical": fpt,
                     "tflops_utilization_pct": None,  # filled below when possible
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
+                    "tier": "main",
+                    "failure_code": None,
+                    "failure_detail": None,
                     "error": None,
                 }
             )
@@ -311,6 +365,9 @@ def run_model_phase(
                     "domain": task.domain,
                     "prompt_id": prm["id"],
                     "model_id": mid,
+                    "tier": "main",
+                    "failure_code": classify_failure(e),
+                    "failure_detail": str(e),
                     "error": str(e),
                 }
             )
@@ -330,6 +387,7 @@ def _run_model_phases(
     prior_run_id: str | None,
     hardware_id: str | None = None,
     peak_tflops: float | None = None,
+    floor_tasks: list[Task] | None = None,
 ) -> list[dict[str, Any]]:
     """Iterate per-model-sequentially, honouring resume pending sets.
 
@@ -353,11 +411,34 @@ def _run_model_phases(
             pending=pending,
             hardware_id=hardware_id,
             peak_tflops=peak_tflops,
+            floor_tasks=floor_tasks,
         )
         if prior_run_id is not None:
             recs = tag_fresh(recs, prior_run_id)
         fresh.extend(recs)
     return fresh
+
+
+def assemble_model_scores(
+    models: list[dict[str, Any]],
+    records: list[dict[str, Any]],
+    cells_total: int,
+) -> tuple[list[dict[str, Any]], str]:
+    """Post-hoc per-model rollup + run-level status (Rethunk-AI/bakeoff#23).
+
+    Pure: no network, no proxy. `cells_total` is the main-suite cell count C
+    per model (len(tasks) * len(prompts)). Floor records (tier == "dumb_model")
+    are separated from main records before rollup so partial_score reflects the
+    main suite and floor_score the floor suite. Returns (model_scores list,
+    run_status word)."""
+    model_scores: list[dict[str, Any]] = []
+    for m in models:
+        mid = str(m["id"])
+        mine = [r for r in records if r.get("model_id") == mid]
+        main_recs = [r for r in mine if r.get("tier", "main") != "dumb_model"]
+        floor_recs = [r for r in mine if r.get("tier") == "dumb_model"]
+        model_scores.append(model_rollup(mid, main_recs, floor_recs, cells_total))
+    return model_scores, run_status_from_scores(model_scores)
 
 
 def _pairwise_all_phase(
@@ -758,6 +839,18 @@ def main() -> int:
             file=sys.stderr,
         )
 
+    # Minimal-capability floor tier (Rethunk-AI/bakeoff#23): runs per model
+    # within its existing load (no extra swap). Fresh runs only — resume reruns
+    # focus on pending main cells. Config-gated, default enabled.
+    dumb_cfg = cfg.get("dumb_model_tier", {})
+    floor_tasks = (
+        load_floor_tasks()
+        if bool(dumb_cfg.get("enabled", True)) and not args.resume_from
+        else None
+    )
+    if floor_tasks:
+        print(f"[floor] dumb_model tier: {len(floor_tasks)} tasks", file=sys.stderr)
+
     # Collect hardware context once before proxy startup so it doesn't
     # interfere with GPU power/VRAM sampling during the benchmark.
     hardware_context = collect_hardware_context()
@@ -781,6 +874,7 @@ def main() -> int:
             prior_run_id,
             hardware_id=hardware_id,
             peak_tflops=peak_tflops,
+            floor_tasks=floor_tasks,
         )
         all_records = reused_records + fresh_records
 
@@ -809,14 +903,19 @@ def main() -> int:
     hf_mode = args.hf_enrichment or run_cfg.get("hf_enrichment", "off")
     model_metadata = build_model_metadata(cfg)
     model_metadata = enrich_model_metadata(model_metadata, hf_mode, provenance["warnings"])
+    # Post-hoc completeness-weighted rollup + run-level status (#23).
+    cells_total = len(tasks) * len(prompts)
+    model_scores, run_status = assemble_model_scores(models, all_records, cells_total)
     payload = {
         "run_id": run_cfg.get("name", ts),
         "timestamp": ts,
+        "run_status": run_status,
         "config": cfg,
         "provenance": provenance,
         "model_metadata": model_metadata,
         "tasks": [asdict(t) for t in tasks],
         "records": all_records,
+        "model_scores": model_scores,
         "judgements": judgements,
         "resumed_from": prior_run_id,
         "hardware": hardware_context,

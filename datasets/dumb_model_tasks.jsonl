@@ -1,0 +1,12 @@
+{"id": "t_dumb_00", "tier": "dumb_model", "domain": "arithmetic", "user_prompt": "What is 2 + 2? Answer with one number.", "expected": "4", "scorer": "exact"}
+{"id": "t_dumb_01", "tier": "dumb_model", "domain": "arithmetic", "user_prompt": "What is 10 - 3? Answer with one number.", "expected": "7", "scorer": "exact"}
+{"id": "t_dumb_02", "tier": "dumb_model", "domain": "arithmetic", "user_prompt": "What is 6 × 7? Answer with one number.", "expected": "42", "scorer": "exact"}
+{"id": "t_dumb_03", "tier": "dumb_model", "domain": "arithmetic", "user_prompt": "What is 100 ÷ 4? Answer with one number.", "expected": "25", "scorer": "exact"}
+{"id": "t_dumb_04", "tier": "dumb_model", "domain": "instruction", "user_prompt": "Reply with exactly one word: the color of the sky. One word only.", "expected": "blue", "scorer": "exact"}
+{"id": "t_dumb_05", "tier": "dumb_model", "domain": "instruction", "user_prompt": "Count to 3 and list only the numbers, separated by commas.", "expected": "1, 2, 3", "scorer": "contains"}
+{"id": "t_dumb_06", "tier": "dumb_model", "domain": "instruction", "user_prompt": "Reply YES if you can understand this sentence, NO otherwise.", "expected": "YES", "scorer": "exact"}
+{"id": "t_dumb_07", "tier": "dumb_model", "domain": "instruction", "user_prompt": "What is the opposite of hot? Answer with one word.", "expected": "cold", "scorer": "exact"}
+{"id": "t_dumb_08", "tier": "dumb_model", "domain": "summarize", "user_prompt": "Summarize in 5 words or fewer: The cat sat on the mat.", "expected": "cat sat on mat", "scorer": "contains"}
+{"id": "t_dumb_09", "tier": "dumb_model", "domain": "summarize", "user_prompt": "In one word, what animal says \"woof\"?", "expected": "dog", "scorer": "exact"}
+{"id": "t_dumb_10", "tier": "dumb_model", "domain": "qa", "user_prompt": "What is the capital of France? Answer with one word.", "expected": "Paris", "scorer": "exact"}
+{"id": "t_dumb_11", "tier": "dumb_model", "domain": "qa", "user_prompt": "What color do you get when you mix red and blue? Answer with one word.", "expected": "purple", "scorer": "contains"}

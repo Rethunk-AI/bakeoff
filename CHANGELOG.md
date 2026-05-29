@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
+### Added
+- **Disk-persistence layer** — `bench/store.py` (atomic JSON record I/O under `BAKEOFF_DATA_DIR`; directory-per-table / UUID-filename layout; `schema_version` audit stamping; deterministic UUID5 helpers), `bench/descriptor.py` (model descriptor reader/validator with a hard `schema_version` gate), and `bench/queue.py` (opt-in disk-backed run queue: `pending/` + `completed/` DR layout, race-safe rename-as-mutex `claim()`, retry backoff + terminal failure, stale-claim reaping). The standalone runner default is unchanged; the queue is strictly opt-in. (#13, #15)
+- **`interface_types` seed** — `schema/seeds/interface_types.json`, completing the seed-file pattern for the last lookup table that was only seeded inline in `schema.sql`. (#22)
+
 ### Changed
 - Refactored runner to route all inference through `llama-swap` proxy; retired `bin/serve.sh` in favour of `bin/llama-swap.sh`.
 - Extracted `bench.config` module; validation and `judge_id` helper are now shared across runner, report, and llama-swap generator.

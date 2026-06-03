@@ -19,9 +19,9 @@ jobs:
     name: python lint + type + dry-run
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6.0.2
+    - uses: actions/checkout@v6
 
-    - uses: actions/setup-python@v6.2.0
+    - uses: actions/setup-python@v6
       with:
         python-version: "3.12"
 
@@ -50,7 +50,7 @@ jobs:
     name: shell scripts
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6.0.2
+    - uses: actions/checkout@v6
 
     - name: Shellcheck
       run: shellcheck bin/llama-swap.sh run.sh
@@ -59,7 +59,7 @@ jobs:
     name: actionlint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v6.0.2
+    - uses: actions/checkout@v6
 
     - name: Install actionlint
       run: |

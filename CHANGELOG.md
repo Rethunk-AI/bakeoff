@@ -9,11 +9,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Added
 - **Disk-persistence layer** — `bench/store.py` (atomic JSON record I/O under `BAKEOFF_DATA_DIR`; directory-per-table / UUID-filename layout; `schema_version` audit stamping; deterministic UUID5 helpers), `bench/descriptor.py` (model descriptor reader/validator with a hard `schema_version` gate), and `bench/queue.py` (opt-in disk-backed run queue: `pending/` + `completed/` DR layout, race-safe rename-as-mutex `claim()`, retry backoff + terminal failure, stale-claim reaping). The standalone runner default is unchanged; the queue is strictly opt-in. (#13, #15)
 - **`interface_types` seed** — `schema/seeds/interface_types.json`, completing the seed-file pattern for the last lookup table that was only seeded inline in `schema.sql`. (#22)
+- **Failure-reason taxonomy** — `bench/failure.py` introduces a `failure_code` enum (`timeout`, `refusal`, `malformed_output`, `oom`, `load_failure`, `capability_gap`, `infra_error`, `cancelled`, `unknown`) and a classifier; replaces the previous free-text `error` field. The runner now emits a structured `failure_code` + `failure_detail` per cell. (#23)
+- **Completeness-weighted scoring** — `bench/scoring.py` adds a `partial_score` formula (`S(m)/C` treating unattempted cells as 0), a `floor_score` rollup for the `dumb_model` tier, per-model `model_rollup()`, and `run_status_from_scores()`. (#23)
+- **Floor-tier dataset** — `datasets/dumb_model_tasks.jsonl`: 12 fixed tasks spanning arithmetic, instruction-following, QA, and summarisation with deterministic exact/contains scorers; the runner executes the `dumb_model` tier before the main matrix when configured. Schema additions: `failure_detail TEXT` on `run_model_metrics`, `run_status TEXT` on `runs`, and a `dumb_model` row in `task_categories`. (#23)
+- **`manifest.json` score projection** — `bench/publish.py` now writes `run_status` and `model_scores_summary` into the published manifest. A `--strict` flag warns (without erroring) when new optional fields are absent in older bundles. (#23)
+- **Ed25519 result signing** — `bench/signing.py` provides sign/verify for result envelopes using Ed25519; the `runners` schema table gains a `public_key TEXT` (base64) column; signing is gated on `config.signing.enabled`; `bench/publish.py` enforces mandatory Ed25519 verification on ingest. Unit tests cover sign/verify round-trips and failure modes. (#16)
+- **Hardware context collector** — `bench/hardware.py` captures GPU, CPU, RAM, and OS details and wires them into the runner to populate `run_hardware_metrics`. (closes #8 partial)
+- **Hardware schema tables** — `interface_type`, `gpu_hardware`, `system_hardware`, `system_software`, `system_gpu_link`, and `run_hardware_metrics` tables. (#17–#21)
+- **Schema-version tracking** — `schema_versions`, `schema_tables`, and `schema_tables_join` tables for schema-version tracking and migration-graph bookkeeping. (#25)
 
 ### Changed
 - Refactored runner to route all inference through `llama-swap` proxy; retired `bin/serve.sh` in favour of `bin/llama-swap.sh`.
 - Extracted `bench.config` module; validation and `judge_id` helper are now shared across runner, report, and llama-swap generator.
 - Consolidated `_fmt`, `resolve_models_dir`, `DEFAULT_CONFIG`, and several small helpers that had drifted to multiple sites.
+- Updated repo-ops dependency and GitHub Actions versions.
 
 ### Fixed
 - Removed duplicate `_fmt` definition in `bench/report.py`.

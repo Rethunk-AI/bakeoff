@@ -397,3 +397,53 @@ CREATE TABLE run_hardware_metrics (
     power_limit_w      FLOAT,
     measured_tflops    FLOAT
 );
+
+-- ---------------------------------------------------------------------------
+-- schema_versions (#25)
+-- One row per schema generation. allow_migration gates data migration for
+-- this version. schema_migration_script / record_migration_script are Go
+-- template + sprig scripts executed by the migration runner.
+-- ---------------------------------------------------------------------------
+CREATE TABLE schema_versions (
+    schema_version_id       INTEGER     PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    description             TEXT,
+    allow_migration         BOOLEAN     NOT NULL DEFAULT FALSE,
+    schema_migration_script TEXT,
+    record_migration_script TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------------------------------------------------------------------------
+-- schema_tables (#25)
+-- One row per logical table / uuid_namespace generation.
+-- deprecated_at non-null signals migration is pending; check schema_tables_join
+-- for destination(s). Minor upgrades (no join row) update DDL in place and
+-- bump current_version_id only.
+-- ---------------------------------------------------------------------------
+CREATE TABLE schema_tables (
+    table_id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    table_name         TEXT        NOT NULL,
+    uuid_namespace     UUID        NOT NULL,
+    initial_version_id INTEGER     NOT NULL REFERENCES schema_versions(schema_version_id),
+    current_version_id INTEGER     NOT NULL REFERENCES schema_versions(schema_version_id),
+    created_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at         TIMESTAMPTZ NOT NULL DEFAULT now(),
+    deprecated_at      TIMESTAMPTZ,
+    UNIQUE (table_name, uuid_namespace)
+);
+
+-- ---------------------------------------------------------------------------
+-- schema_tables_join (#25)
+-- Migration graph edges for major migrations (splits, merges, UUID namespace
+-- changes). One or more rows for a src_table = data must move.
+-- No row = minor upgrade; DDL updated in place on the existing table.
+-- INDEX on src_table alone is omitted: the composite PK (src_table, dst_table)
+-- covers src-only lookups via leading-key index scan.
+-- ---------------------------------------------------------------------------
+CREATE TABLE schema_tables_join (
+    src_table     UUID    NOT NULL REFERENCES schema_tables(table_id),
+    dst_table     UUID    NOT NULL REFERENCES schema_tables(table_id),
+    migrate_using INTEGER NOT NULL REFERENCES schema_versions(schema_version_id),
+    PRIMARY KEY (src_table, dst_table),
+    CHECK (src_table <> dst_table)
+);

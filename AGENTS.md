@@ -14,18 +14,26 @@ Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap
 config.yaml          single source of truth (server, models, prompts, dataset, judge, cost, output)
 bin/llama-swap.sh    llama-swap launcher: up (sweep stragglers + exec binary) / down / sweep / wait
 bench/
+  __init__.py        package marker
   clients.py         httpx OpenAI-compat client; prefers `content`, falls back to `reasoning_content`
+  compare.py         diff two result JSON files → Markdown comparison report; compatibility warnings to stderr
+  config.py          config loading + validation gate; aggregates errors before proxy startup
   constants.py       project-wide UUID5 namespace constants (BAKEOFF_MODEL_NAMESPACE, BAKEOFF_CREATOR_NAMESPACE)
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
   descriptor.py      model descriptor reader/validator/persister (seed JSON → models/ store); schema_version gate
   download.py        huggingface_hub fetcher; writes `<models_dir>/<repo_id>/<filename>`
+  failure.py         failure-reason taxonomy (9 codes: timeout/refusal/malformed_output/oom/load_failure/capability_gap/infra_error/cancelled/unknown)
   hardware.py        best-effort hardware context collector (GPU/CPU/RAM/OS); feeds run_hardware_metrics
   llama_swap.py      pure config generator: bakeoff config.yaml → llama-swap proxy config
   metrics.py         heuristic scorers + judge prompts + nvidia-smi / rocm-smi power sampling
+  provenance.py      run provenance collector (git SHA, platform, optional HF enrichment); best-effort with null fallbacks
   publish.py         validate/package/sign/submit result bundles for bakeoff-results
   queue.py           opt-in disk-backed run queue (pending/ + completed/); claim is rename-as-mutex
-  runner.py          start proxy → warmup + matrix per model → judge → stop proxy
   report.py          JSON + Markdown + single-file HTML dashboard (Chart.js via CDN)
+  resume.py          resume support: computes pending model/judge cells from a prior partial result
+  runner.py          start proxy → warmup + matrix per model → judge → stop proxy
+  scoring.py         completeness-weighted partial score + floor score rollup; run_status aggregation
+  signing.py         Ed25519 sign/verify for result envelopes (sha256 canonical form)
   store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR; audit stamping; UUID5 helpers
 run.sh               uv venv + uv pip install + pinned llama-swap bootstrap + uv run;
                      `fetch` subcommand → bench.download

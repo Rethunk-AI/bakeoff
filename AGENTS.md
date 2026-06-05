@@ -35,6 +35,13 @@ bench/
   scoring.py         completeness-weighted partial score + floor score rollup; run_status aggregation
   signing.py         Ed25519 sign/verify for result envelopes (sha256 canonical form)
   store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR; audit stamping; UUID5 helpers
+migrate/             Go module: bakeoff migration runner (#27)
+  go.mod             module github.com/Rethunk-AI/bakeoff/migrate
+  record.go          Record struct: field mutation tracking, Tengo ↔ Go value conversion
+  record_builtins.go Tengo built-ins for record_migration_script (getField, setField, select*, hash, uuid_5, now)
+  runner.go          MigrationRunner: schema + record script execution, shadow table, batch sizing, FK order, resume gate
+  schema_builtins.go Tengo built-ins for schema_migration_script (createTable, dropTable, renameTable, addColumn, createIndex, withIndexDisabled, rawSQL, …)
+  cmd/main.go        bakeoff-migrate CLI (DATABASE_URL / --dsn, --batch-size, --max-rejects, --ignore-is-fatal, --dry-run)
 run.sh               uv venv + uv pip install + pinned llama-swap bootstrap + uv run;
                      `fetch` subcommand → bench.download
 .cache/              vendored llama-swap binary + generated proxy config (gitignored)
@@ -52,7 +59,7 @@ datasets/ results/   generated artifacts (gitignored)
 - **Cost axis is energy, not tokens.** `nvidia-smi --query-gpu=power.draw` or `rocm-smi --showpower` sampled during the call. Neither available → `energy_wh` / `cost_usd` set to `null`. Do not substitute latency.
 - **`mmproj-*` files are vision projectors, not standalone models.** Never list under `models:`. The generator rejects them outright.
 - **Disk-persistence layer is directory-per-table, UUID-filename JSON.** `bench/store.py` owns all atomic I/O under `BAKEOFF_DATA_DIR` (env-configurable; default `~/.local/share/bakeoff`). `schema_version` is a plain integer (currently 1); missing or unexpected values are hard errors. `run_queue/` is the only ephemeral sub-tree. The runner writes each completed run to `runs/<run_id>.json` (canonical, addressable by run ID) and maintains a `run_queue/pending` → `run_queue/completed` lifecycle record per real run. `results/run-<ts>.json` is retained for backwards compatibility. `--resume-run-id <id>` loads from the store; `--resume-from <file>` loads from the flat file.
-- **No database in `bench/`.** `schema/schema.sql` is forward-looking DDL with no runtime consumer yet. Never add psycopg/sqlite imports to any `bench/` module.
+- **No database in `bench/`.** Never add psycopg/sqlite imports to any `bench/` module. Database access lives in `migrate/` (Go), which is the sole runtime consumer of `schema/schema.sql`. The `migrate/` package is a separate Go module (`go.mod` at `migrate/`) — it does not import any Python packages and is not reachable from `bench/`.
 
 ## Hardware caveats
 

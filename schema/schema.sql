@@ -183,10 +183,19 @@ INSERT INTO task_categories (name, description)
     VALUES ('dumb_model', 'Minimal-capability floor suite: deterministic scorers only.')
     ON CONFLICT (name) DO NOTHING;
 
+-- Seed: cyber_safety category (Rethunk-AI/bakeoff#33)
+INSERT INTO task_categories (name, description)
+VALUES (
+  'cyber_safety',
+  'Cyber capability proxy tests: injection resistance, refusal quality, dual-use code generation, agentic containment, exfiltration-via-reasoning, non-expert uplift.'
+)
+ON CONFLICT (name) DO NOTHING;
+
 -- ---------------------------------------------------------------------------
 -- tasks
 -- Tiered: parent_id IS NULL = top-level suite; non-null = sub-task.
 -- natural_key_hash = SHA256 of canonical path relative to prompts root (#12).
+-- uplift_baseline_task_id: reference task whose score forms the uplift baseline (#33).
 -- ---------------------------------------------------------------------------
 CREATE TABLE tasks (
     task_id              SERIAL PRIMARY KEY,
@@ -199,6 +208,10 @@ CREATE TABLE tasks (
     grader_script_commit TEXT,
     natural_key_hash     TEXT NOT NULL UNIQUE
 );
+
+-- Extend tasks: uplift baseline reference (Rethunk-AI/bakeoff#33)
+ALTER TABLE tasks
+    ADD COLUMN IF NOT EXISTS uplift_baseline_task_id INT REFERENCES tasks(task_id);
 
 -- ---------------------------------------------------------------------------
 -- prompts
@@ -312,6 +325,32 @@ CREATE TABLE run_model_metrics (
 ALTER TABLE run_model_metrics
     ADD COLUMN IF NOT EXISTS failure_detail TEXT;
 -- (failure_reason already exists; its values now conform to the failure_code taxonomy)
+
+-- ---------------------------------------------------------------------------
+-- agent_traces (#33)
+-- Per-step trace for agentic evaluation runs (C4 cyber_safety, C6 agentic).
+-- boundary_violated: true if the step crossed a containment / safety boundary.
+-- cost_tokens: token cost for this action step; NULL for non-LLM steps.
+-- UNIQUE (run_id, prompt_id, model_id, step_index) prevents duplicate steps.
+-- ---------------------------------------------------------------------------
+CREATE TABLE agent_traces (
+    trace_id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+    run_id            UUID        NOT NULL REFERENCES runs ON DELETE CASCADE,
+    prompt_id         INT         NOT NULL REFERENCES prompts,
+    model_id          UUID        NOT NULL REFERENCES models,
+    step_index        INT         NOT NULL,
+    action_type       TEXT        NOT NULL,
+    action_payload    TEXT,
+    observation       TEXT,
+    boundary_violated BOOLEAN     NOT NULL DEFAULT FALSE,
+    cost_tokens       INT,
+    recorded_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (run_id, prompt_id, model_id, step_index)
+);
+
+-- Extend run_model_metrics: link to agent_traces for agentic evaluation (#33)
+ALTER TABLE run_model_metrics
+    ADD COLUMN IF NOT EXISTS trace_id UUID REFERENCES agent_traces(trace_id);
 
 -- ---------------------------------------------------------------------------
 -- interface_type (#17)
@@ -446,4 +485,16 @@ CREATE TABLE schema_tables_join (
     migrate_using INTEGER NOT NULL REFERENCES schema_versions(schema_version_id),
     PRIMARY KEY (src_table, dst_table),
     CHECK (src_table <> dst_table)
+);
+
+-- ---------------------------------------------------------------------------
+-- schema_versions seed (#33)
+-- Version 1: agent_traces table, uplift_baseline_task_id on tasks,
+-- trace_id on run_model_metrics, cyber_safety category seed.
+-- allow_migration=false until migration runner (#27) is implemented.
+-- ---------------------------------------------------------------------------
+INSERT INTO schema_versions (description, allow_migration)
+VALUES (
+    'C4+C6 schema: agent_traces table, tasks.uplift_baseline_task_id, run_model_metrics.trace_id, cyber_safety category (#33)',
+    FALSE
 );

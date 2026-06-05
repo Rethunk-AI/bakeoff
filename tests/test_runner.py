@@ -119,21 +119,40 @@ class TestScoreAssembly:
     """Pure post-hoc rollup (no proxy/network) — Rethunk-AI/bakeoff#23."""
 
     def _main_ok(self, mid, task_id, q):
-        return {"model_id": mid, "task_id": task_id, "prompt_id": "plain",
-                "tier": "main", "quality_heuristic": q, "failure_code": None,
-                "error": None}
+        return {
+            "model_id": mid,
+            "task_id": task_id,
+            "prompt_id": "plain",
+            "tier": "main",
+            "quality_heuristic": q,
+            "failure_code": None,
+            "error": None,
+        }
 
     def _main_fail(self, mid, task_id, code):
-        return {"model_id": mid, "task_id": task_id, "prompt_id": "plain",
-                "tier": "main", "failure_code": code, "error": code}
+        return {
+            "model_id": mid,
+            "task_id": task_id,
+            "prompt_id": "plain",
+            "tier": "main",
+            "failure_code": code,
+            "error": code,
+        }
 
     def _floor(self, mid, task_id, passed):
-        return {"model_id": mid, "task_id": task_id, "prompt_id": "floor",
-                "tier": "dumb_model", "quality_heuristic": 1.0 if passed else 0.0,
-                "failure_code": None, "error": None}
+        return {
+            "model_id": mid,
+            "task_id": task_id,
+            "prompt_id": "floor",
+            "tier": "dumb_model",
+            "quality_heuristic": 1.0 if passed else 0.0,
+            "failure_code": None,
+            "error": None,
+        }
 
     def test_assemble_partial_incomplete_and_failed(self):
         from bench.runner import assemble_model_scores
+
         models = [{"id": "good"}, {"id": "partial"}, {"id": "dead"}]
         # cells_total = 4 main cells per model
         records = []
@@ -151,8 +170,11 @@ class TestScoreAssembly:
         for i in range(4):
             records.append(self._main_fail("dead", f"t{i}", "load_failure"))
         # floor: dead passes 6/... give it 3 floor cells, 2 pass
-        records += [self._floor("dead", "f0", True), self._floor("dead", "f1", True),
-                    self._floor("dead", "f2", False)]
+        records += [
+            self._floor("dead", "f0", True),
+            self._floor("dead", "f1", True),
+            self._floor("dead", "f2", False),
+        ]
 
         scores, run_status = assemble_model_scores(models, records, cells_total=4)
         by = {s["model_id"]: s for s in scores}
@@ -171,6 +193,7 @@ class TestScoreAssembly:
 
     def test_floor_loader_roundtrip(self, tmp_path):
         from bench.dataset import load_floor_tasks
+
         p = tmp_path / "floor.jsonl"
         p.write_text(
             '{"id": "d0", "domain": "arithmetic", "user_prompt": "2+2?",'
@@ -186,6 +209,7 @@ class TestScoreAssembly:
 
     def test_floor_loader_absent_file_returns_empty(self, tmp_path):
         from bench.dataset import load_floor_tasks
+
         assert load_floor_tasks(tmp_path / "nope.jsonl") == []
 
 
@@ -238,9 +262,10 @@ class TestStoreWiring:
             patch("bench.runner._write_proxy_config"),
             patch("bench.runner._run_model_phases", return_value=fake_records),
             patch("bench.runner.run_judge_phase", return_value=[]),
-            patch("bench.runner.collect_provenance", return_value={
-                "warnings": [], "git": {}, "seed": 42
-            }),
+            patch(
+                "bench.runner.collect_provenance",
+                return_value={"warnings": [], "git": {}, "seed": 42},
+            ),
             patch("bench.runner.build_model_metadata", return_value={}),
             patch("bench.runner.enrich_model_metadata", return_value={}),
             patch("bench.runner.collect_hardware_context", return_value={}),

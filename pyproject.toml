@@ -20,6 +20,9 @@ dev = [
     "types-PyYAML>=6.0.12.20260518",
 ]
 
+[project.scripts]
+bakeoff-report = "bench.report_cli:main"
+
 # Auto-discovery trips over the gitignored `results/` and `datasets/` output
 # directories when they exist on disk during `pip install -e .`. Pin the
 # package set explicitly so local dev installs don't depend on those dirs

@@ -867,9 +867,7 @@ def main() -> int:
     # focus on pending main cells. Config-gated, default enabled.
     dumb_cfg = cfg.get("dumb_model_tier", {})
     floor_tasks = (
-        load_floor_tasks()
-        if bool(dumb_cfg.get("enabled", True)) and prior is None
-        else None
+        load_floor_tasks() if bool(dumb_cfg.get("enabled", True)) and prior is None else None
     )
     if floor_tasks:
         print(f"[floor] dumb_model tier: {len(floor_tasks)} tasks", file=sys.stderr)

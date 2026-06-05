@@ -162,6 +162,15 @@ def list_records(table: str) -> list[str]:
     return sorted(p.stem for p in table_path.glob("*.json"))
 
 
+def list_runs() -> list[str]:
+    """Return a sorted list of stored run IDs (newest-first by stem).
+
+    Thin wrapper over ``list_records("runs")`` so callers don't repeat
+    the table name string.
+    """
+    return list_records("runs")
+
+
 def delete_record(table: str, record_id: str) -> None:
     """Delete the record at ``<data_dir>/<table>/<record_id>.json``.
 

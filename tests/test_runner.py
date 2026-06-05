@@ -187,3 +187,103 @@ class TestScoreAssembly:
     def test_floor_loader_absent_file_returns_empty(self, tmp_path):
         from bench.dataset import load_floor_tasks
         assert load_floor_tasks(tmp_path / "nope.jsonl") == []
+
+
+class TestStoreWiring:
+    """Test that runner wires to bench.store on a mocked full run (#35)."""
+
+    def _make_config(self, tmp_path: Path, run_name: str = "test-run") -> Path:
+        cfg = {
+            **_BASE_CFG,
+            "run": {"seed": 42, "name": run_name},
+            "output": {
+                "dir": str(tmp_path / "results"),
+                "emit_markdown": False,
+                "emit_html": False,
+            },
+            "judge": {"enabled": False},
+            "dumb_model_tier": {"enabled": False},
+        }
+        p = tmp_path / "config.yaml"
+        p.write_text(yaml.safe_dump(cfg))
+        return p
+
+    def _run_mocked(self, config_path: Path, monkeypatch, data_dir: Path) -> int:
+        """Run main() with all side-effecting calls patched out."""
+        from bench.runner import main
+
+        monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
+
+        fake_records = [
+            {
+                "model_id": "m_a",
+                "task_id": "t0",
+                "prompt_id": "plain",
+                "tier": "main",
+                "quality_heuristic": 1.0,
+                "failure_code": None,
+                "error": None,
+                "wall_clock_seconds": 1.0,
+                "seconds_to_first_token": 0.1,
+                "tokens_per_second": 10.0,
+                "energy_wh": None,
+            }
+        ]
+
+        with (
+            patch("sys.argv", ["runner", "--config", str(config_path)]),
+            patch("bench.runner.write_jsonl"),
+            patch("bench.runner._proxy_start", return_value=None),
+            patch("bench.runner._proxy_stop"),
+            patch("bench.runner._write_proxy_config"),
+            patch("bench.runner._run_model_phases", return_value=fake_records),
+            patch("bench.runner.run_judge_phase", return_value=[]),
+            patch("bench.runner.collect_provenance", return_value={
+                "warnings": [], "git": {}, "seed": 42
+            }),
+            patch("bench.runner.build_model_metadata", return_value={}),
+            patch("bench.runner.enrich_model_metadata", return_value={}),
+            patch("bench.runner.collect_hardware_context", return_value={}),
+            patch("bench.runner.LAUNCHER", config_path),  # make LAUNCHER.exists() True
+        ):
+            return main()
+
+    def test_store_record_written_after_run(self, tmp_path, monkeypatch):
+        """Store file must exist at runs/<run_id>.json after a successful run."""
+        from bench import store
+
+        data_dir = tmp_path / "data"
+        config_path = self._make_config(tmp_path, run_name="test-run-42")
+        rc = self._run_mocked(config_path, monkeypatch, data_dir)
+
+        assert rc == 0
+        monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
+        record = store.read_record("runs", "test-run-42")
+        assert record["run_id"] == "test-run-42"
+        assert "records" in record
+
+    def test_queue_completed_record_written(self, tmp_path, monkeypatch):
+        """run_queue/completed/<qid>.json must exist; pending must be gone."""
+        data_dir = tmp_path / "data"
+        config_path = self._make_config(tmp_path, run_name="q-test-run")
+        rc = self._run_mocked(config_path, monkeypatch, data_dir)
+
+        assert rc == 0
+        completed_dir = data_dir / "run_queue" / "completed"
+        pending_dir = data_dir / "run_queue" / "pending"
+        completed = list(completed_dir.glob("*.json")) if completed_dir.exists() else []
+        pending = list(pending_dir.glob("*.json")) if pending_dir.exists() else []
+        assert len(completed) == 1, "expected one completed queue record"
+        assert len(pending) == 0, "pending record should have been moved to completed"
+
+    def test_list_runs_returns_stored_run(self, tmp_path, monkeypatch):
+        """list_runs() must return the run ID after a successful run."""
+        from bench import store
+
+        data_dir = tmp_path / "data"
+        config_path = self._make_config(tmp_path, run_name="listed-run")
+        self._run_mocked(config_path, monkeypatch, data_dir)
+
+        monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
+        run_ids = store.list_runs()
+        assert "listed-run" in run_ids

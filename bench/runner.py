@@ -639,10 +639,16 @@ def main() -> int:
         action="store_true",
         help="Parse + gen dataset, no proxy startup or network calls.",
     )
-    ap.add_argument(
+    _resume_group = ap.add_mutually_exclusive_group()
+    _resume_group.add_argument(
         "--resume-from",
         metavar="RESULT_JSON",
         help="Prior result JSON. Reuses complete rows, reruns errored/missing.",
+    )
+    _resume_group.add_argument(
+        "--resume-run-id",
+        metavar="RUN_ID",
+        help="Resume from a run stored in BAKEOFF_DATA_DIR (alternative to --resume-from).",
     )
     ap.add_argument(
         "--rerun-errors",
@@ -771,12 +777,29 @@ def main() -> int:
     pending_scores: set | None = None
     prior_run_id: str | None = None
 
-    if args.resume_from:
+    prior: dict[str, Any] | None = None
+    if args.resume_run_id:
+        from bench.store import StoreError as _StoreError
+        from bench.store import read_record
+
+        try:
+            prior = read_record("runs", args.resume_run_id)
+        except _StoreError as e:
+            print(f"[error] resume-run-id: {e}", file=sys.stderr)
+            return 1
+        # Validate minimum required fields (same contract as load_prior).
+        for field in ("tasks", "records"):
+            if field not in prior:
+                print(f"[error] stored run missing required field: {field!r}", file=sys.stderr)
+                return 1
+    elif args.resume_from:
         try:
             prior = load_prior(Path(args.resume_from))
         except ResumeError as e:
             print(f"[error] resume: {e}", file=sys.stderr)
             return 1
+
+    if prior is not None:
         prior_run_id = prior.get("run_id")
         task_ids = [str(t.id) for t in tasks]
         prompt_ids = [str(p["id"]) for p in prompts]
@@ -845,7 +868,7 @@ def main() -> int:
     dumb_cfg = cfg.get("dumb_model_tier", {})
     floor_tasks = (
         load_floor_tasks()
-        if bool(dumb_cfg.get("enabled", True)) and not args.resume_from
+        if bool(dumb_cfg.get("enabled", True)) and prior is None
         else None
     )
     if floor_tasks:
@@ -856,6 +879,22 @@ def main() -> int:
     hardware_context = collect_hardware_context()
     if any(v is not None for v in hardware_context.values()):
         print(f"[hardware-ctx] {hardware_context}", file=sys.stderr)
+
+    # Write a run-queue pending record so reporting can enumerate historical
+    # runs without scanning the flat results/ directory.
+    import uuid as _uuid
+
+    from bench.store import delete_record as _store_delete
+    from bench.store import write_record as _store_write
+
+    _queue_id = str(_uuid.uuid4())
+    _run_id_for_queue = run_cfg.get("name", ts)
+    _store_write(
+        "run_queue/pending",
+        _queue_id,
+        {"queue_id": _queue_id, "run_id": _run_id_for_queue, "status": "pending"},
+    )
+    _queue_terminal_status = "error"
 
     _write_proxy_config(cfg, models_dir, LLAMA_SWAP_CONFIG)
     proxy = _proxy_start(listen, LLAMA_SWAP_CONFIG, boot_timeout)
@@ -893,8 +932,23 @@ def main() -> int:
             pending_scores=pending_scores,
         )
         judgements = reused_judgements + fresh_judgements
+        _queue_terminal_status = "complete"
     finally:
         _proxy_stop(proxy)
+        # Move queue record from pending to completed regardless of outcome.
+        _store_write(
+            "run_queue/completed",
+            _queue_id,
+            {
+                "queue_id": _queue_id,
+                "run_id": _run_id_for_queue,
+                "status": _queue_terminal_status,
+            },
+        )
+        import contextlib as _contextlib
+
+        with _contextlib.suppress(Exception):
+            _store_delete("run_queue/pending", _queue_id)
 
     # 5. Emit
     out_json = out_dir / f"run-{ts}.json"
@@ -920,6 +974,12 @@ def main() -> int:
         "resumed_from": prior_run_id,
         "hardware": hardware_context,
     }
+
+    # Persist the run record to the store so it is addressable by run ID.
+    # The store record IS the payload dict; the flat results/ file remains
+    # for backwards compatibility (e.g. existing --resume-from callers).
+    _store_write("runs", payload["run_id"], payload)
+    print(f"[store] runs/{payload['run_id']}.json", file=sys.stderr)
 
     # Config-gated Ed25519 signing.
     # Enable by adding a `signing` stanza to config.yaml:

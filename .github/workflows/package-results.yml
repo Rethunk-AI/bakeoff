@@ -1,0 +1,52 @@
+name: package-results
+
+on:
+  workflow_dispatch:
+    inputs:
+      result_path:
+        description: "Path to the result JSON file to package and submit"
+        required: true
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  package-and-submit:
+    name: sign, package, and submit result bundle
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+      with:
+        repository: Rethunk-AI/bakeoff
+
+    - uses: actions/setup-python@v6
+      with:
+        python-version: "3.12"
+
+    - name: Install uv
+      uses: astral-sh/setup-uv@v8.1.0
+
+    - name: Install package
+      run: uv sync --all-extras
+
+    - name: Install cosign
+      uses: sigstore/cosign-installer@v3
+
+    - name: Package result (with Sigstore signing)
+      id: package
+      run: |
+        BUNDLE_DIR=$(uv run bench publish package "${{ inputs.result_path }}" --sign --output-dir bundle | sed 's/\[publish\] bundle: //')
+        echo "bundle_dir=$BUNDLE_DIR" >> "$GITHUB_OUTPUT"
+
+    - name: Submit bundle to bakeoff-results
+      env:
+        GH_TOKEN: ${{ secrets.BAKEOFF_RESULTS_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.BAKEOFF_RESULTS_TOKEN }}
+      run: |
+        git config --global user.name "Bastion Agent"
+        git config --global user.email "bastion-agent@rethunk.tech"
+        uv run bench publish submit "${{ steps.package.outputs.bundle_dir }}" \
+          --repo Rethunk-AI/bakeoff-results \
+          --checkout ../bakeoff-results

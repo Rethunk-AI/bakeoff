@@ -1,0 +1,71 @@
+# Topic: model_trust
+
+Consolidated chat history (chronological, ascending comment-id). 2 entries. Verbatim quotes; attribution in each header. **#38 thread excluded from this variant.**
+
+## Source entries (provenance TOC)
+
+Entries used to build this topic and its summary. (Not migrated into `topic_summary/`; audit reference only.)
+
+| ticket | entry | author | posted | url |
+|---|---|---|---|---|
+| #14 | issue body | @gissf1 | 2026-05-20T19:04:46Z | <https://github.com/Rethunk-AI/bakeoff/issues/14> |
+| #14 | comment 4503203471 | @AlbinoGeek | 2026-05-20T22:36:25Z | <https://github.com/Rethunk-AI/bakeoff/issues/14#issuecomment-4503203471> |
+
+---
+
+## Consolidated thread
+
+### issue #14 body — @gissf1 — 2026-05-20T19:04:46Z
+<https://github.com/Rethunk-AI/bakeoff/issues/14>
+
+As noted at: https://github.com/Rethunk-AI/bakeoff/issues/7#issuecomment-4469658261
+
+I believe the models hosted by ollama are roughly the same trustworthiness as HuggingFace (correct me if I'm wrong on that), so they're likely another acceptable source.
+
+I'd like to discuss the topic in more detail.
+
+---
+
+### #14 comment 4503203471 — @AlbinoGeek — 2026-05-20T22:36:25Z
+<https://github.com/Rethunk-AI/bakeoff/issues/14#issuecomment-4503203471>
+
+**Bastion response — 201926ZMAY26**
+
+@gissf1 — trustworthiness assessment and design implications.
+
+---
+
+**Ollama vs HuggingFace — trustworthiness**
+
+Ollama is an acceptable source, roughly comparable to HuggingFace in trustworthiness. Key distinctions:
+
+| Attribute | HuggingFace | Ollama |
+|---|---|---|
+| Source type | Direct from creator repos | Redistribution layer (mostly HF-sourced) |
+| Model origin | Creator uploads GGUF, SafeTensors, etc. | Ollama team converts/mirrors from HF |
+| Curation | Minimal — creator-controlled | Curated Ollama Library + community models |
+| Commit tracking | HF commit hash per file | Ollama model tag (e.g., `llama3:8b-q4_K_M`) |
+| Verification | SHA256 of weights file | Same SHA256 verification available |
+
+Ollama models are largely the same underlying weights as HuggingFace — just repackaged into GGUF with specific quantization presets. For models in the Ollama Library (curated), provenance is traceable back to HF or the original creator. Community models have less formal provenance tracking.
+
+---
+
+**Design implications for our schema**
+
+Our architecture already handles this cleanly. `model_sources` is provider-agnostic; `model_hash` (SHA256 of weights) is the deduplication ground truth regardless of where the model was obtained. An Ollama-sourced model with the same `model_hash` as a HF-sourced model will be detected as a duplicate and merged per the established workflow.
+
+Recommendation: add `ollama` as a `source_types` entry alongside `huggingface`, `direct_url`, and `local_file`. No schema changes required — just a new row in the lookup table.
+
+`source_metadata` JSONB for Ollama entries would store `{"ollama_tag": "llama3:8b-q4_K_M", "ollama_digest": "..."}`. Ollama exposes a digest per model pull that can serve as a secondary hash check before running the full `model_hash` computation.
+
+---
+
+**Caveat on community/unverified Ollama models**
+
+Models outside the Ollama Library curated set have no guaranteed provenance chain. `model_hash` remains the authoritative trust anchor — source URL and tag are metadata, not trust signals. If the system eventually tracks a "trust tier" for sources, Ollama Library models and HF creator-published models would sit at the same tier; unverified community models from either platform would sit lower.
+
+— Bastion
+
+---
+

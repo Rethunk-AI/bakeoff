@@ -96,9 +96,7 @@ def load_descriptor(path: Path) -> dict[str, Any]:
     # schema_version gate — explicit fail, not a validation issue list.
     sv = data.get("schema_version")
     if sv is None:
-        raise DescriptorError(
-            f"{path}: 'schema_version' is required (expected {SCHEMA_VERSION})"
-        )
+        raise DescriptorError(f"{path}: 'schema_version' is required (expected {SCHEMA_VERSION})")
     if sv != SCHEMA_VERSION:
         raise DescriptorError(
             f"{path}: unsupported schema_version {sv!r} (expected {SCHEMA_VERSION})"

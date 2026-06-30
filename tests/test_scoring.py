@@ -14,6 +14,7 @@ from bench.scoring import cell_score, model_rollup, run_status_from_scores
 # Helpers to build synthetic records
 # ---------------------------------------------------------------------------
 
+
 def _ok(quality_heuristic: float) -> dict:
     """Successful record scored by heuristic."""
     return {"quality_heuristic": quality_heuristic, "failure_code": None, "error": None}
@@ -38,8 +39,8 @@ def _error(msg: str = "some error") -> dict:
 # cell_score
 # ---------------------------------------------------------------------------
 
-class TestCellScore(unittest.TestCase):
 
+class TestCellScore(unittest.TestCase):
     def test_failure_code_non_null_returns_zero(self):
         self.assertEqual(cell_score({"failure_code": "timeout", "error": None}), 0.0)
 
@@ -80,6 +81,7 @@ class TestCellScore(unittest.TestCase):
 # ---------------------------------------------------------------------------
 # Spec §2 worked example (exact numbers)
 # ---------------------------------------------------------------------------
+
 
 class TestWorkedExample(unittest.TestCase):
     """Verify every row in the spec §2 worked-example table."""
@@ -150,8 +152,8 @@ class TestWorkedExample(unittest.TestCase):
 # Status assignment
 # ---------------------------------------------------------------------------
 
-class TestStatusAssignment(unittest.TestCase):
 
+class TestStatusAssignment(unittest.TestCase):
     def test_complete_when_all_cells_attempted_no_load_failure(self):
         records = [_ok(0.8)] * 5
         r = model_rollup("m", records, [], 5)
@@ -197,8 +199,8 @@ class TestStatusAssignment(unittest.TestCase):
 # Floor scoring (spec §3)
 # ---------------------------------------------------------------------------
 
-class TestFloorScoring(unittest.TestCase):
 
+class TestFloorScoring(unittest.TestCase):
     def test_floor_not_run_yields_none_fields(self):
         r = model_rollup("m", [_ok(0.5)] * 5, [], 5)
         self.assertIsNone(r["floor_score"])
@@ -238,8 +240,8 @@ class TestFloorScoring(unittest.TestCase):
 # run_status_from_scores
 # ---------------------------------------------------------------------------
 
-class TestRunStatusFromScores(unittest.TestCase):
 
+class TestRunStatusFromScores(unittest.TestCase):
     def test_empty_list_is_complete(self):
         self.assertEqual(run_status_from_scores([]), "complete")
 

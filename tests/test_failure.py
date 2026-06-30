@@ -101,14 +101,10 @@ class TestClassifyCancelled(unittest.TestCase):
 
 class TestClassifyRefusal(unittest.TestCase):
     def test_i_cannot(self):
-        self.assertEqual(
-            classify(response_text="I cannot help with that request."), "refusal"
-        )
+        self.assertEqual(classify(response_text="I cannot help with that request."), "refusal")
 
     def test_i_cant(self):
-        self.assertEqual(
-            classify(response_text="I can't assist with this."), "refusal"
-        )
+        self.assertEqual(classify(response_text="I can't assist with this."), "refusal")
 
     def test_im_sorry(self):
         self.assertEqual(
@@ -162,21 +158,15 @@ class TestClassifyUnknown(unittest.TestCase):
 class TestClassifyPrecedence(unittest.TestCase):
     def test_cancelled_beats_timeout(self):
         # Message matches both cancelled and timeout; cancelled wins.
-        self.assertEqual(
-            classify(message="cancelled after timed out"), "cancelled"
-        )
+        self.assertEqual(classify(message="cancelled after timed out"), "cancelled")
 
     def test_timeout_beats_infra(self):
         # Message matches timeout and network; timeout wins.
-        self.assertEqual(
-            classify(message="network timeout"), "timeout"
-        )
+        self.assertEqual(classify(message="network timeout"), "timeout")
 
     def test_oom_beats_load_failure(self):
         # "failed to load" + "out of memory": oom checked before load_failure.
-        self.assertEqual(
-            classify(message="failed to load: out of memory"), "oom"
-        )
+        self.assertEqual(classify(message="failed to load: out of memory"), "oom")
 
     def test_infra_beats_refusal(self):
         # infra_error checked before refusal.

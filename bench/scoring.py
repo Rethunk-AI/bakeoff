@@ -94,6 +94,7 @@ def model_rollup(
     -------
     dict with keys matching ``model_scores[*]`` in spec §2 / §3.
     """
+
     # --- cells_attempted: response received; failure_code and error both null
     def _is_attempted(r: dict) -> bool:
         return r.get("failure_code") is None and not r.get("error")
@@ -121,9 +122,7 @@ def model_rollup(
     partial_score = 0.0 if cells_total == 0 else max(0.0, min(1.0, score_sum / cells_total))
 
     # --- status
-    has_load_failure = any(
-        _failure_code(r) == "load_failure" for r in main_records
-    )
+    has_load_failure = any(_failure_code(r) == "load_failure" for r in main_records)
     if completeness == 1.0 and not has_load_failure:
         status = "complete"
     elif completeness == 0.0:

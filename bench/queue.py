@@ -49,8 +49,8 @@ _PENDING = "pending"
 _COMPLETED = "completed"
 
 # Backoff constants (per #13 design).
-_RETRY_BACKOFF_MINUTES = 5    # retry_after = now + N * attempt_count minutes
-_RETRY_PRIORITY_BUMP = 5      # priority += N * attempt_count
+_RETRY_BACKOFF_MINUTES = 5  # retry_after = now + N * attempt_count minutes
+_RETRY_PRIORITY_BUMP = 5  # priority += N * attempt_count
 
 _STATUS_PENDING = "PENDING"
 _STATUS_CLAIMED = "CLAIMED"

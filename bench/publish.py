@@ -275,7 +275,11 @@ def _emit_reports(payload: dict[str, Any], bundle_dir: Path) -> None:
 
 
 _SCORE_SUMMARY_KEYS = (
-    "model_id", "status", "partial_score", "floor_score", "dominant_failure_code"
+    "model_id",
+    "status",
+    "partial_score",
+    "floor_score",
+    "dominant_failure_code",
 )
 
 

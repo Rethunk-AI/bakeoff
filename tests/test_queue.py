@@ -158,6 +158,7 @@ def test_fail_multiple_retries_accumulate():
 
     # Reset retry_after so it can be claimed again.
     import json
+
     path = queue._pending_path(qid)
     data = json.loads(path.read_text())
     data["retry_after"] = None
@@ -224,9 +225,7 @@ def test_reap_stale_claims():
 
     path = queue._pending_path(qid)
     data = json.loads(path.read_text())
-    stale_time = (datetime.now(timezone.utc) - timedelta(minutes=20)).strftime(
-        "%Y-%m-%dT%H:%M:%SZ"
-    )
+    stale_time = (datetime.now(timezone.utc) - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
     data["claimed_at"] = stale_time
     path.write_text(json.dumps(data))
 

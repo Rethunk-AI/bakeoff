@@ -1,8 +1,8 @@
 # Mirrors the CI checks in .github/workflows/ci.yml so local commits fail
-# fast on things CI would catch. Not a superset — mypy and pytest run only
+# fast on things CI would catch. Not a superset — pyrefly and pytest run only
 # in CI because they depend on the full dev environment (types-PyYAML,
 # pytest fixtures) and would slow down every commit. Run them locally with
-#   uv run mypy bench/
+#   uv run pyrefly check bench/
 #   uv run python -m pytest
 # before opening a PR. See CONTRIBUTING.md.
 
@@ -11,7 +11,7 @@ repos:
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
-        exclude: \.md$    # markdown trailing spaces can be intentional line breaks
+        exclude: \.md$ # markdown trailing spaces can be intentional line breaks
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-toml

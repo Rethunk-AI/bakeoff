@@ -19,7 +19,7 @@ content here; we deliberately keep it in one place.
 
 Base environment (podman, `uv`, GGUFs): [`HUMANS.md` § Prerequisites](HUMANS.md#prerequisites). Don't re-derive that here.
 
-Dev extras (ruff, mypy, pytest, types-PyYAML) on top of the base venv:
+Dev extras (ruff, pyrefly, pytest, types-PyYAML) on top of the base venv:
 
 ```sh
 uv pip install -e ".[dev]"
@@ -36,11 +36,11 @@ pre-commit run --all-files
 ```
 
 `pre-commit` covers ruff, shellcheck, actionlint, and basic file hygiene. It
-deliberately does **not** run mypy or pytest (they need the dev venv and are
+deliberately does **not** run pyrefly or pytest (they need the dev venv and are
 slow for every commit). Run those once before pushing:
 
 ```sh
-uv run mypy bench/
+uv run pyrefly check bench/
 uv run python -m pytest
 uv run python -m bench.runner --config config.yaml --dry-run
 ```

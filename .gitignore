@@ -5,7 +5,7 @@ __pycache__/
 .Python
 *.egg-info/
 .pytest_cache/
-.mypy_cache/
+.pyrefly_cache/
 .ruff_cache/
 
 # uv / venv

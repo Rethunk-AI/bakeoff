@@ -71,7 +71,8 @@ def _render_cmd(
     mid = entry["id"]
     gguf = entry["gguf"]
     alias = entry.get("alias") or mid
-    ctx = int(entry.get("ctx", server_cfg.get("ctx", 4096)))
+    ctx_default: int = server_cfg.get("ctx", 4096)
+    ctx = int(entry.get("ctx", ctx_default))
     ngl = int(server_cfg.get("ngl", 99))
     ubatch = int(server_cfg.get("ubatch", 512))
     ctk = str(server_cfg.get("cache_type_k", "q8_0"))

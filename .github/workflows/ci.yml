@@ -19,52 +19,52 @@ jobs:
     name: python lint + type + dry-run
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-    - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
-      with:
-        python-version: "3.12"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.2.0
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.2.0
 
-    - name: Install dev deps
-      run: uv sync --all-extras
+      - name: Install dev deps
+        run: uv sync --all-extras
 
-    - name: Ruff
-      run: uv run ruff check bench/ tests/
+      - name: Ruff
+        run: uv run ruff check bench/ tests/
 
-    - name: Mypy
-      run: uv run mypy bench/
+      - name: Pyrefly
+        run: uv run pyrefly check bench/
 
-    - name: Py compile
-      run: uv run python -m compileall -q bench/ tests/
+      - name: Py compile
+        run: uv run python -m compileall -q bench/ tests/
 
-    - name: Pytest
-      run: uv run pytest
+      - name: Pytest
+        run: uv run pytest
 
-    - name: Dry-run
-      run: uv run python -m bench.runner --config config.yaml --dry-run
+      - name: Dry-run
+        run: uv run python -m bench.runner --config config.yaml --dry-run
 
   shell:
     name: shell scripts
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-    - name: Shellcheck
-      run: shellcheck bin/llama-swap.sh run.sh
+      - name: Shellcheck
+        run: shellcheck bin/llama-swap.sh run.sh
 
   workflows:
     name: actionlint
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-    - name: Install actionlint
-      run: |
-        bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-        echo "$PWD" >> "$GITHUB_PATH"
+      - name: Install actionlint
+        run: |
+          bash <(curl -fsSL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          echo "$PWD" >> "$GITHUB_PATH"
 
-    - name: Lint workflows
-      run: actionlint -color
+      - name: Lint workflows
+        run: actionlint -color

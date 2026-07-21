@@ -7,6 +7,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [Unreleased]
 
 ### Added
+
 - **Disk-persistence layer** — `bench/store.py` (atomic JSON record I/O under `BAKEOFF_DATA_DIR`; directory-per-table / UUID-filename layout; `schema_version` audit stamping; deterministic UUID5 helpers), `bench/descriptor.py` (model descriptor reader/validator with a hard `schema_version` gate), and `bench/queue.py` (opt-in disk-backed run queue: `pending/` + `completed/` DR layout, race-safe rename-as-mutex `claim()`, retry backoff + terminal failure, stale-claim reaping). The standalone runner default is unchanged; the queue is strictly opt-in. (#13, #15)
 - **`interface_types` seed** — `schema/seeds/interface_types.json`, completing the seed-file pattern for the last lookup table that was only seeded inline in `schema.sql`. (#22)
 - **Failure-reason taxonomy** — `bench/failure.py` introduces a `failure_code` enum (`timeout`, `refusal`, `malformed_output`, `oom`, `load_failure`, `capability_gap`, `infra_error`, `cancelled`, `unknown`) and a classifier; replaces the previous free-text `error` field. The runner now emits a structured `failure_code` + `failure_detail` per cell. (#23)
@@ -19,12 +20,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Schema-version tracking** — `schema_versions`, `schema_tables`, and `schema_tables_join` tables for schema-version tracking and migration-graph bookkeeping. (#25)
 
 ### Changed
+
 - Refactored runner to route all inference through `llama-swap` proxy; retired `bin/serve.sh` in favour of `bin/llama-swap.sh`.
 - Extracted `bench.config` module; validation and `judge_id` helper are now shared across runner, report, and llama-swap generator.
 - Consolidated `_fmt`, `resolve_models_dir`, `DEFAULT_CONFIG`, and several small helpers that had drifted to multiple sites.
 - Updated repo-ops dependency and GitHub Actions versions.
+- **Dev tooling:** replaced `mypy` with `pyrefly` for type checking (CI, pre-commit docs, `.gitignore`); repository-only change, no user-facing effect.
 
 ### Fixed
+
 - Removed duplicate `_fmt` definition in `bench/report.py`.
 - Applied current ruff formatting fleet-wide.
 
@@ -35,6 +39,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 First complete benchmark harness.
 
 ### Added
+
 - **Core harness** — `bench/runner.py`: sequential per-model matrix (`tasks × prompt_variants × models`); `llama-swap` proxy lifecycle (up / warmup / matrix / judge / down); warmup call excluded from `PowerSampler` to avoid absorbing swap cost.
 - **llama-swap integration** — `bin/llama-swap.sh` launcher (up / down / sweep / wait) and `bench/llama_swap.py` config generator; produces a validated proxy config from `config.yaml` with `globalTTL: 0` and `sendLoadingState: false` enforced.
 - **Judge modes** — `pairwise_all` (round-robin tournament, order-randomized per call to mitigate positional bias) and `scored` (absolute 1–5 rubric); threshold guidance: N ∈ {2–4} → pairwise, N ≥ 5 → scored.
@@ -56,6 +61,7 @@ First complete benchmark harness.
 - **Three-tier governance** — `README.md` (entry point), `HUMANS.md` (operators), `AGENTS.md` / `CLAUDE.md` (LLMs + contributors).
 
 ### Technical constraints
+
 - One model in VRAM at a time (unified-memory APU support; Strix Halo / Radeon 8060S tested).
 - `pairwise_all` judge order randomized per call (seeded from `run.seed`); swapped verdicts inverted before counting.
 - Cost axis is energy (Wh / USD), not token count; `null` on Strix Halo due to `libdrm_amdgpu.so` failures in `rocm-smi`.

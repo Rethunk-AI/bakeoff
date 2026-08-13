@@ -161,7 +161,6 @@ func TestGoToTengoTengoToGo_RoundTrip(t *testing.T) {
 		{"bytes", []byte("world"), []byte("world")},
 	}
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			got := tengoToGo(goToTengo(tc.in))
 			switch exp := tc.want.(type) {

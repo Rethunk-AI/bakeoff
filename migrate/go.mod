@@ -1,6 +1,6 @@
 module github.com/Rethunk-AI/bakeoff/migrate
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/Masterminds/squirrel v1.5.4

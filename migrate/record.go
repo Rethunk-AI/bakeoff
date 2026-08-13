@@ -4,6 +4,7 @@ package migrate
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/d5/tengo/v2"
 )
@@ -23,9 +24,7 @@ type Record struct {
 // NewRecord constructs a Record from a row map.
 func NewRecord(row map[string]any) *Record {
 	data := make(map[string]any, len(row))
-	for k, v := range row {
-		data[k] = v
-	}
+	maps.Copy(data, row)
 	return &Record{
 		data:    data,
 		dirty:   make(map[string]any),

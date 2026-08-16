@@ -11,7 +11,6 @@ __pycache__/
 # uv / venv
 .venv/
 venv/
-.python-version
 uv.lock
 
 # Benchmark output (generated per run)

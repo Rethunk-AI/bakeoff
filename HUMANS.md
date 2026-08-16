@@ -33,8 +33,7 @@ AMD users: the image uses Vulkan, works on ROCm-supported GPUs and APUs without 
 Without the wrapper:
 
 ```sh
-uv venv .venv
-uv pip install -r requirements.txt
+uv sync
 uv run python -m bench.runner --config config.yaml
 ```
 
@@ -216,7 +215,7 @@ and static leaderboard generation.
 ## Troubleshooting
 
 | Symptom | Cause / fix |
-|---------|-------------|
+| --------- | ------------- |
 | `llama-swap.sh: binary not found` | Bootstrap hasn't run yet. Execute `./run.sh` once; it fetches and SHA-verifies the pinned binary into `.cache/llama-swap/`. |
 | `SHA256 mismatch for ...` during bootstrap | The pinned version's checksum no longer matches the downloaded tarball. Check the release on GitHub; update both `LLAMA_SWAP_VERSION` and the matching `LLAMA_SWAP_SHA256_*` line in `run.sh`. Never bypass the check. |
 | Port `server.swap_port` already in use | `llama-swap` itself, another benchmark instance, or LM Studio holds it. Stop the other process or change `server.swap_port`. |
@@ -248,7 +247,7 @@ run:
 ```
 
 | Mode | Behaviour |
-|------|-----------|
+| ------ | ----------- |
 | `off` | No HF calls. Safe for offline and air-gapped environments. |
 | `best-effort` | Failures append to `provenance.warnings` and the run continues. |
 | `strict` | Any lookup failure aborts the run with an error. |
@@ -270,6 +269,7 @@ uv run python -m bench.compare base.json cand.json --strict   # exit 1 on any wa
 ```
 
 The report includes:
+
 - **Core metrics** — latency, tokens/sec, heuristic quality deltas per model.
 - **Energy and cost** — total Wh and USD deltas per model (columns are `—` when energy was not measured).
 - **Judge scores / win rates** — score delta (scored mode) or win-rate delta (pairwise mode), only when both runs used the same judge mode.
@@ -317,6 +317,7 @@ uv run python -m bench.runner --resume-from results/run-20260101-120000.json
 ```
 
 Resume behaviour:
+
 - **Reused rows** — model rows that completed without error in the prior run are copied into the new result and tagged `resumed_from: <prior_run_id>`.
 - **Pending cells** — rows that are missing or errored in the prior run are re-executed and tagged `source_run_id: <prior_run_id>`.
 - **Models with all cells complete** — skipped entirely (no proxy swap, no warmup call).

@@ -42,7 +42,7 @@ migrate/             Go module: bakeoff migration runner (#27)
   runner.go          MigrationRunner: schema + record script execution, shadow table, batch sizing, FK order, resume gate
   schema_builtins.go Tengo built-ins for schema_migration_script (createTable, dropTable, renameTable, addColumn, createIndex, withIndexDisabled, rawSQL, …)
   cmd/main.go        bakeoff-migrate CLI (DATABASE_URL / --dsn, --batch-size, --max-rejects, --ignore-is-fatal, --dry-run)
-run.sh               uv venv + uv pip install + pinned llama-swap bootstrap + uv run;
+run.sh               uv sync + pinned llama-swap bootstrap + uv run;
                      `fetch` subcommand → bench.download
 .cache/              vendored llama-swap binary + generated proxy config (gitignored)
 datasets/ results/   generated artifacts (gitignored)
@@ -90,7 +90,7 @@ datasets/ results/   generated artifacts (gitignored)
 Three-tier split prevents duplication and routes content to the right audience. Modeled after Rethunk-Tech/Bastion ([`documentation-governance.mdc`](https://github.com/Rethunk-Tech/Bastion/blob/main/.cursor/rules/documentation-governance.mdc)).
 
 | Tier | File | Audience | Content |
-|------|------|----------|---------|
+| ------ | ------ | ---------- | --------- |
 | **README** | [`README.md`](README.md) | Everyone (entry point) | Hook + basic product description + layout + links. **No** full install procedures, env catalogs, troubleshooting tables, or LLM internals — those link out. |
 | **HUMANS** | [`HUMANS.md`](HUMANS.md) | Operators, developers, end-users | Prerequisites, install, usage, config walkthrough, output description, troubleshooting, cleanup. Everything needed to **run and use** the harness. |
 | **AGENTS** | [`AGENTS.md`](AGENTS.md) (this file) | LLMs, contributors, reviewers | Design invariants, hardware caveats, judge mode selection, editing conventions, governance. `CLAUDE.md` is a symlink here. |

@@ -26,6 +26,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Consolidated `_fmt`, `resolve_models_dir`, `DEFAULT_CONFIG`, and several small helpers that had drifted to multiple sites.
 - Updated repo-ops dependency and GitHub Actions versions.
 - **Dev tooling:** replaced `mypy` with `pyrefly` for type checking (CI, pre-commit docs, `.gitignore`); repository-only change, no user-facing effect.
+- **Single dependency source:** removed `requirements.txt`; `pyproject.toml` is now the only declared dependency list. `run.sh` and `HUMANS.md` use `uv sync` instead of `uv pip install -r requirements.txt`.
 
 ### Fixed
 

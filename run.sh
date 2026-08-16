@@ -18,7 +18,10 @@ LLAMA_SWAP_SHA256_linux_arm64="c40a21143efcd5b84a56813edab38af00a34cca10c508b5b5
 LLAMA_SWAP_SHA256_darwin_amd64="c29970ae4e9eac17deca162f0409c7e6152c097c00d124ee8e0f553f7a9641ae"
 LLAMA_SWAP_SHA256_darwin_arm64="7c588e2ba47691694b12194b4f678543c3d23066068a95f769b550027fe08697"
 
-die() { echo "run.sh: $*" >&2; exit 1; }
+die() {
+  echo "run.sh: $*" >&2
+  exit 1
+}
 
 sha256_of() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -33,13 +36,13 @@ sha256_of() {
 detect_platform() {
   local os arch
   case "$(uname -s)" in
-    Linux)  os=linux ;;
+    Linux) os=linux ;;
     Darwin) os=darwin ;;
     *) die "unsupported OS for pre-built llama-swap: $(uname -s)" ;;
   esac
   case "$(uname -m)" in
-    x86_64|amd64)  arch=amd64 ;;
-    aarch64|arm64) arch=arm64 ;;
+    x86_64 | amd64) arch=amd64 ;;
+    aarch64 | arm64) arch=arm64 ;;
     *) die "unsupported arch for pre-built llama-swap: $(uname -m)" ;;
   esac
   echo "${os}_${arch}"
@@ -47,8 +50,8 @@ detect_platform() {
 
 select_checksum() {
   case "$1" in
-    linux_amd64)  echo "$LLAMA_SWAP_SHA256_linux_amd64" ;;
-    linux_arm64)  echo "$LLAMA_SWAP_SHA256_linux_arm64" ;;
+    linux_amd64) echo "$LLAMA_SWAP_SHA256_linux_amd64" ;;
+    linux_arm64) echo "$LLAMA_SWAP_SHA256_linux_arm64" ;;
     darwin_amd64) echo "$LLAMA_SWAP_SHA256_darwin_amd64" ;;
     darwin_arm64) echo "$LLAMA_SWAP_SHA256_darwin_arm64" ;;
     *) return 1 ;;
@@ -58,13 +61,13 @@ select_checksum() {
 bootstrap_llama_swap() {
   local plat checksum url stamp archive target_dir actual
   plat="$(detect_platform)"
-  checksum="$(select_checksum "$plat")" \
-    || die "no pinned checksum for platform: $plat"
+  checksum="$(select_checksum "$plat")" ||
+    die "no pinned checksum for platform: $plat"
 
   target_dir="$here/.cache/llama-swap"
   stamp="$target_dir/VERSION"
-  if [[ -x "$target_dir/llama-swap" && -f "$stamp" ]] \
-       && [[ "$(cat "$stamp")" == "$LLAMA_SWAP_VERSION $plat" ]]; then
+  if [[ -x "$target_dir/llama-swap" && -f "$stamp" ]] &&
+    [[ "$(cat "$stamp")" == "$LLAMA_SWAP_VERSION $plat" ]]; then
     return 0
   fi
 
@@ -84,7 +87,7 @@ bootstrap_llama_swap() {
   tar -xzf "$archive" -C "$target_dir"
   rm -f "$archive"
   [[ -x "$target_dir/llama-swap" ]] || die "extract did not yield executable llama-swap"
-  echo "$LLAMA_SWAP_VERSION $plat" > "$stamp"
+  echo "$LLAMA_SWAP_VERSION $plat" >"$stamp"
 }
 
 if ! command -v uv >/dev/null 2>&1; then
@@ -92,8 +95,9 @@ if ! command -v uv >/dev/null 2>&1; then
   exit 1
 fi
 
-[ -d .venv ] || uv venv .venv
-uv pip install --quiet -r requirements.txt
+# --inexact: don't strip a contributor's dev extras (pytest, ruff, ...) just
+# because this run only needs the base runtime deps.
+uv sync --quiet --inexact
 
 # Subcommands. Default: run the benchmark with the default config.
 case "${1:-}" in

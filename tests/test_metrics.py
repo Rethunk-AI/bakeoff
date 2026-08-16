@@ -93,7 +93,7 @@ class TestParseJudge:
 
     def test_empty_or_none_defaults_tie(self):
         assert parse_judge("") == "TIE"
-        assert parse_judge(None) == "TIE"  # type: ignore[arg-type]
+        assert parse_judge(None) == "TIE"
 
     def test_picks_last_verdict_token(self):
         # Reasoning-model output: earlier tokens are deliberation; final is the call.
@@ -147,7 +147,7 @@ class TestParseScore:
 
     def test_empty_or_none(self):
         assert parse_score("") == 3
-        assert parse_score(None) == 3  # type: ignore[arg-type]
+        assert parse_score(None) == 3
 
     def test_ignores_out_of_range_digits(self):
         # 0, 6, 7, 8, 9 must not count.

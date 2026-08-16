@@ -38,9 +38,11 @@ def test_percentile_p99_clamps_to_max():
     xs = [1.0, 2.0, 3.0, 4.0, 5.0]
     # p99 ~ 4.96, bounded below the max.
     v = _percentile(xs, 99)
+    v95 = _percentile(xs, 95)
     assert v is not None
+    assert v95 is not None
     assert v <= max(xs)
-    assert v > _percentile(xs, 95)  # type: ignore[operator]
+    assert v > v95
 
 
 def test_percentile_unsorted_input_does_not_mutate():

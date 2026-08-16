@@ -91,7 +91,7 @@ def invert_winner(winner: str) -> str:
     return winner  # TIE unchanged
 
 
-def parse_judge(text: str) -> str:
+def parse_judge(text: str | None) -> str:
     """Extract A / B / TIE verdict.
 
     Uses the *last* bare verdict token so that reasoning-style output
@@ -134,7 +134,7 @@ def judge_score_prompt(user_prompt: str, response: str) -> list[dict[str, str]]:
 _SCORE_RE = re.compile(r"\b([1-5])\b")
 
 
-def parse_score(text: str, default: int = 3) -> int:
+def parse_score(text: str | None, default: int = 3) -> int:
     """Extract integer score in [1,5]. Take the last valid digit in range.
 
     Reasoning models emit thoughts before the answer, so prefer the final

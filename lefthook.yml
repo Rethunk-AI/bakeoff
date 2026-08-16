@@ -1,0 +1,37 @@
+# Git hooks, run through gate.
+#
+# The split follows cost. pre-commit carries only what is imperceptible, so it
+# never becomes the thing people reach for --no-verify to escape; everything
+# else waits for the push, which happens rarely and once.
+#
+# Bare `gate` on pre-push detects this project's gates rather than listing them
+# here, so this file cannot drift from what the project actually has.
+#
+# Enable with `uv run lefthook install`. Hooks are not committed by git, so
+# this file is the decision and that command is what applies it.
+
+pre-commit:
+  parallel: true
+  jobs:
+    # ruff, via the project's own lint gate.
+    - name: lint
+      run: gate run lint
+
+    # Not covered by any gate: these scripts are the documented entry points,
+    # and a broken one fails at the moment someone is trying to run the thing.
+    - name: shellcheck
+      glob: "*.sh"
+      run: shellcheck {staged_files}
+
+    # Conflict markers and whitespace errors, straight from git. Cheaper than a
+    # hook framework's file-hygiene plugins and it reads the staged content
+    # rather than the working tree.
+    - name: whitespace
+      run: git diff --cached --check
+
+pre-push:
+  jobs:
+    # Everything: typecheck, lint, workflows, tests, dependencies. This is the
+    # last point before the code leaves the machine.
+    - name: gates
+      run: gate

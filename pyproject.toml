@@ -90,3 +90,8 @@ DEP001 = ["psutil"]
 minversion = "8.0"
 testpaths = ["tests"]
 addopts = "-ra --strict-markers"
+
+[dependency-groups]
+dev = [
+    "lefthook>=2.1.10",
+]

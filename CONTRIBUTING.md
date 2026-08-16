@@ -28,16 +28,17 @@ uv pip install -e ".[dev]"
 ## Before opening a PR
 
 Run the same checks CI runs. The fastest path is
-[`pre-commit`](https://pre-commit.com/):
+[`lefthook`](https://lefthook.dev/):
 
 ```sh
-pre-commit install        # one-time, installs the git hook
-pre-commit run --all-files
+uv run lefthook install   # one-time, installs the git hooks
+uv run lefthook run pre-commit
 ```
 
-`pre-commit` covers ruff, shellcheck, actionlint, and basic file hygiene. It
-deliberately does **not** run pyrefly or pytest (they need the dev venv and are
-slow for every commit). Run those once before pushing:
+pre-commit carries only what is imperceptible — ruff, shellcheck, and a check
+for conflict markers and whitespace errors. pyrefly, pytest and the dependency
+check run on pre-push instead, where the cost is paid once rather than on every
+commit. Run those yourself any time with `gate`, or individually:
 
 ```sh
 uv run pyrefly check bench/

@@ -27,6 +27,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Updated repo-ops dependency and GitHub Actions versions.
 - **Dev tooling:** replaced `mypy` with `pyrefly` for type checking (CI, pre-commit docs, `.gitignore`); repository-only change, no user-facing effect.
 - **Single dependency source:** removed `requirements.txt`; `pyproject.toml` is now the only declared dependency list. `run.sh` and `HUMANS.md` use `uv sync` instead of `uv pip install -r requirements.txt`.
+- **`pyproject.toml` gained a `[build-system]`** (setuptools) — `uv sync` was silently skipping `bakeoff-report` entry-point installation, and `CONTRIBUTING.md`'s `uv pip install -e ".[dev]"` had no backend to build against.
+- **Adopted `deptry`** for import/dependency-declaration drift; runs as the `deps` gate via `.gate.toml`.
+- Removed the dead `[[tool.mypy.overrides]]` block in `pyproject.toml` — mypy was replaced by pyrefly (see above) and is no longer installed anywhere; the PR template and the disk-persistence-layer spec/plan docs are updated to say `pyrefly` too.
 
 ### Fixed
 

@@ -51,7 +51,7 @@ Opt-in disk queue. Claim is race-safe via rename-as-mutex: `os.rename(src, lock)
 
 ## Acceptance Criteria
 
-- `bench/store.py`, `bench/descriptor.py`, `bench/queue.py` pass ruff, mypy (py310), and pytest.
+- `bench/store.py`, `bench/descriptor.py`, `bench/queue.py` pass ruff, pyrefly (py312), and pytest.
 - `bench/runner.py` default path is unchanged.
 - `BAKEOFF_DATA_DIR` is documented in `HUMANS.md`.
 - Spec, plan, and tasks created under `specs/disk-persistence-layer/`.

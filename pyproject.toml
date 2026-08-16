@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "bakeoff"
 version = "0.1.0"
@@ -14,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+  "deptry>=0.25",
   "pyrefly>=0.1",
   "pytest>=9.0.3",
   "ruff>=0.15.13",
@@ -67,11 +72,18 @@ matches = "bench/hardware.py"
 # in the base dev environment.
 missing-import = false
 
-# --- Mypy ------------------------------------------------------------------
-[[tool.mypy.overrides]]
-# huggingface_hub ships no inline types and no stub package on PyPI.
-module = ["huggingface_hub", "huggingface_hub.*"]
-ignore_missing_imports = true
+# --- Deptry ------------------------------------------------------------------
+[tool.deptry]
+known_first_party = ["bench"]
+# The "dev" extra is tooling (linters, type checker, test runner) invoked as
+# CLIs, not imported by bench/ -- without this deptry reports every one of
+# them as an unused dependency (DEP002).
+optional_dependencies_dev_groups = ["dev"]
+
+[tool.deptry.per_rule_ignores]
+# Same lazy/optional psutil import as the pyrefly sub-config above: never a
+# hard dependency, so deptry can't see it as declared.
+DEP001 = ["psutil"]
 
 # --- Pytest ----------------------------------------------------------------
 [tool.pytest.ini_options]

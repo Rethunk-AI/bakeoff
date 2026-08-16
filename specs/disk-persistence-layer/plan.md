@@ -12,6 +12,6 @@
 ## Test Plan
 
 - `uv run ruff check bench/store.py bench/descriptor.py bench/queue.py tests/test_store.py tests/test_descriptor.py tests/test_queue.py`
-- `uv run mypy bench/store.py bench/descriptor.py bench/queue.py`
+- `uv run pyrefly check bench/store.py bench/descriptor.py bench/queue.py`
 - `uv run pytest tests/test_store.py tests/test_descriptor.py tests/test_queue.py -q`
 - `uv run pytest -q` (full suite; no new regressions)

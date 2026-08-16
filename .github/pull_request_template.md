@@ -23,8 +23,8 @@
 ## Verification
 
 - [ ] `ruff check bench/`
-- [ ] `mypy bench/`
-- [ ] `shellcheck bin/serve.sh run.sh`
+- [ ] `pyrefly check bench/`
+- [ ] `shellcheck bin/llama-swap.sh run.sh`
 - [ ] `python -m bench.runner --config config.yaml --dry-run`
 - [ ] End-to-end run against real models (if serving or judge logic changed)
 

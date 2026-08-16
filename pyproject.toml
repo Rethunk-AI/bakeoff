@@ -17,6 +17,7 @@ dev = [
   "pyrefly>=0.1",
   "pytest>=9.0.3",
   "ruff>=0.15.13",
+  "types-psutil>=7.0.0.20250601",
   "types-PyYAML>=6.0.12.20260518",
 ]
 
@@ -65,6 +66,12 @@ matches = "bench/hardware.py"
 # try/except) -- not declared in [project.dependencies], not installed
 # in the base dev environment.
 missing-import = false
+
+# --- Mypy ------------------------------------------------------------------
+[[tool.mypy.overrides]]
+# huggingface_hub ships no inline types and no stub package on PyPI.
+module = ["huggingface_hub", "huggingface_hub.*"]
+ignore_missing_imports = true
 
 # --- Pytest ----------------------------------------------------------------
 [tool.pytest.ini_options]

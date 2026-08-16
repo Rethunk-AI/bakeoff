@@ -41,7 +41,7 @@ import contextlib
 import json
 import os
 import tempfile
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -68,16 +68,16 @@ _ISO_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime(_ISO_FMT)
+    return datetime.now(UTC).strftime(_ISO_FMT)
 
 
 def _parse_dt(s: str) -> datetime:
     """Parse an ISO-8601 UTC string (always ends in Z) into an aware datetime."""
-    return datetime.strptime(s, _ISO_FMT).replace(tzinfo=timezone.utc)
+    return datetime.strptime(s, _ISO_FMT).replace(tzinfo=UTC)
 
 
 def _now_dt() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 # ---------------------------------------------------------------------------

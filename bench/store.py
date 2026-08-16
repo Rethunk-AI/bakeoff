@@ -25,7 +25,7 @@ import contextlib
 import json
 import os
 import tempfile
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
@@ -62,7 +62,7 @@ def data_dir() -> Path:
 
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def _stamp_audit(existing: dict[str, Any] | None, record: dict[str, Any]) -> dict[str, Any]:

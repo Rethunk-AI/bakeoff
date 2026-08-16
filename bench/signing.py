@@ -21,7 +21,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -91,7 +91,7 @@ def sign_result(
     sha256_hex = sha256_bytes.hex()
     signature_bytes = private_key.sign(sha256_bytes)
     signature_b64 = base64.b64encode(signature_bytes).decode()
-    signed_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    signed_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     return {
         "result": result,
         "sig": {

@@ -10,7 +10,7 @@ from __future__ import annotations
 import concurrent.futures
 import contextlib
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -109,9 +109,9 @@ def test_fail_retry_increments_attempt_and_sets_backoff():
     assert result["retry_after"] is not None
     # retry_after must be in the future.
     retry_dt = datetime.strptime(result["retry_after"], "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=timezone.utc
+        tzinfo=UTC
     )
-    assert retry_dt > datetime.now(timezone.utc)
+    assert retry_dt > datetime.now(UTC)
     # priority bumped.
     assert result["priority"] > 100
 
@@ -192,7 +192,7 @@ def test_cancel_moves_to_completed():
 
 def test_claim_respects_retry_after():
     """An item with retry_after in the future must not be claimed."""
-    future = (datetime.now(timezone.utc) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    future = (datetime.now(UTC) + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     item = _item({"retry_after": future})
     queue.enqueue(item)
 
@@ -201,7 +201,7 @@ def test_claim_respects_retry_after():
 
 def test_claim_picks_up_past_retry_after():
     """An item with retry_after in the past is eligible."""
-    past = (datetime.now(timezone.utc) - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    past = (datetime.now(UTC) - timedelta(minutes=10)).strftime("%Y-%m-%dT%H:%M:%SZ")
     item = _item({"retry_after": past})
     qid = queue.enqueue(item)
 
@@ -225,7 +225,7 @@ def test_reap_stale_claims():
 
     path = queue._pending_path(qid)
     data = json.loads(path.read_text())
-    stale_time = (datetime.now(timezone.utc) - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    stale_time = (datetime.now(UTC) - timedelta(minutes=20)).strftime("%Y-%m-%dT%H:%M:%SZ")
     data["claimed_at"] = stale_time
     path.write_text(json.dumps(data))
 

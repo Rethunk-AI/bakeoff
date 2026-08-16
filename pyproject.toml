@@ -2,7 +2,7 @@
 name = "bakeoff"
 version = "0.1.0"
 description = "Local LLM N-vs-N benchmark harness (llama.cpp podman + OpenAI-compat)."
-requires-python = ">=3.10"
+requires-python = ">=3.12"
 readme = "README.md"
 license = { file = "LICENSE" }
 dependencies = [
@@ -37,7 +37,7 @@ packages = ["bench"]
 # discipline but exempt those.
 [tool.ruff]
 line-length = 100
-target-version = "py310"
+target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]

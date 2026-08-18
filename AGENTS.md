@@ -2,7 +2,7 @@
 
 Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap` proxy sitting in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` containers, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on `llama-swap`'s singleton swap to unload the previous backend before the next boots. Judge runs as its own swap target after the A/B phases.
 
-**Claude Code:** `CLAUDE.md` is a symlink to this file. Edit **AGENTS.md**.
+**Claude Code:** `CLAUDE.md` is `@AGENTS.md`. Edit **AGENTS.md**.
 
 **Global rules** (shell tools, git/MCP preference, commit discipline, sandbox) live in `~/.claude/CLAUDE.md`. Do not restate them here. This file is project-specific LLM onboarding only.
 

@@ -1,7 +1,6 @@
 -- schema/schema.sql
 -- Relational schema for the bakeoff benchmarking harness.
--- Design agreed in Rethunk-AI/bakeoff#12, #13, #14, #15.
--- Do not hand-edit without a matching update to the relevant issues.
+-- Do not hand-edit without updating the migration runner and seed files in lockstep.
 
 -- ---------------------------------------------------------------------------
 -- source_types
@@ -12,7 +11,7 @@ CREATE TABLE source_types (
     name           TEXT NOT NULL UNIQUE   -- 'huggingface', 'ollama', 'direct_url', 'local_file'
 );
 
--- Seed: canonical provider names agreed in #14
+-- Seed: canonical provider names
 INSERT INTO source_types (name) VALUES
     ('huggingface'),
     ('ollama'),
@@ -20,7 +19,7 @@ INSERT INTO source_types (name) VALUES
     ('local_file');
 
 -- ---------------------------------------------------------------------------
--- quantization_methods (#13)
+-- quantization_methods
 -- Lookup table for model quantization formats.
 -- vram_multiplier = bytes per active parameter (e.g. 4.0 for fp32, 0.563 for q4_k_m).
 -- Used in claim query: CEIL(active_parameter_count_b * vram_multiplier * 1.15) <= runner_vram_gb.
@@ -71,10 +70,10 @@ INSERT INTO quantization_methods (name, vram_multiplier, description) VALUES
     ('iq1_s',   0.188, 'GGUF IQ1_S — 1-bit imatrix small');
 
 -- ---------------------------------------------------------------------------
--- model_architectures (#13/#15)
+-- model_architectures
 -- Lookup table for model architecture types.
 -- Seed data in seeds/model_architectures.json.
--- New values require admin review — no automated insertion (#13).
+-- New values require admin review — no automated insertion.
 -- ---------------------------------------------------------------------------
 CREATE TABLE model_architectures (
     architecture_id  SERIAL  PRIMARY KEY,
@@ -89,10 +88,10 @@ INSERT INTO model_architectures (name, description) VALUES
     ('Hybrid', 'Mixed architecture combining MoE and Dense layers');
 
 -- ---------------------------------------------------------------------------
--- model_file_formats (#13/#15)
+-- model_file_formats
 -- Lookup table for model weight file formats.
 -- Seed data in seeds/model_file_formats.json.
--- New values require admin review — no automated insertion (#13).
+-- New values require admin review — no automated insertion.
 -- ---------------------------------------------------------------------------
 CREATE TABLE model_file_formats (
     file_format_id  SERIAL  PRIMARY KEY,
@@ -109,7 +108,7 @@ INSERT INTO model_file_formats (name, description) VALUES
     ('MLX',         'Apple MLX framework format');
 
 -- ---------------------------------------------------------------------------
--- creators (#13/#15)
+-- creators
 -- Organisations or individuals that publish models.
 -- creator_id is deterministic UUID5(BAKEOFF_CREATOR_NAMESPACE, homepage).
 -- Fallback: UUID5(BAKEOFF_CREATOR_NAMESPACE, display_name) with provisional=true.
@@ -124,18 +123,18 @@ CREATE TABLE creators (
 );
 
 -- ---------------------------------------------------------------------------
--- models (#13/#15)
+-- models
 -- One row per distinct weights file / quantisation variant.
 -- model_id is deterministic UUID5(BAKEOFF_MODEL_NAMESPACE, model_hash) when hash known;
 -- UUID5(BAKEOFF_MODEL_NAMESPACE, source_url|param_count_b|model_source_size) provisional.
--- Lookup FKs for architecture, file_format, quantization (#13).
--- min_vram is calculated (active_parameter_count_b * vram_multiplier * 1.15), not stored (#13).
+-- Lookup FKs for architecture, file_format, quantization.
+-- min_vram is calculated (active_parameter_count_b * vram_multiplier * 1.15), not stored.
 -- ---------------------------------------------------------------------------
 CREATE TABLE models (
     model_id                  UUID PRIMARY KEY,
     name                      TEXT NOT NULL,
     creator_id                UUID REFERENCES creators,
-    model_hash                TEXT UNIQUE,               -- SHA256 of weights file; dedup ground truth (#12)
+    model_hash                TEXT UNIQUE,               -- SHA256 of weights file; dedup ground truth
     parameter_count_b         FLOAT,                    -- total params in billions
     active_parameter_count_b  FLOAT,                    -- active params per forward pass (= total for Dense)
     architecture_id           INT REFERENCES model_architectures,
@@ -144,8 +143,8 @@ CREATE TABLE models (
     context_length_max        INT,
     file_format_id            INT REFERENCES model_file_formats,
     quantization_id           INT REFERENCES quantization_methods,
-    model_source_mtime        TIMESTAMPTZ,               -- mtime of cached weights file (#13)
-    model_source_size         BIGINT,                   -- byte size of cached weights file (#13)
+    model_source_mtime        TIMESTAMPTZ,               -- mtime of cached weights file
+    model_source_size         BIGINT,                   -- byte size of cached weights file
     release_date              DATE,
     version                   TEXT,
     description               TEXT,
@@ -162,7 +161,7 @@ CREATE TABLE model_sources (
     model_id        UUID NOT NULL REFERENCES models,
     source_type_id  INT NOT NULL REFERENCES source_types,
     url             TEXT NOT NULL,
-    source_metadata JSONB,          -- flat: provider identity + stats, no sub-objects (#14)
+    source_metadata JSONB,          -- flat: provider identity + stats, no sub-objects
                                     -- e.g. {"ollama_tag": "llama3:8b-q4_K_M", "pulls": 3000}
                                     -- e.g. {"hf_commit": "abc123", "downloads": 50000}
     updated         TIMESTAMPTZ     -- when source_metadata and model_hash were last sourced
@@ -178,12 +177,12 @@ CREATE TABLE task_categories (
     description TEXT
 );
 
--- Seed: dumb_model floor tier (Rethunk-AI/bakeoff#23)
+-- Seed: dumb_model floor tier
 INSERT INTO task_categories (name, description)
     VALUES ('dumb_model', 'Minimal-capability floor suite: deterministic scorers only.')
     ON CONFLICT (name) DO NOTHING;
 
--- Seed: cyber_safety category (Rethunk-AI/bakeoff#33)
+-- Seed: cyber_safety category
 INSERT INTO task_categories (name, description)
 VALUES (
   'cyber_safety',
@@ -194,8 +193,8 @@ ON CONFLICT (name) DO NOTHING;
 -- ---------------------------------------------------------------------------
 -- tasks
 -- Tiered: parent_id IS NULL = top-level suite; non-null = sub-task.
--- natural_key_hash = SHA256 of canonical path relative to prompts root (#12).
--- uplift_baseline_task_id: reference task whose score forms the uplift baseline (#33).
+-- natural_key_hash = SHA256 of canonical path relative to prompts root.
+-- uplift_baseline_task_id: reference task whose score forms the uplift baseline.
 -- ---------------------------------------------------------------------------
 CREATE TABLE tasks (
     task_id              SERIAL PRIMARY KEY,
@@ -209,13 +208,13 @@ CREATE TABLE tasks (
     natural_key_hash     TEXT NOT NULL UNIQUE
 );
 
--- Extend tasks: uplift baseline reference (Rethunk-AI/bakeoff#33)
+-- Extend tasks: uplift baseline reference
 ALTER TABLE tasks
     ADD COLUMN IF NOT EXISTS uplift_baseline_task_id INT REFERENCES tasks(task_id);
 
 -- ---------------------------------------------------------------------------
 -- prompts
--- Metadata for prompt files tracked in git (#12).
+-- Metadata for prompt files tracked in git.
 -- ---------------------------------------------------------------------------
 CREATE TABLE prompts (
     prompt_id            SERIAL PRIMARY KEY,
@@ -232,32 +231,32 @@ CREATE TABLE prompts (
 );
 
 -- ---------------------------------------------------------------------------
--- runners (#13/#16)
+-- runners
 -- One row per registered runner.
--- Merged: Ed25519 signing identity (#16) + queue worker tracking (#13).
+-- Merged: Ed25519 signing identity + queue worker tracking.
 -- public_key is base64-encoded Ed25519 public key.
 -- hostname/process_id/effective_user/last_heartbeat populated by queue worker mode.
--- TODO(deferred P2 #13): migrate status TEXT+CHECK to ENUM once schema stabilises.
+-- TODO(deferred P2): migrate status TEXT+CHECK to ENUM once schema stabilises.
 -- ---------------------------------------------------------------------------
 CREATE TABLE runners (
     runner_id      TEXT        PRIMARY KEY,
-    public_key     TEXT        NOT NULL,                     -- Ed25519 public key, base64 (#16)
-    hostname       TEXT,                                     -- runner hostname (#13)
-    process_id     INT,                                      -- runner PID (#13)
-    effective_user TEXT,                                     -- OS user (#13)
-    last_heartbeat TIMESTAMPTZ,                              -- updated every 60s by queue worker (#13)
+    public_key     TEXT        NOT NULL,                     -- Ed25519 public key, base64
+    hostname       TEXT,                                     -- runner hostname
+    process_id     INT,                                      -- runner PID
+    effective_user TEXT,                                     -- OS user
+    last_heartbeat TIMESTAMPTZ,                              -- updated every 60s by queue worker
     status         TEXT        NOT NULL DEFAULT 'ACTIVE'
                                CHECK (status IN ('ACTIVE', 'IDLE', 'DEAD')),
     registered_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    started_at     TIMESTAMPTZ,                              -- when this process started (#13)
+    started_at     TIMESTAMPTZ,                              -- when this process started
     description    TEXT
 );
 
 -- ---------------------------------------------------------------------------
 -- runs
 -- A single benchmarking execution.
--- run_id is client-generated UUID (#12).
--- runner_id FK records which runner executed this run (#13).
+-- run_id is client-generated UUID.
+-- runner_id FK records which runner executed this run.
 -- ---------------------------------------------------------------------------
 CREATE TABLE runs (
     run_id          UUID PRIMARY KEY,
@@ -265,16 +264,16 @@ CREATE TABLE runs (
     publisher_id    TEXT NOT NULL,
     runner_version  TEXT,
     prompt_git_hash TEXT,
-    runner_id       TEXT REFERENCES runners   -- null = standalone run, no queue registration (#13)
+    runner_id       TEXT REFERENCES runners   -- null = standalone run, no queue registration
 );
 
--- Extend runs: run-level completeness status (Rethunk-AI/bakeoff#23)
+-- Extend runs: run-level completeness status
 ALTER TABLE runs
     ADD COLUMN IF NOT EXISTS run_status TEXT
         CHECK (run_status IN ('complete', 'incomplete', 'failed'));
 
 -- ---------------------------------------------------------------------------
--- run_queue (#13)
+-- run_queue
 -- Operational queue for model test jobs. DB-authoritative; files in queue/
 -- directory serve as bootstrap / disaster-recovery artefacts only.
 -- Claim protocol: FOR UPDATE SKIP LOCKED; capability filter in claim query.
@@ -308,7 +307,7 @@ CREATE INDEX run_queue_claim_idx
 -- run_model_metrics
 -- Per-(run, prompt, model) result row.
 -- score NULL means the run failed for this cell.
--- gflops_per_token = theoretical GFLOPs per forward-pass token (#12).
+-- gflops_per_token = theoretical GFLOPs per forward-pass token.
 -- ---------------------------------------------------------------------------
 CREATE TABLE run_model_metrics (
     run_id           UUID NOT NULL REFERENCES runs,
@@ -321,13 +320,13 @@ CREATE TABLE run_model_metrics (
     PRIMARY KEY (run_id, prompt_id, model_id)
 );
 
--- Extend run_model_metrics: structured failure detail (Rethunk-AI/bakeoff#23)
+-- Extend run_model_metrics: structured failure detail
 ALTER TABLE run_model_metrics
     ADD COLUMN IF NOT EXISTS failure_detail TEXT;
 -- (failure_reason already exists; its values now conform to the failure_code taxonomy)
 
 -- ---------------------------------------------------------------------------
--- agent_traces (#33)
+-- agent_traces
 -- Per-step trace for agentic evaluation runs (C4 cyber_safety, C6 agentic).
 -- boundary_violated: true if the step crossed a containment / safety boundary.
 -- cost_tokens: token cost for this action step; NULL for non-LLM steps.
@@ -348,12 +347,12 @@ CREATE TABLE agent_traces (
     UNIQUE (run_id, prompt_id, model_id, step_index)
 );
 
--- Extend run_model_metrics: link to agent_traces for agentic evaluation (#33)
+-- Extend run_model_metrics: link to agent_traces for agentic evaluation
 ALTER TABLE run_model_metrics
     ADD COLUMN IF NOT EXISTS trace_id UUID REFERENCES agent_traces(trace_id);
 
 -- ---------------------------------------------------------------------------
--- interface_type (#17)
+-- interface_type
 -- GPU interface / interconnect bus types.
 -- ---------------------------------------------------------------------------
 CREATE TABLE interface_type (
@@ -374,7 +373,7 @@ INSERT INTO interface_type (name) VALUES
     ('integrated');
 
 -- ---------------------------------------------------------------------------
--- system_hardware (#19)
+-- system_hardware
 -- Host machine hardware snapshot.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_hardware (
@@ -387,7 +386,7 @@ CREATE TABLE system_hardware (
 );
 
 -- ---------------------------------------------------------------------------
--- system_software (#19)
+-- system_software
 -- Host OS / driver snapshot.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_software (
@@ -399,7 +398,7 @@ CREATE TABLE system_software (
 );
 
 -- ---------------------------------------------------------------------------
--- gpu_hardware (#18)
+-- gpu_hardware
 -- One row per physical GPU slot.
 -- ---------------------------------------------------------------------------
 CREATE TABLE gpu_hardware (
@@ -413,7 +412,7 @@ CREATE TABLE gpu_hardware (
 );
 
 -- ---------------------------------------------------------------------------
--- system_gpu_link (#20)
+-- system_gpu_link
 -- Many-to-many: which GPUs are in which system snapshot.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_gpu_link (
@@ -424,7 +423,7 @@ CREATE TABLE system_gpu_link (
 );
 
 -- ---------------------------------------------------------------------------
--- run_hardware_metrics (#21)
+-- run_hardware_metrics
 -- Hardware context for a run (one row per run).
 -- ---------------------------------------------------------------------------
 CREATE TABLE run_hardware_metrics (
@@ -438,7 +437,7 @@ CREATE TABLE run_hardware_metrics (
 );
 
 -- ---------------------------------------------------------------------------
--- schema_versions (#25)
+-- schema_versions
 -- One row per schema generation. allow_migration gates data migration for
 -- this version. schema_migration_script / record_migration_script are Go
 -- template + sprig scripts executed by the migration runner.
@@ -453,7 +452,7 @@ CREATE TABLE schema_versions (
 );
 
 -- ---------------------------------------------------------------------------
--- schema_tables (#25)
+-- schema_tables
 -- One row per logical table / uuid_namespace generation.
 -- deprecated_at non-null signals migration is pending; check schema_tables_join
 -- for destination(s). Minor upgrades (no join row) update DDL in place and
@@ -472,7 +471,7 @@ CREATE TABLE schema_tables (
 );
 
 -- ---------------------------------------------------------------------------
--- schema_tables_join (#25)
+-- schema_tables_join
 -- Migration graph edges for major migrations (splits, merges, UUID namespace
 -- changes). One or more rows for a src_table = data must move.
 -- No row = minor upgrade; DDL updated in place on the existing table.
@@ -488,13 +487,13 @@ CREATE TABLE schema_tables_join (
 );
 
 -- ---------------------------------------------------------------------------
--- schema_versions seed (#33)
+-- schema_versions seed
 -- Version 1: agent_traces table, uplift_baseline_task_id on tasks,
 -- trace_id on run_model_metrics, cyber_safety category seed.
--- allow_migration=false until migration runner (#27) is implemented.
+-- allow_migration=false until migration runner is implemented.
 -- ---------------------------------------------------------------------------
 INSERT INTO schema_versions (description, allow_migration)
 VALUES (
-    'C4+C6 schema: agent_traces table, tasks.uplift_baseline_task_id, run_model_metrics.trace_id, cyber_safety category (#33)',
+    'C4+C6 schema: agent_traces table, tasks.uplift_baseline_task_id, run_model_metrics.trace_id, cyber_safety category',
     FALSE
 );

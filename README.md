@@ -13,7 +13,7 @@ Matrix: `tasks × prompt_variants × models`.
 **Start here:**
 
 - **[HUMANS.md](HUMANS.md)** — operators & developers: prerequisites, install, run, configure, troubleshoot, clean up.
-- **[AGENTS.md](AGENTS.md)** — LLMs & contributors: design invariants, hardware caveats, judge-mode selection, editing conventions. `CLAUDE.md` is a symlink here.
+- **[AGENTS.md](AGENTS.md)** — LLMs & contributors: design invariants, hardware caveats, judge-mode selection, editing conventions. `CLAUDE.md` is `@AGENTS.md`.
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** — opening a PR: pre-commit checklist, commit style, what not to change without discussing.
 
 **Reference:**
@@ -23,7 +23,7 @@ Matrix: `tasks × prompt_variants × models`.
 ## Design choices (explicit)
 
 | Concern | Choice | Reason |
-|---|---|---|
+| --- | --- | --- |
 | Serving | `llama-swap` proxy in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` | `llama-swap` owns model lifecycle (boot/unload on demand). The Vulkan image works on AMD (Strix Halo tested), NVIDIA, Intel without per-backend wrangling. No `llama-server` binary ships in LM Studio's own `~/.lmstudio/extensions/backends/*/` — only `.so` libraries for LM Studio's internal runtime. |
 | One model at a time | `llama-swap` unloads current backend before starting next; runner iterates per-model-sequentially on top of that | Unified-memory APUs (and modest-VRAM discrete GPUs) can't hold A + B + judge concurrently. Each model pays exactly one swap, absorbed by warmup. |
 | Transport | OpenAI-compatible `/v1/chat/completions` | llama.cpp server exposes it; one client class works for Ollama, vLLM, LM Studio, llama.cpp. |

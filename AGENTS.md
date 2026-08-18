@@ -93,7 +93,7 @@ Three-tier split prevents duplication and routes content to the right audience. 
 | ------ | ------ | ---------- | --------- |
 | **README** | [`README.md`](README.md) | Everyone (entry point) | Hook + basic product description + layout + links. **No** full install procedures, env catalogs, troubleshooting tables, or LLM internals — those link out. |
 | **HUMANS** | [`HUMANS.md`](HUMANS.md) | Operators, developers, end-users | Prerequisites, install, usage, config walkthrough, output description, troubleshooting, cleanup. Everything needed to **run and use** the harness. |
-| **AGENTS** | [`AGENTS.md`](AGENTS.md) (this file) | LLMs, contributors, reviewers | Design invariants, hardware caveats, judge mode selection, editing conventions, governance. `CLAUDE.md` is a symlink here. |
+| **AGENTS** | [`AGENTS.md`](AGENTS.md) (this file) | LLMs, contributors, reviewers | Design invariants, hardware caveats, judge mode selection, editing conventions, governance. `CLAUDE.md` is `@AGENTS.md`. |
 
 ### When to update which file
 

@@ -955,7 +955,7 @@ def main() -> int:
     hf_mode = args.hf_enrichment or run_cfg.get("hf_enrichment", "off")
     model_metadata = build_model_metadata(cfg)
     model_metadata = enrich_model_metadata(model_metadata, hf_mode, provenance["warnings"])
-    # Post-hoc completeness-weighted rollup + run-level status (#23).
+    # Post-hoc completeness-weighted rollup + run-level status.
     cells_total = len(tasks) * len(prompts)
     model_scores, run_status = assemble_model_scores(models, all_records, cells_total)
     payload = {

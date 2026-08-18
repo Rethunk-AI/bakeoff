@@ -308,7 +308,7 @@ func (r *MigrationRunner) migrateRecords(
 			break // All records processed.
 		}
 
-		// Randomize order after first rejection (bakeoff#27 spec).
+		// Randomize order after first rejection to avoid starvation.
 		if firstRejection {
 			rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
 		}
@@ -427,9 +427,9 @@ func (r *MigrationRunner) migrateRecords(
 			// After batch 0 (or when we have data), compute.
 			if lastCommitTime > 0 && lastProcessingTime > 0 {
 				nextByProcessing := r.cfg.ProcessingTimeTarget *
-					(3*(float64(totalRecords)/totalProcessingTime)+(float64(lastBatchSize)/lastProcessingTime)) / 4
+					(3*(float64(totalRecords)/totalProcessingTime) + (float64(lastBatchSize) / lastProcessingTime)) / 4
 				nextByCommit := r.cfg.CommitTimeTarget *
-					(3*(float64(totalRecords)/totalCommitTime)+(float64(lastBatchSize)/lastCommitTime)) / 4
+					(3*(float64(totalRecords)/totalCommitTime) + (float64(lastBatchSize) / lastCommitTime)) / 4
 				next := math.Min(nextByProcessing, nextByCommit)
 				if next < 1 {
 					next = 1
@@ -458,8 +458,8 @@ func (r *MigrationRunner) migrateRecords(
 
 // rejectEntry records a rejected record for end-of-run reporting.
 type rejectEntry struct {
-	RowID any
-	Table string
+	RowID  any
+	Table  string
 	Reason string
 }
 

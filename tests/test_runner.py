@@ -214,7 +214,7 @@ class TestScoreAssembly:
 
 
 class TestStoreWiring:
-    """Test that runner wires to bench.store on a mocked full run (#35)."""
+    """Test that runner wires to bench.store on a mocked full run."""
 
     def _make_config(self, tmp_path: Path, run_name: str = "test-run") -> Path:
         cfg = {

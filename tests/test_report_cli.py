@@ -1,6 +1,6 @@
 """Smoke tests for bench.report_cli (bakeoff-report CLI).
 
-Coverage strategy: two critical paths per the issue spec (#36):
+Coverage strategy: two critical paths for the report CLI:
   1. --list on an empty store returns zero exit code and no output.
   2. --run-id <id> --format md emits a .md file to --out-dir.
 """

@@ -217,7 +217,7 @@ and static leaderboard generation.
 | Symptom | Cause / fix |
 | --------- | ------------- |
 | `llama-swap.sh: binary not found` | Bootstrap hasn't run yet. Execute `./run.sh` once; it fetches and SHA-verifies the pinned binary into `.cache/llama-swap/`. |
-| `SHA256 mismatch for ...` during bootstrap | The pinned version's checksum no longer matches the downloaded tarball. Check the release on GitHub; update both `LLAMA_SWAP_VERSION` and the matching `LLAMA_SWAP_SHA256_*` line in `run.sh`. Never bypass the check. |
+| `SHA256 mismatch for ...` during bootstrap | The pinned version's checksum does not match the downloaded tarball. Check the release on GitHub; update both `LLAMA_SWAP_VERSION` and the matching `LLAMA_SWAP_SHA256_*` line in `run.sh`. Never bypass the check. |
 | Port `server.swap_port` already in use | `llama-swap` itself, another benchmark instance, or LM Studio holds it. Stop the other process or change `server.swap_port`. |
 | Dry-run: `gguf must be '<org>/<repo>/<file>.gguf' form` | Path shape typo. List real files with `fd -e gguf . ~/.lmstudio/models/` and copy a matching entry into `config.yaml`. |
 | `[config] ...` errors on startup | Validation failed. Read the messages — each names the field and the problem. Fix `config.yaml` and re-run `--dry-run` to confirm. |

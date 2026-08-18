@@ -50,12 +50,12 @@ def _percentile(xs: list[float], p: float) -> float | None:
         return None
     s = sorted(xs)
     if len(s) == 1:
-        return float(s[0])
+        return s[0]
     k = (len(s) - 1) * (p / 100.0)
     lo = int(k)
     hi = min(lo + 1, len(s) - 1)
     frac = k - lo
-    return float(s[lo] + (s[hi] - s[lo]) * frac)
+    return s[lo] + (s[hi] - s[lo]) * frac
 
 
 # --- numeric rollup from records -------------------------------------------

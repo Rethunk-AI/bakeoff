@@ -310,7 +310,7 @@ def run_model_phase(
             print(f"[floor-err] {mid} {ft.id}: {e}", file=sys.stderr)
 
     for task, prm in itertools.product(tasks, prompts):
-        if pending is not None and (str(task.id), str(prm["id"])) not in pending:
+        if pending is not None and (task.id, str(prm["id"])) not in pending:
             continue
         try:
             res, wh, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms = call_one(
@@ -801,7 +801,7 @@ def main() -> int:
 
     if prior is not None:
         prior_run_id = prior.get("run_id")
-        task_ids = [str(t.id) for t in tasks]
+        task_ids = [t.id for t in tasks]
         prompt_ids = [str(p["id"]) for p in prompts]
         compat_errors = check_compat(cfg, seed=seed, task_ids=task_ids, prior=prior)
         for err in compat_errors:

@@ -108,9 +108,7 @@ def test_fail_retry_increments_attempt_and_sets_backoff():
     assert result["attempt_count"] == 1
     assert result["retry_after"] is not None
     # retry_after must be in the future.
-    retry_dt = datetime.strptime(result["retry_after"], "%Y-%m-%dT%H:%M:%SZ").replace(
-        tzinfo=UTC
-    )
+    retry_dt = datetime.strptime(result["retry_after"], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
     assert retry_dt > datetime.now(UTC)
     # priority bumped.
     assert result["priority"] > 100

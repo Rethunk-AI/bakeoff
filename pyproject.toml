@@ -80,6 +80,9 @@ known_first_party = ["bench"]
 # them as an unused dependency (DEP002).
 optional_dependencies_dev_groups = ["dev"]
 
+[tool.deptry.package_module_name_map]
+pyyaml = "yaml"
+
 [tool.deptry.per_rule_ignores]
 # Same lazy/optional psutil import as the pyrefly sub-config above: never a
 # hard dependency, so deptry can't see it as declared.

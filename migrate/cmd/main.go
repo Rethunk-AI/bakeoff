@@ -66,7 +66,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("connect to database: %v", err)
 	}
-	defer conn.Close(ctx)
+	defer func() { _ = conn.Close(ctx) }()
 
 	cfg := migrate.Config{
 		BatchSize:            *batchSize,

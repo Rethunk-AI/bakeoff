@@ -9,6 +9,7 @@ package migrate
 // PostgreSQL connection and are not covered here.
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strings"
@@ -29,7 +30,7 @@ func squirrelSelect() squirrel.SelectBuilder {
 // noDBBuiltins returns record built-ins with nil conn (safe for tests that
 // don't call select/selectFirst/selectOne/rawSQL).
 func noDBBuiltins(rec *Record) map[string]tengo.Object {
-	return recordBuiltins(nil, nil, rec)
+	return recordBuiltins(context.TODO(), nil, rec)
 }
 
 // runTengo compiles and runs a script; fatal on error.

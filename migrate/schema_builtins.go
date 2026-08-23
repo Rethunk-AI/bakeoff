@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/Masterminds/squirrel"
 	"github.com/d5/tengo/v2"
 	"github.com/jackc/pgx/v5"
 )
@@ -326,6 +325,3 @@ func singleColumnDef(colMap *tengo.Map) (string, error) {
 
 	return strings.Join(parts, " "), nil
 }
-
-// squirrelPlaceholder is the PostgreSQL placeholder format for squirrel.
-var squirrelPlaceholder = squirrel.Dollar

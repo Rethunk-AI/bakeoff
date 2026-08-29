@@ -10,9 +10,7 @@
 
 ---
 
-Small harness that serves models from `~/.lmstudio/models/` through a [`llama-swap`](https://github.com/mostlygeek/llama-swap) proxy in front of `llama.cpp` podman containers, and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models: round-robin tournament (`pairwise_all`) or absolute rubric (`scored`). Emits JSON, Markdown, and a single-file HTML dashboard.
-
-Matrix: `tasks × prompt_variants × models`.
+Serves GGUFs from `~/.lmstudio/models/` through a [`llama-swap`](https://github.com/mostlygeek/llama-swap) proxy in front of `llama.cpp` podman containers. Benchmarks **quality**, **latency**, and **cost** (energy) across `tasks × prompt_variants × models`. Judge modes: `pairwise_all` tournament or `scored` rubric. Emits JSON, Markdown, and a single-file HTML dashboard under `results/`.
 
 ## Quick start
 
@@ -24,11 +22,12 @@ Prerequisites, install, and configuration: [HUMANS.md](HUMANS.md).
 
 ## Highlights
 
-- Serve GGUFs from LM Studio paths via `llama-swap` + llama.cpp (Vulkan podman image)
-- Judge modes: `pairwise_all` round-robin tournament or `scored` 1–5 rubric
-- Quality, latency, and energy-based cost metrics with heuristic fallbacks
+- `llama-swap` + llama.cpp Vulkan podman image; OpenAI-compatible client
+- `pairwise_all` tournament or `scored` 1–5 rubric; heuristic fallbacks
+- Quality, latency, and energy-based cost metrics
 - JSON, Markdown, and single-file HTML dashboard output
 - Any number of models; deterministic seeded synthetic dataset
+- `./run.sh fetch` pulls missing GGUFs from Hugging Face
 
 ## Documentation
 
@@ -36,40 +35,8 @@ Prerequisites, install, and configuration: [HUMANS.md](HUMANS.md).
 | --- | --- | --- |
 | [HUMANS.md](HUMANS.md) | Operators & developers | Prerequisites, install, run, configure, troubleshoot, clean up |
 | [AGENTS.md](AGENTS.md) | LLMs & contributors | Design invariants, hardware caveats, judge-mode selection, editing conventions |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | PR checklist, commit style, what not to change without discussing |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | PR checklist, commit style |
 | [config.yaml](config.yaml) | Reference | Server, models, prompts, dataset, judge, cost, output (inline comments) |
-
-## Design choices (explicit)
-
-| Concern | Choice | Reason |
-| --- | --- | --- |
-| Serving | `llama-swap` proxy in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` | `llama-swap` owns model lifecycle (boot/unload on demand). The Vulkan image works on AMD (Strix Halo tested), NVIDIA, Intel without per-backend wrangling. No `llama-server` binary ships in LM Studio's own `~/.lmstudio/extensions/backends/*/` — only `.so` libraries for LM Studio's internal runtime. |
-| One model at a time | `llama-swap` unloads current backend before starting next; runner iterates per-model-sequentially on top of that | Unified-memory APUs (and modest-VRAM discrete GPUs) can't hold A + B + judge concurrently. Each model pays exactly one swap, absorbed by warmup. |
-| Transport | OpenAI-compatible `/v1/chat/completions` | llama.cpp server exposes it; one client class works for Ollama, vLLM, LM Studio, llama.cpp. |
-| Quality scorer | `pairwise_all` tournament (default) or `scored` 1-5 rubric via LLM judge; plus heuristic (`exact` / `contains` / `regex`) for structured tasks | Tournament gives sharp ranking on small N (2-4); rubric scales linearly for larger N. Heuristics catch hard ground-truth items without a judge round trip. |
-| Pairwise positional-bias mitigation | Order randomized per call (seeded from `run.seed`); swapped verdicts inverted before counting | Judges show a 5-15% preference for slot A; flipping per call averages it out across the matrix. `order: "AB" \| "BA"` is stored on every judgement. |
-| Default context | `4096` | Benchmark prompts are short; keeping `ctx` small cuts load time + memory. Override per model or in `server.ctx`. |
-| "Cost" for local models | Energy estimate via `nvidia-smi --query-gpu=power.draw` **or** `rocm-smi --showpower` sampled at call start + end; average × wall time × `$/kWh` | No per-token price for local. Energy is the honest cost axis. |
-| Cost fallback | `energy_wh` / `cost_usd` = `null` when neither tool works | No silent substitution with latency. On Strix Halo, `rocm-smi` often fails on `libdrm_amdgpu.so` — expect `null`. |
-| Dataset | Generated from seeded templates across `qa` / `code` / `summarize` / `classify` | Simple stack, no external corpus. Deterministic via `run.seed`. |
-| Stack | Python + `httpx` + `pyyaml`, stdlib for everything else | No promptfoo / lm-eval / framework. |
-| Dashboard | One static HTML file with Chart.js via CDN, reads embedded run JSON | No build step, opens from disk. |
-
-## Layout
-
-```
-config.yaml          the contract
-bin/llama-swap.sh    proxy launcher (up / down / sweep / wait)
-bench/               clients · dataset · download · llama_swap · metrics · publish · runner · report
-run.sh               uv venv + install + pinned llama-swap bootstrap + run
-.cache/              vendored llama-swap binary + generated proxy config (gitignored)
-datasets/            generated inputs (gitignored)
-results/             run-<ts>.json / .md / .html (gitignored)
-```
-
-Per-module breakdown with behavior notes: [`AGENTS.md` § Layout](AGENTS.md#layout).
-
-For prerequisites, configuration, and troubleshooting see [HUMANS.md](HUMANS.md).
 
 ## License
 

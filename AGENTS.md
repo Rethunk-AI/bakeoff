@@ -1,51 +1,39 @@
 # AGENTS.md — LLM onboarding
 
-Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap` proxy sitting in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` containers, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on `llama-swap`'s singleton swap to unload the previous backend before the next boots. Judge runs as its own swap target after the A/B phases.
+Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap` proxy in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` containers, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on `llama-swap`'s singleton swap to unload the previous backend before the next boots. Judge runs as its own swap target after the model phases.
 
 **Claude Code:** `CLAUDE.md` is `@AGENTS.md`. Edit **AGENTS.md**.
 
-**Global rules** (shell tools, git/MCP preference, commit discipline, sandbox) live in `~/.claude/CLAUDE.md`. Do not restate them here. This file is project-specific LLM onboarding only.
-
-**Operator/developer run/use** (prereqs, install, usage, troubleshooting, cleanup): [`HUMANS.md`](HUMANS.md).
+**Operator runbook:** [`HUMANS.md`](HUMANS.md). Global harness rules live in `~/.claude/CLAUDE.md` — not restated here.
 
 ## Layout
 
 ```
 config.yaml          single source of truth (server, models, prompts, dataset, judge, cost, output)
-bin/llama-swap.sh    llama-swap launcher: up (sweep stragglers + exec binary) / down / sweep / wait
+bin/llama-swap.sh    llama-swap launcher: up / down / sweep / wait
 bench/
-  __init__.py        package marker
-  clients.py         httpx OpenAI-compat client; prefers `content`, falls back to `reasoning_content`
-  compare.py         diff two result JSON files → Markdown comparison report; compatibility warnings to stderr
-  config.py          config loading + validation gate; aggregates errors before proxy startup
-  constants.py       project-wide UUID5 namespace constants (BAKEOFF_MODEL_NAMESPACE, BAKEOFF_CREATOR_NAMESPACE)
+  clients.py         httpx OpenAI-compat client; prefers content, falls back to reasoning_content
+  compare.py         diff two result JSON files → Markdown report
+  config.py          config loading + validation gate
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
-  descriptor.py      model descriptor reader/validator/persister (seed JSON → models/ store); schema_version gate
-  download.py        huggingface_hub fetcher; writes `<models_dir>/<repo_id>/<filename>`
-  failure.py         failure-reason taxonomy (9 codes: timeout/refusal/malformed_output/oom/load_failure/capability_gap/infra_error/cancelled/unknown)
-  hardware.py        best-effort hardware context collector (GPU/CPU/RAM/OS); feeds run_hardware_metrics
-  llama_swap.py      pure config generator: bakeoff config.yaml → llama-swap proxy config
-  metrics.py         heuristic scorers + judge prompts + nvidia-smi / rocm-smi power sampling
-  provenance.py      run provenance collector (git SHA, platform, optional HF enrichment); best-effort with null fallbacks
+  descriptor.py      model descriptor reader/validator/persister
+  download.py        huggingface_hub fetcher
+  failure.py         failure-reason taxonomy (9 codes)
+  hardware.py        best-effort hardware context collector
+  llama_swap.py      bakeoff config.yaml → llama-swap proxy config
+  metrics.py         heuristic scorers + judge prompts + power sampling
+  provenance.py      run provenance collector (git SHA, platform, optional HF enrichment)
   publish.py         validate/package/sign/submit result bundles for bakeoff-results
-  queue.py           opt-in disk-backed run queue (pending/ + completed/); claim is rename-as-mutex
-  report.py          JSON + Markdown + single-file HTML dashboard (Chart.js via CDN)
-  resume.py          resume support: computes pending model/judge cells from a prior partial result
+  queue.py           opt-in disk-backed run queue (pending/ + completed/)
+  report.py          JSON + Markdown + single-file HTML dashboard
+  resume.py          resume support from a prior partial result
   runner.py          start proxy → warmup + matrix per model → judge → stop proxy
-  scoring.py         completeness-weighted partial score + floor score rollup; run_status aggregation
-  signing.py         Ed25519 sign/verify for result envelopes (sha256 canonical form)
-  store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR; audit stamping; UUID5 helpers
+  scoring.py         completeness-weighted partial score rollup
+  signing.py         Ed25519 sign/verify for result envelopes
+  store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR
 migrate/             Go module: bakeoff migration runner (#27)
-  go.mod             module github.com/Rethunk-AI/bakeoff/migrate
-  record.go          Record struct: field mutation tracking, Tengo ↔ Go value conversion
-  record_builtins.go Tengo built-ins for record_migration_script (getField, setField, select*, hash, uuid_5, now)
-  runner.go          MigrationRunner: schema + record script execution, shadow table, batch sizing, FK order, resume gate
-  schema_builtins.go Tengo built-ins for schema_migration_script (createTable, dropTable, renameTable, addColumn, createIndex, withIndexDisabled, rawSQL, …)
-  cmd/main.go        bakeoff-migrate CLI (DATABASE_URL / --dsn, --batch-size, --max-rejects, --ignore-is-fatal, --dry-run)
-run.sh               uv sync + pinned llama-swap bootstrap + uv run;
-                     `fetch` subcommand → bench.download
-.cache/              vendored llama-swap binary + generated proxy config (gitignored)
-datasets/ results/   generated artifacts (gitignored)
+run.sh               uv sync + pinned llama-swap bootstrap + uv run; fetch → bench.download
+.cache/ datasets/ results/   generated artifacts (gitignored)
 ```
 
 ## Design invariants (don't break silently)
@@ -79,53 +67,6 @@ datasets/ results/   generated artifacts (gitignored)
 - Backend container flags (image args, ctx, ngl, etc.) are rendered into `cmd` strings inside `bench/llama_swap.py`. Changes there are covered by `tests/test_llama_swap.py` — keep the structural assertions current.
 - Bumping the pinned `llama-swap` version means updating `LLAMA_SWAP_VERSION` **and** the matching per-platform SHA256 constants in `run.sh`. A mismatch aborts the bootstrap; never silence the check.
 - Every new scorer/judge mode must preserve the JSON record shape in `results/run-<ts>.json` — the HTML dashboard reads it verbatim.
-- Publication is explicit: `bench.publish` packages a completed result for
-  `Rethunk-AI/bakeoff-results`; normal benchmark runs still leave `results/`
-  gitignored and local.
+- Publication is explicit: `bench.publish` packages a completed result for `Rethunk-AI/bakeoff-results`; normal benchmark runs still leave `results/` gitignored and local.
 - Python env: `uv`. No `python -m venv`, no bare `pip`.
 - Match style in touched files; no drive-by refactors.
-
-## Documentation governance
-
-Three-tier split prevents duplication and routes content to the right audience. Modeled after Rethunk-Tech/Bastion ([`documentation-governance.mdc`](https://github.com/Rethunk-Tech/Bastion/blob/main/.cursor/rules/documentation-governance.mdc)).
-
-| Tier | File | Audience | Content |
-| ------ | ------ | ---------- | --------- |
-| **README** | [`README.md`](README.md) | Everyone (entry point) | Hook + basic product description + layout + links. **No** full install procedures, env catalogs, troubleshooting tables, or LLM internals — those link out. |
-| **HUMANS** | [`HUMANS.md`](HUMANS.md) | Operators, developers, end-users | Prerequisites, install, usage, config walkthrough, output description, troubleshooting, cleanup. Everything needed to **run and use** the harness. |
-| **AGENTS** | [`AGENTS.md`](AGENTS.md) (this file) | LLMs, contributors, reviewers | Design invariants, hardware caveats, judge mode selection, editing conventions, governance. `CLAUDE.md` is `@AGENTS.md`. |
-
-### When to update which file
-
-- **New CLI flag, env var, config key, or usage mode** → **HUMANS.md** (operator-visible)
-- **New design constraint, invariant, or hardware quirk affecting code** → **AGENTS.md**
-- **New troubleshooting recipe** → **HUMANS.md**
-- **New scorer / judge mode / runner phase** → **AGENTS.md** (invariants section) + **HUMANS.md** (usage)
-- **Typo / broken link** → fix in place
-- **Re-shuffled files** → update **AGENTS.md** § Layout (canonical, per-module behavior) + confirm **README.md**'s compact tree still reflects reality. README points to AGENTS for module notes; do **not** duplicate per-file annotations back into README.
-
-### Drift patterns to consolidate
-
-- ✗ Install / prereq detail in **README** → move to **HUMANS**
-- ✗ Troubleshooting table in **README** → move to **HUMANS**
-- ✗ Design invariants in **HUMANS** → move to **AGENTS**
-- ✗ Global shell/git rules in any project file → delete; they live in `~/.claude/CLAUDE.md`
-- ✗ Duplicated command blocks in **README** and **HUMANS** → keep in **HUMANS**; README links
-- ✗ Per-module file annotations in **README** → trim to bare tree; canonical annotated layout is **AGENTS** § Layout
-- ✗ Environment / install instructions in **CONTRIBUTING** → keep in **HUMANS**; CONTRIBUTING only adds the dev-extras delta (`.[dev]`) and the PR checklist
-
-### Keep it lean
-
-Single-repo project. No submodules, no nested package-manager split. Three files stay flat at repo root; no per-subdirectory `AGENTS.md`. If the project ever grows a submodule or a separable library, add a local `AGENTS.md` there following the same split.
-
-### Community-profile files (outside the three-tier split)
-
-These are **not** product documentation and are not governed by the three-tier split above. They are standard GitHub community-profile files that live at repo root by convention and are consumed by GitHub flows (PR surfacing, security-advisory prompts, community-health badge):
-
-- [`LICENSE`](LICENSE) — terms of use.
-- [`SECURITY.md`](SECURITY.md) — private disclosure policy.
-- [`CONTRIBUTING.md`](CONTRIBUTING.md) — PR routing + checklist. **Thin pointer only** — must not duplicate HUMANS (setup) or AGENTS (invariants).
-
-Do not fold any of these into README / HUMANS / AGENTS, and do not move them into a `docs/` directory — GitHub looks for them at root.
-
-A `docs/` directory is **not** warranted for this project. The three-tier split already covers product documentation at the right granularity; adding a folder would fragment without consolidating. Revisit only if a fourth distinct audience emerges that the existing tiers can't absorb.

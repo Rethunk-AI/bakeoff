@@ -1,24 +1,43 @@
-# Local LLM N-vs-N Benchmark (LM Studio GGUFs via llama.cpp)
+<h1 align="center">Local LLM N-vs-N Benchmark</h1>
+
+<div align="center">
 
 [![ci](https://github.com/Rethunk-AI/bakeoff/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Rethunk-AI/bakeoff/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/Rethunk-AI/bakeoff)](LICENSE)
 [![python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](pyproject.toml)
 
+</div>
+
+---
+
 Small harness that serves models from `~/.lmstudio/models/` through a [`llama-swap`](https://github.com/mostlygeek/llama-swap) proxy in front of `llama.cpp` podman containers, and benchmarks them on **quality**, **latency**, and **cost** (energy). Supports any number of models: round-robin tournament (`pairwise_all`) or absolute rubric (`scored`). Emits JSON, Markdown, and a single-file HTML dashboard.
 
 Matrix: `tasks × prompt_variants × models`.
 
+## Quick start
+
+```sh
+./run.sh
+```
+
+Prerequisites, install, and configuration: [HUMANS.md](HUMANS.md).
+
+## Highlights
+
+- Serve GGUFs from LM Studio paths via `llama-swap` + llama.cpp (Vulkan podman image)
+- Judge modes: `pairwise_all` round-robin tournament or `scored` 1–5 rubric
+- Quality, latency, and energy-based cost metrics with heuristic fallbacks
+- JSON, Markdown, and single-file HTML dashboard output
+- Any number of models; deterministic seeded synthetic dataset
+
 ## Documentation
 
-**Start here:**
-
-- **[HUMANS.md](HUMANS.md)** — operators & developers: prerequisites, install, run, configure, troubleshoot, clean up.
-- **[AGENTS.md](AGENTS.md)** — LLMs & contributors: design invariants, hardware caveats, judge-mode selection, editing conventions. `CLAUDE.md` is `@AGENTS.md`.
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** — opening a PR: pre-commit checklist, commit style, what not to change without discussing.
-
-**Reference:**
-
-- **[config.yaml](config.yaml)** — single source of truth for server, models, prompts, dataset, judge, cost, output. Inline comments describe every knob.
+| Document | Audience | Contents |
+| --- | --- | --- |
+| [HUMANS.md](HUMANS.md) | Operators & developers | Prerequisites, install, run, configure, troubleshoot, clean up |
+| [AGENTS.md](AGENTS.md) | LLMs & contributors | Design invariants, hardware caveats, judge-mode selection, editing conventions |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Contributors | PR checklist, commit style, what not to change without discussing |
+| [config.yaml](config.yaml) | Reference | Server, models, prompts, dataset, judge, cost, output (inline comments) |
 
 ## Design choices (explicit)
 
@@ -51,3 +70,7 @@ results/             run-<ts>.json / .md / .html (gitignored)
 Per-module breakdown with behavior notes: [`AGENTS.md` § Layout](AGENTS.md#layout).
 
 For prerequisites, configuration, and troubleshooting see [HUMANS.md](HUMANS.md).
+
+## License
+
+Licensed under the terms in [LICENSE](LICENSE).

@@ -1,8 +1,14 @@
 """Completeness-weighted partial score and floor score rollup.
 
-Implements the per-cell scoring, per-model rollup, and run-level status
-aggregation defined in specs/score-incomplete-and-dumb-model-tier/spec.md §2
-and §3.
+Implements per-cell scoring, the per-model rollup, and run-level status
+aggregation.
+
+``partial_score = S / C``: the sum of per-cell scores over the *whole* matrix
+size C, not over attempted cells A. Unattempted cells count as 0.0, so a model
+that finished half the matrix perfectly (0.5) ranks below one that finished it
+all at a 0.6 average. Dividing by A was rejected: it rewards stopping early,
+and the harness cannot know how the missing cells would have scored.
+``completeness = A / C``. The worked examples live in tests/test_scoring.py.
 
 Public API (consumed by runner.py):
     cell_score(record)              -> float in [0, 1]
@@ -92,7 +98,7 @@ def model_rollup(
 
     Returns
     -------
-    dict with keys matching ``model_scores[*]`` in spec §2 / §3.
+    dict with keys matching a ``model_scores[*]`` entry in result.json.
     """
 
     # --- cells_attempted: response received; failure_code and error both null

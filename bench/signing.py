@@ -53,8 +53,16 @@ def generate_keypair() -> tuple[Ed25519PrivateKey, str]:
         suitable for storing in the ``runners`` table.
     """
     private_key = Ed25519PrivateKey.generate()
-    public_key_b64 = _encode_public_key(private_key.public_key())
+    public_key_b64 = encode_public_key(private_key.public_key())
     return private_key, public_key_b64
+
+
+def encode_public_key(public_key: Ed25519PublicKey) -> str:
+    raw = public_key.public_bytes(
+        encoding=serialization.Encoding.Raw,
+        format=serialization.PublicFormat.Raw,
+    )
+    return base64.b64encode(raw).decode()
 
 
 def _encode_public_key(public_key: Ed25519PublicKey) -> str:

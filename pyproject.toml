@@ -28,6 +28,7 @@ dev = [
 
 [project.scripts]
 bakeoff-report = "bench.report_cli:main"
+bakeoff-worker = "bench.worker:main"
 
 # Auto-discovery trips over the gitignored `results/` and `datasets/` output
 # directories when they exist on disk during `pip install -e .`. Pin the

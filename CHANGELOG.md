@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- **Distributed worker pull client** — `bench.worker` registers with a bakeoff-results queue, claims jobs, heartbeats, optionally runs `bench.runner --models`, and submits an Ed25519-signed envelope. Empty queue sleeps. Standalone `./run.sh` is unchanged. (#37)
+- **`--models` on the runner** — restrict a run to named model IDs so a claimed worker job still loads one model at a time.
 - **Disk-persistence layer** — `bench/store.py` (atomic JSON record I/O under `BAKEOFF_DATA_DIR`; directory-per-table / UUID-filename layout; `schema_version` audit stamping; deterministic UUID5 helpers), `bench/descriptor.py` (model descriptor reader/validator with a hard `schema_version` gate), and `bench/queue.py` (opt-in disk-backed run queue: `pending/` + `completed/` DR layout, race-safe rename-as-mutex `claim()`, retry backoff + terminal failure, stale-claim reaping). The standalone runner default is unchanged; the queue is strictly opt-in. (#13, #15)
 - **`interface_types` seed** — `schema/seeds/interface_types.json`, completing the seed-file pattern for the last lookup table that was only seeded inline in `schema.sql`. (#22)
 - **Failure-reason taxonomy** — `bench/failure.py` introduces a `failure_code` enum (`timeout`, `refusal`, `malformed_output`, `oom`, `load_failure`, `capability_gap`, `infra_error`, `cancelled`, `unknown`) and a classifier; replaces the previous free-text `error` field. The runner now emits a structured `failure_code` + `failure_detail` per cell. (#23)

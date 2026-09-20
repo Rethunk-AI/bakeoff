@@ -144,3 +144,19 @@ export BAKEOFF_DATA_DIR=/data/bakeoff   # default ~/.local/share/bakeoff
 ```
 
 Store/queue modules write JSON under `models/`, `run_queue/pending/`, `run_queue/completed/`. The standalone runner does **not** use this by default — opt-in for multi-runner scenarios.
+
+## Distributed worker mode
+
+Opt-in pull client against a `bakeoff-results` queue server. The default `./run.sh` matrix is unchanged.
+
+```sh
+# Approve this runner's public key on the queue host first (admin /runners UI).
+uv run python -m bench.worker \
+  --queue-url http://queue-host:8765 \
+  --vram-mb 32768 \
+  --quantization q4_k_m \
+  --poll-seconds 30
+```
+
+`--no-execute` registers, claims, heartbeats, and submits a signed stub without starting llama.cpp (useful for wiring tests). `--once` exits after one claim attempt. `--models` on `bench.runner` is the execute path the worker uses for a single claimed model.
+

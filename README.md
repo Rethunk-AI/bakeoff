@@ -28,6 +28,7 @@ Prerequisites, install, and configuration: [HUMANS.md](HUMANS.md).
 - JSON, Markdown, and single-file HTML dashboard output
 - Any number of models; deterministic seeded synthetic dataset
 - `./run.sh fetch` pulls missing GGUFs from Hugging Face
+- Optional distributed worker (`python -m bench.worker`) pulls jobs from a bakeoff-results queue
 
 ## Documentation
 

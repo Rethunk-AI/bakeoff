@@ -65,14 +65,6 @@ def encode_public_key(public_key: Ed25519PublicKey) -> str:
     return base64.b64encode(raw).decode()
 
 
-def _encode_public_key(public_key: Ed25519PublicKey) -> str:
-    raw = public_key.public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw,
-    )
-    return base64.b64encode(raw).decode()
-
-
 def sign_result(
     result: dict[str, Any],
     private_key: Ed25519PrivateKey,

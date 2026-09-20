@@ -11,6 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 import yaml
 
 # Minimal valid config shared by multiple tests.
@@ -113,6 +114,38 @@ class TestDryRunSmoke:
         p = _write_config(tmp_path, cfg)
         rc = _run_dry(p, capsys)
         assert rc == 0
+
+
+class TestSelectModels:
+    def test_select_models_filters_and_rejects_unknown(self):
+        from bench.config import ConfigError
+        from bench.runner import select_models
+
+        models = [
+            {"id": "m_a", "gguf": "a.gguf"},
+            {"id": "m_b", "gguf": "b.gguf"},
+        ]
+        assert select_models(models, None) == models
+        assert [m["id"] for m in select_models(models, ["m_b"])] == ["m_b"]
+        with pytest.raises(ConfigError, match="unknown --models"):
+            select_models(models, ["nope"])
+
+    def test_models_flag_restricts_dry_run(self, tmp_path, capsys):
+        from bench.runner import main
+
+        p = _write_config(tmp_path, _BASE_CFG)
+        with (
+            patch(
+                "sys.argv",
+                ["runner", "--config", str(p), "--dry-run", "--models", "m_a"],
+            ),
+            patch("bench.runner.write_jsonl"),
+        ):
+            rc = main()
+        assert rc == 0
+        err = capsys.readouterr().err
+        # Two backends: selected model + judge.
+        assert "2 backends" in err
 
 
 class TestScoreAssembly:

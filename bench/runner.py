@@ -628,6 +628,21 @@ def run_judge_phase(
     return _scored_phase(judge, models, tasks, prompts, records, pending_scores=pending_scores)
 
 
+def select_models(
+    models: list[dict[str, Any]],
+    ids: list[str] | None,
+) -> list[dict[str, Any]]:
+    """Return *models* restricted to *ids*, or the original list when *ids* is empty."""
+    if not ids:
+        return models
+    wanted = set(ids)
+    selected = [model for model in models if str(model["id"]) in wanted]
+    missing = wanted - {str(model["id"]) for model in selected}
+    if missing:
+        raise ConfigError("unknown --models id(s): " + ", ".join(sorted(missing)))
+    return selected
+
+
 # --- Entry point ------------------------------------------------------------
 
 
@@ -638,6 +653,12 @@ def main() -> int:
         "--dry-run",
         action="store_true",
         help="Parse + gen dataset, no proxy startup or network calls.",
+    )
+    ap.add_argument(
+        "--models",
+        nargs="+",
+        metavar="MODEL_ID",
+        help="Restrict the run to these model IDs (worker jobs use this).",
     )
     _resume_group = ap.add_mutually_exclusive_group()
     _resume_group.add_argument(
@@ -690,6 +711,13 @@ def main() -> int:
         for issue in issues:
             print(f"[config] {issue}", file=sys.stderr)
         return 1
+
+    if args.models:
+        try:
+            cfg["models"] = select_models(cfg["models"], args.models)
+        except ConfigError as e:
+            print(f"[error] {e}", file=sys.stderr)
+            return 1
 
     run_cfg = cfg.get("run", {})
     ds_cfg = cfg["dataset"]

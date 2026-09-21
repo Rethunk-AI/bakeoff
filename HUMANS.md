@@ -158,5 +158,4 @@ uv run python -m bench.worker \
   --poll-seconds 30
 ```
 
-`--no-execute` registers, claims, heartbeats, and submits a signed stub without starting llama.cpp (useful for wiring tests). `--once` exits after one claim attempt. `--models` on `bench.runner` is the execute path the worker uses for a single claimed model.
-
+`--no-execute` registers, claims, heartbeats, and submits a signed stub without starting llama.cpp (useful for wiring tests). `--once` exits after one claim attempt. `--models` on `bench.runner` is the execute path the worker uses for a single claimed model. If the runner exits non-zero, the worker reports `/fail` (queue retry/backoff) and keeps polling. A paused runner sleeps on the poll interval until an admin sets it idle again. Use `--results-dir` when `bench.runner` writes somewhere other than `./results`.

@@ -10,16 +10,18 @@ from typing import Any
 import pytest
 
 from bench.signing import generate_keypair, verify_result
-from bench.worker import QueueClient, run_loop, stub_result
+from bench.worker import QueueClient, WorkerError, load_latest_result, run_loop, stub_result
 
 
 class QueueFake:
     def __init__(self) -> None:
         self.jobs: list[dict[str, Any]] = []
         self.submitted: list[dict[str, Any]] = []
+        self.failed: list[dict[str, Any]] = []
         self.heartbeats = 0
         self.registered: dict[str, Any] | None = None
         self.token = "runner-token"
+        self.paused = False
 
     def add_job(self, model_id: str = "qwen3.5-9b") -> None:
         self.jobs.append(
@@ -71,6 +73,9 @@ def _make_handler(fake: QueueFake) -> type[BaseHTTPRequestHandler]:
                 )
                 return
             if path == "/api/queue/claim":
+                if fake.paused:
+                    self._send(403, {"error": "runner is paused"})
+                    return
                 if not fake.jobs:
                     self._send(204)
                     return
@@ -85,6 +90,10 @@ def _make_handler(fake: QueueFake) -> type[BaseHTTPRequestHandler]:
             if path.endswith("/submit"):
                 fake.submitted.append(self._read_json())
                 self._send(200, {"job": {"status": "COMPLETE"}})
+                return
+            if path.endswith("/fail"):
+                fake.failed.append(self._read_json())
+                self._send(200, {"job": {"status": "PENDING"}})
                 return
             self._send(404, {"error": "not found"})
 
@@ -170,3 +179,87 @@ def test_stub_result_has_required_fields():
     assert result["run_id"] == "r1"
     assert result["provenance"]["runner_id"] == "runner-x"
     assert result["models"][0]["id"] == "m"
+
+
+def test_paused_claim_sleeps_once(queue_http, tmp_path):
+    fake, url = queue_http
+    fake.paused = True
+    fake.add_job("qwen3.5-9b")
+    private_key, public_key = generate_keypair()
+    client = QueueClient(url)
+    client.register(
+        public_key,
+        hostname="test",
+        process_id=1,
+        effective_user="tester",
+        capabilities={},
+    )
+    slept: list[float] = []
+    run_loop(
+        client,
+        private_key=private_key,
+        capabilities={},
+        execute=False,
+        config=tmp_path / "config.yaml",
+        poll_seconds=7,
+        wait=slept.append,
+        once=True,
+    )
+    assert slept == [7]
+    assert fake.submitted == []
+    assert fake.failed == []
+    assert fake.jobs[0]["model_id"] == "qwen3.5-9b"
+
+
+def test_execute_failure_reports_fail(queue_http, tmp_path, monkeypatch):
+    fake, url = queue_http
+    fake.add_job("boom")
+
+    def boom(_config, model_id: str) -> None:
+        raise WorkerError(f"runner exited 1 for model {model_id}")
+
+    monkeypatch.setattr("bench.worker.execute_job", boom)
+    private_key, public_key = generate_keypair()
+    client = QueueClient(url)
+    client.register(
+        public_key,
+        hostname="test",
+        process_id=1,
+        effective_user="tester",
+        capabilities={},
+    )
+    run_loop(
+        client,
+        private_key=private_key,
+        capabilities={},
+        execute=True,
+        config=tmp_path / "config.yaml",
+        poll_seconds=1,
+        wait=lambda _: None,
+        once=True,
+        results_dir=tmp_path,
+    )
+    assert fake.submitted == []
+    assert fake.failed == [{"error": "runner exited 1 for model boom"}]
+
+
+def test_load_latest_result_skips_other_models(tmp_path):
+    older = tmp_path / "run-old.json"
+    newer = tmp_path / "run-new.json"
+    older.write_text(
+        json.dumps({"run_id": "old", "config": {"models": [{"id": "other"}]}}),
+        encoding="utf-8",
+    )
+    newer.write_text(
+        json.dumps(
+            {
+                "run_id": "new",
+                "model_metadata": [{"id": "qwen3.5-9b"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = load_latest_result(tmp_path, model_id="qwen3.5-9b")
+    assert result is not None
+    assert result["run_id"] == "new"
+    assert load_latest_result(tmp_path, model_id="missing") is None

@@ -2,7 +2,7 @@
 
 The standalone ``bench.runner`` matrix loop is unchanged. This module is the
 opt-in pull client for Rethunk-AI/bakeoff#37 — poll, claim, heartbeat, execute,
-sign, submit. Empty queue sleeps rather than busy-looping.
+sign, submit. Empty or paused queues sleep. Execute failures report ``/fail``.
 """
 
 from __future__ import annotations

@@ -29,6 +29,8 @@ pre-commit:
     - name: whitespace
       run: git diff --cached --check
 
+    - name: gitleaks
+      run: gitleaks git --pre-commit --staged --redact --no-banner --log-level warn
 pre-push:
   jobs:
     # Everything: typecheck, lint, workflows, tests, dependencies. This is the

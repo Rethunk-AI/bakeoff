@@ -353,87 +353,269 @@ ALTER TABLE run_model_metrics
 
 -- ---------------------------------------------------------------------------
 -- interface_type
--- GPU interface / interconnect bus types.
+-- GPU host / interconnect link types. Admin-controlled lookup; seed data in
+-- seeds/interface_types.json.
+-- bandwidth_peak_gb_s is bidirectional and the only field comparable across
+-- families. lane_transfer_rate (GT/s per lane) and lane_count are set only for
+-- PCIe-lane links so gen and width degradation can be attributed separately.
+-- Degraded links get no rows: the display layer composes the description from
+-- the native and actual rows referenced by system_gpu_link.
+-- NVLink rows are reserved; no table references them yet.
 -- ---------------------------------------------------------------------------
 CREATE TABLE interface_type (
-    interface_type_id SERIAL PRIMARY KEY,
-    name              TEXT NOT NULL UNIQUE
+    interface_type_id   SERIAL PRIMARY KEY,
+    bandwidth_peak_gb_s FLOAT  NOT NULL,
+    description         TEXT   NOT NULL UNIQUE,   -- 'PCIe 4.0 x16', 'SXM5', 'Thunderbolt 4'
+    interface_family    TEXT,                     -- 'PCIe', 'SXM', 'NVLink', 'Thunderbolt', 'OCuLink'
+    lane_transfer_rate  FLOAT,                    -- FLOAT because PCIe 1.0 is 2.5 GT/s
+    lane_count          INT
 );
 
-INSERT INTO interface_type (name) VALUES
-    ('PCIe 3.0 x16'),
-    ('PCIe 4.0 x16'),
-    ('PCIe 5.0 x16'),
-    ('NVLink 3'),
-    ('NVLink 4'),
-    ('Thunderbolt 3'),
-    ('Thunderbolt 4'),
-    ('USB4'),
-    ('eGPU'),
-    ('integrated');
+INSERT INTO interface_type (description, bandwidth_peak_gb_s, interface_family, lane_transfer_rate, lane_count) VALUES
+    ('PCIe 1.0 x1',       0.5, 'PCIe',         2.5,  1),
+    ('PCIe 1.0 x4',       2.0, 'PCIe',         2.5,  4),
+    ('PCIe 1.0 x8',       4.0, 'PCIe',         2.5,  8),
+    ('PCIe 1.0 x16',      8.0, 'PCIe',         2.5,  16),
+    ('PCIe 2.0 x1',       1.0, 'PCIe',         5,    1),
+    ('PCIe 2.0 x4',       4.0, 'PCIe',         5,    4),
+    ('PCIe 2.0 x8',       8.0, 'PCIe',         5,    8),
+    ('PCIe 2.0 x16',     16.0, 'PCIe',         5,    16),
+    ('PCIe 3.0 x1',      1.97, 'PCIe',         8,    1),
+    ('PCIe 3.0 x4',      7.88, 'PCIe',         8,    4),
+    ('PCIe 3.0 x8',     15.75, 'PCIe',         8,    8),
+    ('PCIe 3.0 x16',    31.51, 'PCIe',         8,    16),
+    ('PCIe 4.0 x1',      3.94, 'PCIe',         16,   1),
+    ('PCIe 4.0 x4',     15.75, 'PCIe',         16,   4),
+    ('PCIe 4.0 x8',     31.51, 'PCIe',         16,   8),
+    ('PCIe 4.0 x16',    63.02, 'PCIe',         16,   16),
+    ('PCIe 5.0 x1',      7.88, 'PCIe',         32,   1),
+    ('PCIe 5.0 x4',     31.51, 'PCIe',         32,   4),
+    ('PCIe 5.0 x8',     63.02, 'PCIe',         32,   8),
+    ('PCIe 5.0 x16',   126.03, 'PCIe',         32,   16),
+    ('SXM2',            300.0, 'SXM',          NULL, NULL),
+    ('SXM4',            600.0, 'SXM',          NULL, NULL),
+    ('SXM5',            900.0, 'SXM',          NULL, NULL),
+    ('NVLink 2.0',      300.0, 'NVLink',       NULL, NULL),
+    ('NVLink 3.0',      600.0, 'NVLink',       NULL, NULL),
+    ('NVLink 4.0',      900.0, 'NVLink',       NULL, NULL),
+    ('Thunderbolt 3',    10.0, 'Thunderbolt',  NULL, NULL),
+    ('Thunderbolt 4',    10.0, 'Thunderbolt',  NULL, NULL),
+    ('OCuLink 2.0',     15.75, 'OCuLink',      16,   4);
+
+-- ---------------------------------------------------------------------------
+-- gpu_architectures
+-- GPU micro-architecture lookup, used to group results by generation.
+-- Not an identity input: it is implied by the PCI vendor + device IDs.
+-- Seed data in seeds/gpu_architectures.json.
+-- ---------------------------------------------------------------------------
+CREATE TABLE gpu_architectures (
+    gpu_architecture_id SERIAL PRIMARY KEY,
+    name                TEXT   NOT NULL UNIQUE,
+    description         TEXT
+);
+
+INSERT INTO gpu_architectures (name, description) VALUES
+    ('Pascal',       'NVIDIA, 2016'),
+    ('Volta',        'NVIDIA, 2017'),
+    ('Turing',       'NVIDIA, 2018'),
+    ('Ampere',       'NVIDIA, 2020'),
+    ('Ada Lovelace', 'NVIDIA, 2022'),
+    ('Hopper',       'NVIDIA, 2022'),
+    ('Blackwell',    'NVIDIA, 2024'),
+    ('RDNA 2',       'AMD, 2020'),
+    ('RDNA 3',       'AMD, 2022'),
+    ('RDNA 3.5',     'AMD, 2024 (Strix Point / Strix Halo iGPU)'),
+    ('RDNA 4',       'AMD, 2025'),
+    ('CDNA 2',       'AMD, 2021'),
+    ('CDNA 3',       'AMD, 2023'),
+    ('Xe-HPG',       'Intel, 2022 (Alchemist)'),
+    ('Xe2',          'Intel, 2024 (Battlemage / Lunar Lake)');
+
+-- ---------------------------------------------------------------------------
+-- vram_types
+-- GPU memory technology lookup. Seed data in seeds/vram_types.json.
+-- ---------------------------------------------------------------------------
+CREATE TABLE vram_types (
+    vram_type_id SERIAL PRIMARY KEY,
+    name         TEXT   NOT NULL UNIQUE,
+    description  TEXT
+);
+
+INSERT INTO vram_types (name, description) VALUES
+    ('GDDR5',   'Graphics DDR5'),
+    ('GDDR5X',  'Graphics DDR5X'),
+    ('GDDR6',   'Graphics DDR6'),
+    ('GDDR6X',  'Graphics DDR6X (PAM4 signalling)'),
+    ('GDDR7',   'Graphics DDR7 (PAM3 signalling)'),
+    ('HBM2',    'High Bandwidth Memory 2'),
+    ('HBM2e',   'High Bandwidth Memory 2e'),
+    ('HBM3',    'High Bandwidth Memory 3'),
+    ('HBM3e',   'High Bandwidth Memory 3e'),
+    ('DDR5',    'System DDR5 shared with an integrated GPU'),
+    ('LPDDR5',  'System LPDDR5 shared with an integrated GPU'),
+    ('LPDDR5X', 'System LPDDR5X shared with an integrated GPU');
+
+-- ---------------------------------------------------------------------------
+-- compute_formats
+-- Numeric precision formats that TFLOPS figures are quoted for. A new format
+-- is a seed row, not a new column. Seed data in seeds/compute_formats.json.
+-- ---------------------------------------------------------------------------
+CREATE TABLE compute_formats (
+    compute_format_id SERIAL PRIMARY KEY,
+    name              TEXT   NOT NULL UNIQUE,
+    description       TEXT
+);
+
+INSERT INTO compute_formats (name, description) VALUES
+    ('fp64', 'IEEE 754 double precision'),
+    ('fp32', 'IEEE 754 single precision'),
+    ('tf32', 'TensorFloat-32 (tensor core)'),
+    ('fp16', 'IEEE 754 half precision'),
+    ('bf16', 'Brain float 16'),
+    ('fp8',  '8-bit float (E4M3 / E5M2)'),
+    ('fp4',  '4-bit float'),
+    ('int8', '8-bit integer'),
+    ('int4', '4-bit integer');
+
+-- ---------------------------------------------------------------------------
+-- tflops_sources
+-- Provenance for gpu_tflops values. Manufacturer figures are kept but marked
+-- as such so measured values can later be told apart and preferred.
+-- contacts: JSONB array of {"type": ..., "value": ...}.
+-- url_template: static URL or {pci_vendor_id} / {pci_device_id} / {gpu_name}
+-- token substitution. url_script: Go template + sprig (the language used by
+-- schema_versions scripts); takes precedence over url_template when non-null.
+-- Seed data in seeds/tflops_sources.json.
+-- ---------------------------------------------------------------------------
+CREATE TABLE tflops_sources (
+    tflops_source_id SERIAL PRIMARY KEY,
+    name             TEXT   NOT NULL UNIQUE,
+    contacts         JSONB,
+    url_template     TEXT,
+    url_script       TEXT
+);
+
+INSERT INTO tflops_sources (name) VALUES
+    ('unknown/unverified'),
+    ('Rethunk measured');
+
+-- ---------------------------------------------------------------------------
+-- gpu_hardware
+-- Die/board-level GPU intrinsics: one row per GPU model, shared by every
+-- system that has one. Per-slot placement lives in system_gpu_link.
+-- The UNIQUE key dedups rows that carry full PCI identity; rows without it
+-- fall back to gpu_name matching in the writer.
+-- memory_bandwidth_peak_gb_s is stored, not derived, because the derivation
+-- needs a per-vram_type data-rate factor that every reader would repeat.
+-- gpu_native_interface_type_id is the card's rated link, independent of slot.
+-- ---------------------------------------------------------------------------
+CREATE TABLE gpu_hardware (
+    gpu_hardware_id              SERIAL PRIMARY KEY,
+    gpu_name                     TEXT   NOT NULL,
+    pci_vendor_id                TEXT,             -- '0x10de'
+    pci_device_id                TEXT,             -- '0x2684'
+    pci_subsystem_vendor_id      TEXT,             -- board partner
+    pci_subsystem_device_id      TEXT,             -- board variant
+    gpu_architecture_id          INT    REFERENCES gpu_architectures,
+    vram_total_mb                INT,
+    vram_type_id                 INT    REFERENCES vram_types,
+    memory_bus_width_bits        INT,
+    memory_bandwidth_peak_gb_s   FLOAT,
+    clock_memory_mhz             INT,
+    clock_graphics_boost_mhz     INT,
+    tdp_w                        INT,
+    gpu_native_interface_type_id INT    REFERENCES interface_type,
+    UNIQUE (pci_vendor_id, pci_device_id, pci_subsystem_vendor_id, pci_subsystem_device_id)
+);
+
+-- ---------------------------------------------------------------------------
+-- gpu_tflops
+-- Peak throughput per GPU model and compute format, with provenance.
+-- ---------------------------------------------------------------------------
+CREATE TABLE gpu_tflops (
+    gpu_hardware_id   INT   NOT NULL REFERENCES gpu_hardware,
+    compute_format_id INT   NOT NULL REFERENCES compute_formats,
+    tflops_value      FLOAT NOT NULL,
+    tflops_source_id  INT   NOT NULL REFERENCES tflops_sources,
+    PRIMARY KEY (gpu_hardware_id, compute_format_id)
+);
 
 -- ---------------------------------------------------------------------------
 -- system_hardware
--- Host machine hardware snapshot.
+-- Fixed physical host. system_id is a stable per-host UUID generated on first
+-- run and persisted locally, so one machine is one row across runs and
+-- publishers. cpu_threads is kept (SMT can be toggled in firmware); core count
+-- is implied by cpu_model. Memory clock/channels/profile are the active
+-- settings, not SPD ratings.
+-- bios_notes: JSONB key/value firmware settings, e.g. {"bar_size_mb": 16384}.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_hardware (
-    system_hardware_id SERIAL PRIMARY KEY,
-    cpu_model          TEXT,
-    cpu_cores          INT,
-    cpu_threads        INT,
-    ram_gb             FLOAT,
-    motherboard        TEXT
+    system_hardware_id        SERIAL PRIMARY KEY,
+    system_id                 UUID   NOT NULL UNIQUE,
+    publisher_id              TEXT   NOT NULL,
+    cpu_model                 TEXT,
+    cpu_threads               INT,
+    cpu_base_clock_mhz        INT,
+    cpu_peak_clock_mhz        INT,
+    ram_total_gb              FLOAT,
+    motherboard               TEXT,
+    memory_speed_mhz          INT,
+    memory_channels           INT,
+    memory_interleave_profile TEXT,             -- 'XMP', 'EXPO', 'DOCP', 'manual'
+    bios_notes                JSONB
 );
 
 -- ---------------------------------------------------------------------------
 -- system_software
--- Host OS / driver snapshot.
+-- Software environment snapshot; one new row per run, never deduplicated.
+-- cuda_version / rocm_version are null on the other vendor's stack.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_software (
     system_software_id SERIAL PRIMARY KEY,
-    os_name            TEXT,
-    os_version         TEXT,
-    driver_version     TEXT,
-    runtime_version    TEXT
-);
-
--- ---------------------------------------------------------------------------
--- gpu_hardware
--- One row per physical GPU slot.
--- ---------------------------------------------------------------------------
-CREATE TABLE gpu_hardware (
-    gpu_hardware_id    SERIAL PRIMARY KEY,
-    gpu_model          TEXT NOT NULL,
-    vram_mb            INT,
-    interface_type_id  INT REFERENCES interface_type,
-    tflops_fp16        FLOAT,
-    tflops_fp32        FLOAT,
-    tflops_bf16        FLOAT
+    os                 TEXT,
+    kernel_version     TEXT,
+    python_version     TEXT,
+    gpu_driver_version TEXT,
+    cuda_version       TEXT,
+    rocm_version       TEXT,
+    runner_version     TEXT
 );
 
 -- ---------------------------------------------------------------------------
 -- system_gpu_link
--- Many-to-many: which GPUs are in which system snapshot.
+-- Which GPU model sits in which slot of a host. The slot is the identity; the
+-- GPU in it is data, so two identical GPUs in one host are two rows.
+-- Slot limitation is derived (slot_native_interface_type_id <>
+-- actual_interface_type_id), not stored. "actual" is the negotiated link that
+-- both slot and GPU agreed on.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_gpu_link (
-    system_hardware_id INT NOT NULL REFERENCES system_hardware,
-    gpu_hardware_id    INT NOT NULL REFERENCES gpu_hardware,
-    slot_index         INT NOT NULL DEFAULT 0,
-    PRIMARY KEY (system_hardware_id, gpu_hardware_id, slot_index)
+    system_hardware_id            INT NOT NULL REFERENCES system_hardware,
+    slot_index                    INT NOT NULL,
+    gpu_hardware_id               INT NOT NULL REFERENCES gpu_hardware,
+    slot_native_interface_type_id INT REFERENCES interface_type,
+    actual_interface_type_id      INT REFERENCES interface_type,
+    PRIMARY KEY (system_hardware_id, slot_index)
 );
+
+CREATE INDEX system_gpu_link_gpu_hardware_idx ON system_gpu_link (gpu_hardware_id);
 
 -- ---------------------------------------------------------------------------
 -- run_hardware_metrics
--- Hardware context for a run (one row per run).
+-- Hardware context for a run (one row per run). Hardware identity goes
+-- through system_gpu_link so the run records which GPU in which slot of which
+-- host it used.
 -- ---------------------------------------------------------------------------
 CREATE TABLE run_hardware_metrics (
     run_id             UUID PRIMARY KEY REFERENCES runs,
-    system_hardware_id INT REFERENCES system_hardware,
+    system_hardware_id INT,
+    slot_index         INT,
     system_software_id INT REFERENCES system_software,
-    gpu_hardware_id    INT REFERENCES gpu_hardware,
     peak_vram_mb       INT,
     power_limit_w      FLOAT,
-    measured_tflops    FLOAT
+    measured_tflops    FLOAT,
+    FOREIGN KEY (system_hardware_id, slot_index)
+        REFERENCES system_gpu_link (system_hardware_id, slot_index)
 );
 
 -- ---------------------------------------------------------------------------

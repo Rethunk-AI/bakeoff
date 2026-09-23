@@ -24,6 +24,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 
+- **Hardware schema completed to spec** — `interface_type` gains bandwidth, family, and lane fields with a PCIe 1.0–5.0 × x1/x4/x8/x16, SXM, NVLink, Thunderbolt, and OCuLink seed; `gpu_hardware` is model-level with PCI vendor/device/subsystem IDs, memory bus/bandwidth/clock fields, `tdp_w`, and FKs to new `gpu_architectures` and `vram_types` lookups; per-format TFLOPS move to `gpu_tflops` with `compute_formats` and `tflops_sources` provenance; `system_hardware` / `system_software` carry the host and environment fields; `system_gpu_link` is keyed by slot with native and actual interface FKs; `run_hardware_metrics` references its slot through `system_gpu_link`. (#17–#21, #38)
 - Refactored runner to route all inference through `llama-swap` proxy; retired `bin/serve.sh` in favour of `bin/llama-swap.sh`.
 - Extracted `bench.config` module; validation and `judge_id` helper are now shared across runner, report, and llama-swap generator.
 - Consolidated `_fmt`, `resolve_models_dir`, `DEFAULT_CONFIG`, and several small helpers that had drifted to multiple sites.

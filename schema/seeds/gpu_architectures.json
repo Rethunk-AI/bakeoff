@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "table": "gpu_architectures",
+  "description": "GPU micro-architectures for grouping results by generation. New values require admin review before insertion.",
+  "rows": [
+    {"name": "Pascal", "description": "NVIDIA, 2016"},
+    {"name": "Volta", "description": "NVIDIA, 2017"},
+    {"name": "Turing", "description": "NVIDIA, 2018"},
+    {"name": "Ampere", "description": "NVIDIA, 2020"},
+    {"name": "Ada Lovelace", "description": "NVIDIA, 2022"},
+    {"name": "Hopper", "description": "NVIDIA, 2022"},
+    {"name": "Blackwell", "description": "NVIDIA, 2024"},
+    {"name": "RDNA 2", "description": "AMD, 2020"},
+    {"name": "RDNA 3", "description": "AMD, 2022"},
+    {"name": "RDNA 3.5", "description": "AMD, 2024 (Strix Point / Strix Halo iGPU)"},
+    {"name": "RDNA 4", "description": "AMD, 2025"},
+    {"name": "CDNA 2", "description": "AMD, 2021"},
+    {"name": "CDNA 3", "description": "AMD, 2023"},
+    {"name": "Xe-HPG", "description": "Intel, 2022 (Alchemist)"},
+    {"name": "Xe2", "description": "Intel, 2024 (Battlemage / Lunar Lake)"}
+  ]
+}

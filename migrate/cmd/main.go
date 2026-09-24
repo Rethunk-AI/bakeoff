@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log"
@@ -20,6 +21,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatalf("%v", err)
+	}
+}
+
+func run() error {
 	fs := flag.NewFlagSet("bakeoff-migrate", flag.ExitOnError)
 
 	var (
@@ -37,18 +44,18 @@ func main() {
 	}
 
 	if *batchSize == -1 {
-		log.Fatalf("--batch-size -1 is invalid; use 0 for dynamic sizing or N>0 for a fixed batch size")
+		return errors.New("--batch-size -1 is invalid; use 0 for dynamic sizing or N>0 for a fixed batch size")
 	}
 
 	if fs.NArg() != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: bakeoff-migrate [flags] <schema_version_id>\n\n")
 		fs.PrintDefaults()
-		os.Exit(1)
+		return errors.New("schema_version_id argument is required")
 	}
 
 	schemaVersionID, err := strconv.Atoi(fs.Arg(0))
 	if err != nil || schemaVersionID <= 0 {
-		log.Fatalf("schema_version_id must be a positive integer, got %q", fs.Arg(0))
+		return fmt.Errorf("schema_version_id must be a positive integer, got %q", fs.Arg(0))
 	}
 
 	// Resolve DSN.
@@ -57,14 +64,14 @@ func main() {
 		connStr = os.Getenv("DATABASE_URL")
 	}
 	if connStr == "" {
-		log.Fatalf("DATABASE_URL not set and --dsn not provided")
+		return errors.New("DATABASE_URL not set and --dsn not provided")
 	}
 
 	ctx := context.Background()
 
 	conn, err := pgx.Connect(ctx, connStr)
 	if err != nil {
-		log.Fatalf("connect to database: %v", err)
+		return fmt.Errorf("connect to database: %w", err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
 
@@ -82,8 +89,9 @@ func main() {
 	log.Printf("[bakeoff-migrate] starting migration for schema version %d (dry-run=%v)", schemaVersionID, *dryRun)
 
 	if err := runner.Run(ctx, schemaVersionID); err != nil {
-		log.Fatalf("[bakeoff-migrate] FAILED: %v", err)
+		return fmt.Errorf("[bakeoff-migrate] FAILED: %w", err)
 	}
 
 	log.Printf("[bakeoff-migrate] DONE")
+	return nil
 }

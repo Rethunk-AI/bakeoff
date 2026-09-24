@@ -516,7 +516,7 @@ func (r *MigrationRunner) atomicSwap(ctx context.Context, source, shadow, oldNam
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback is best-effort after commit or an earlier failure
 	if _, err := tx.Exec(ctx, fmt.Sprintf("ALTER TABLE %s RENAME TO %s", source, oldName)); err != nil {
 		return err
 	}
@@ -579,7 +579,7 @@ func (r *MigrationRunner) maybeDropStateTable(ctx context.Context, stateTable st
 		return
 	}
 	if count == 0 {
-		r.conn.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stateTable)) //nolint:errcheck
+		r.conn.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stateTable)) //nolint:errcheck // state cleanup is best-effort after migration completion
 	}
 }
 

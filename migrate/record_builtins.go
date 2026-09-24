@@ -29,7 +29,7 @@ func recordBuiltins(ctx context.Context, conn *pgx.Conn, rec *Record) map[string
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 	// queryRows executes a squirrel select and returns []map[string]any.
-	queryRows := func(table string, where tengo.Object, fields tengo.Object) ([]map[string]any, error) {
+	queryRows := func(table string, where, fields tengo.Object) ([]map[string]any, error) {
 		sel := psql.Select(buildFieldList(fields)...).From(table)
 		sel = applyWhere(sel, where)
 		sql, args, err := sel.ToSql()
@@ -365,7 +365,7 @@ func parseSelectArgs(fn string, args []tengo.Object) (string, tengo.Object, teng
 }
 
 // buildFieldList extracts a SQL field list from a Tengo value.
-// nil / undefined / empty array → ["*"]
+// nil / undefined / empty array → ["*"].
 func buildFieldList(fields tengo.Object) []string {
 	if fields == nil || fields == tengo.UndefinedValue {
 		return []string{"*"}
@@ -442,7 +442,7 @@ func rowsToTengo(rows []map[string]any) *tengo.Array {
 }
 
 // errMap wraps an error into a Tengo map with an "error" key.
-// Scripts should check: if result.error { rejectRecord(result.error) }
+// Scripts should check: if result.error { rejectRecord(result.error) }.
 func errMap(err error) *tengo.Map {
 	return &tengo.Map{Value: map[string]tengo.Object{
 		"error": &tengo.String{Value: err.Error()},

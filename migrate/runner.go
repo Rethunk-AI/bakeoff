@@ -110,7 +110,7 @@ func (r *MigrationRunner) Run(ctx context.Context, schemaVersionID int) error {
 	// 4. Execute schema_migration_script (DDL phase).
 	if sv.SchemaMigrationScript != nil && *sv.SchemaMigrationScript != "" {
 		log.Printf("[migrate] running schema_migration_script for version %d", schemaVersionID)
-		if err := r.runSchemaScript(ctx, *sv.SchemaMigrationScript, sv); err != nil {
+		if err := r.runSchemaScript(ctx, *sv.SchemaMigrationScript); err != nil {
 			return fmt.Errorf("schema_migration_script: %w", err)
 		}
 	}
@@ -135,7 +135,7 @@ func (r *MigrationRunner) Run(ctx context.Context, schemaVersionID int) error {
 
 // runSchemaScript compiles and executes a Tengo DDL script.
 // Script errors are fatal (abort migration entirely).
-func (r *MigrationRunner) runSchemaScript(ctx context.Context, script string, sv SchemaVersion) error {
+func (r *MigrationRunner) runSchemaScript(ctx context.Context, script string) error {
 	builtins := schemaBuiltins(ctx, r.conn)
 
 	compiled, err := compileScript(script, builtins)
@@ -176,7 +176,7 @@ func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersi
 	inlinePath := false
 
 	if inlinePath {
-		return r.runRecordMigrationInline(ctx, sv, table, script)
+		return r.runRecordMigrationInline(table)
 	}
 
 	return r.runRecordMigrationShadow(ctx, sv, table, script, shadowTable)
@@ -254,12 +254,7 @@ func (r *MigrationRunner) runRecordMigrationShadow(
 }
 
 // runRecordMigrationInline migrates records against the live table (no shadow).
-func (r *MigrationRunner) runRecordMigrationInline(
-	ctx context.Context,
-	sv SchemaVersion,
-	table SchemaTable,
-	script string,
-) error {
+func (r *MigrationRunner) runRecordMigrationInline(table SchemaTable) error {
 	// TODO(phase2b): implement inline record migration.
 	return fmt.Errorf("inline migration path not yet implemented for table %q", table.TableName)
 }

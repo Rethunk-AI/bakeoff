@@ -34,7 +34,7 @@ jobs:
 
       - name: Test
         working-directory: migrate
-        run: go test ./...
+        run: go test -race ./...
 
   python:
     name: python lint + type + dry-run (${{ matrix.python-version }})

@@ -9,7 +9,7 @@ package migrate
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // user-requested hash surface; md5 is deliberate
+	"crypto/md5" //nolint:gosec // backs the script-selectable md5 hash method, not a security primitive
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"
@@ -253,7 +253,7 @@ func recordBuiltins(ctx context.Context, conn *pgx.Conn, rec *Record) map[string
 					h := sha512.Sum512(data)
 					result = fmt.Sprintf("%x", h[:])
 				case "md5":
-					h := md5.Sum(data) //nolint:gosec // deliberate user-requested surface
+					h := md5.Sum(data) //nolint:gosec // script-selected md5 checksum for content comparison, not a security primitive
 					result = fmt.Sprintf("%x", h[:])
 				case "blake2b":
 					h, err := blake2b.New256(nil)

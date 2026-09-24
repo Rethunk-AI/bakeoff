@@ -46,7 +46,7 @@ func schemaBuiltins(ctx context.Context, conn *pgx.Conn) map[string]tengo.Object
 				}
 				colDefs, err := buildColumnDefs(colsArr)
 				if err != nil {
-					return &tengo.String{Value: err.Error()}, nil
+					return &tengo.String{Value: err.Error()}, nil //nolint:nilerr // schema built-ins expose validation failures as Tengo strings
 				}
 				sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", name.Value, strings.Join(colDefs, ", "))
 				return &tengo.String{Value: exec(sql)}, nil
@@ -102,7 +102,7 @@ func schemaBuiltins(ctx context.Context, conn *pgx.Conn) map[string]tengo.Object
 				}
 				colDef, err := singleColumnDef(colMap)
 				if err != nil {
-					return &tengo.String{Value: err.Error()}, nil
+					return &tengo.String{Value: err.Error()}, nil //nolint:nilerr // schema built-ins expose validation failures as Tengo strings
 				}
 				return &tengo.String{Value: exec(fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s", table.Value, colDef))}, nil
 			},

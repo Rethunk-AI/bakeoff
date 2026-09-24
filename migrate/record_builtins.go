@@ -258,7 +258,7 @@ func recordBuiltins(ctx context.Context, conn *pgx.Conn, rec *Record) map[string
 				case "blake2b":
 					h, err := blake2b.New256(nil)
 					if err != nil {
-						return &tengo.String{Value: "hash: blake2b init error: " + err.Error()}, nil
+						return nil, fmt.Errorf("hash: blake2b init: %w", err)
 					}
 					h.Write(data)
 					result = fmt.Sprintf("%x", h.Sum(nil))

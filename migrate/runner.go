@@ -348,11 +348,12 @@ func (r *MigrationRunner) migrateRecords(
 				}
 			}
 
-			if rec.rejected {
+			rejected, rejectMsg, ignored, ignoreMsg := rec.disposition()
+			if rejected {
 				rejects = append(rejects, rejectEntry{
 					RowID:  primaryKeyOf(row),
 					Table:  table.TableName,
-					Reason: rec.rejectMsg,
+					Reason: rejectMsg,
 				})
 				stats.rejected++
 				if !firstRejection {
@@ -364,11 +365,11 @@ func (r *MigrationRunner) migrateRecords(
 				continue
 			}
 
-			if rec.ignored {
-				log.Printf("[migrate] ignored record in %s: %s", table.TableName, rec.ignoreMsg)
+			if ignored {
+				log.Printf("[migrate] ignored record in %s: %s", table.TableName, ignoreMsg)
 				stats.ignored++
 				if r.cfg.IgnoreIsFatal {
-					return stats, fmt.Errorf("--ignore-is-fatal: record ignored in %s: %s", table.TableName, rec.ignoreMsg)
+					return stats, fmt.Errorf("--ignore-is-fatal: record ignored in %s: %s", table.TableName, ignoreMsg)
 				}
 				continue
 			}

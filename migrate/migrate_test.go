@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/Masterminds/squirrel"
@@ -804,4 +805,36 @@ func TestRunner_InvalidBatchSize(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "batch-size -1") {
 		t.Fatalf("BatchSize=-1 should produce descriptive error, got %v", err)
 	}
+}
+
+func TestRecord_ConcurrentAccess(t *testing.T) {
+	rec := NewRecord(map[string]any{"shared": int64(0)})
+
+	const workers = 8
+	const iterations = 1_000
+	var wg sync.WaitGroup
+	start := make(chan struct{})
+
+	for worker := range workers {
+		wg.Add(1)
+		go func(worker int) {
+			defer wg.Done()
+			<-start
+			for iteration := range iterations {
+				rec.Set("shared", int64(worker*iterations+iteration))
+				_ = rec.Get("shared")
+				if iteration%2 == 0 {
+					rec.Delete("shared")
+				}
+				_ = rec.MergedRow()
+				_ = rec.toTengoMap()
+				rec.Reject("concurrent rejection")
+				rec.Ignore("concurrent ignore")
+				_, _, _, _ = rec.disposition()
+			}
+		}(worker)
+	}
+
+	close(start)
+	wg.Wait()
 }

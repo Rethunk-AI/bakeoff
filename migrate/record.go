@@ -5,6 +5,7 @@ package migrate
 import (
 	"fmt"
 	"maps"
+	"sync"
 
 	"github.com/d5/tengo/v2"
 )
@@ -12,6 +13,8 @@ import (
 // Record wraps a database row during record migration script execution.
 // All mutations are tracked so only dirty fields are written back.
 type Record struct {
+	mu sync.RWMutex
+
 	data      map[string]any
 	dirty     map[string]any  // fields explicitly set via setField
 	deleted   map[string]bool // fields added to delete-set via deleteField
@@ -34,6 +37,9 @@ func NewRecord(row map[string]any) *Record {
 
 // Get returns the current value of field (original or overwritten).
 func (r *Record) Get(field string) any {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	if v, ok := r.dirty[field]; ok {
 		return v
 	}
@@ -42,31 +48,53 @@ func (r *Record) Get(field string) any {
 
 // Set marks field dirty with value.
 func (r *Record) Set(field string, value any) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.dirty[field] = value
 	delete(r.deleted, field)
 }
 
 // Delete adds field to the delete-set; field is omitted on write-back.
 func (r *Record) Delete(field string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.deleted[field] = true
 	delete(r.dirty, field)
 }
 
 // Reject marks this record as rejected with reason.
 func (r *Record) Reject(reason string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.rejected = true
 	r.rejectMsg = reason
 }
 
 // Ignore marks this record to be skipped with reason.
 func (r *Record) Ignore(reason string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	r.ignored = true
 	r.ignoreMsg = reason
+}
+
+func (r *Record) disposition() (bool, string, bool, string) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.rejected, r.rejectMsg, r.ignored, r.ignoreMsg
 }
 
 // MergedRow returns the final row to write back.
 // Fields in the delete-set are omitted; dirty fields override originals.
 func (r *Record) MergedRow() map[string]any {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	out := make(map[string]any, len(r.data))
 	for k, v := range r.data {
 		if !r.deleted[k] {
@@ -84,6 +112,9 @@ func (r *Record) MergedRow() map[string]any {
 // toTengoMap converts the record's current state to a Tengo map value
 // suitable for injection into a Tengo script as the `this` variable.
 func (r *Record) toTengoMap() *tengo.Map {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	m := &tengo.Map{Value: make(map[string]tengo.Object)}
 	for k, v := range r.data {
 		m.Value[k] = goToTengo(v)

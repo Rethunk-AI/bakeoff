@@ -9,7 +9,7 @@ package migrate
 
 import (
 	"context"
-	"crypto/md5"  //nolint:gosec // user-requested hash surface; md5 is deliberate
+	"crypto/md5" //nolint:gosec // user-requested hash surface; md5 is deliberate
 	"crypto/sha256"
 	"crypto/sha512"
 	"fmt"

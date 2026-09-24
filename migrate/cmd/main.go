@@ -23,13 +23,13 @@ func main() {
 	fs := flag.NewFlagSet("bakeoff-migrate", flag.ExitOnError)
 
 	var (
-		batchSize   = fs.Int("batch-size", 0, "batch size: N>0 fixed, 0=dynamic (default), -1=invalid")
-		maxRejects  = fs.Int("max-rejects", 10, "abort after N rejects (0=first, -1=collect all)")
-		ignoreFatal = fs.Bool("ignore-is-fatal", false, "treat any ignoreRecord as a fatal error")
-		dryRun      = fs.Bool("dry-run", false, "execute scripts without committing; report counts only")
-		procTarget  = fs.Float64("batch-target-processing-time", 20.0, "target seconds per batch processing phase")
+		batchSize    = fs.Int("batch-size", 0, "batch size: N>0 fixed, 0=dynamic (default), -1=invalid")
+		maxRejects   = fs.Int("max-rejects", 10, "abort after N rejects (0=first, -1=collect all)")
+		ignoreFatal  = fs.Bool("ignore-is-fatal", false, "treat any ignoreRecord as a fatal error")
+		dryRun       = fs.Bool("dry-run", false, "execute scripts without committing; report counts only")
+		procTarget   = fs.Float64("batch-target-processing-time", 20.0, "target seconds per batch processing phase")
 		commitTarget = fs.Float64("batch-target-commit-time", 1.0, "target seconds per batch commit phase")
-		dsn         = fs.String("dsn", "", "PostgreSQL DSN (default: DATABASE_URL env var)")
+		dsn          = fs.String("dsn", "", "PostgreSQL DSN (default: DATABASE_URL env var)")
 	)
 
 	if err := fs.Parse(os.Args[1:]); err != nil {

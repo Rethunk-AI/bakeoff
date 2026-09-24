@@ -131,7 +131,7 @@ func (r *Record) toTengoMap() *tengo.Map {
 }
 
 // goToTengo converts a Go value to a Tengo object (best-effort).
-func goToTengo(v any) tengo.Object {
+func goToTengo(v any) tengo.Object { //nolint:ireturn // tengo.Object is a third-party interface (d5/tengo); which concrete type comes back depends on v's runtime type.
 	if v == nil {
 		return tengo.UndefinedValue
 	}

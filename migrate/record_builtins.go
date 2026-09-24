@@ -346,7 +346,7 @@ func recordBuiltins(ctx context.Context, conn *pgx.Conn, rec *Record) map[string
 }
 
 // parseSelectArgs validates and extracts (table, where, fields) from select* args.
-func parseSelectArgs(fn string, args []tengo.Object) (string, tengo.Object, tengo.Object, error) {
+func parseSelectArgs(fn string, args []tengo.Object) (string, tengo.Object, tengo.Object, error) { //nolint:ireturn // tengo.Object is a third-party interface (d5/tengo); where/fields pass through whatever concrete arg type the caller supplied.
 	if len(args) < 1 || len(args) > 3 {
 		return "", nil, nil, fmt.Errorf("%s expects 1–3 args (table, [where], [fields])", fn)
 	}

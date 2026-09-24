@@ -170,9 +170,8 @@ func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersi
 	shadowTable := fmt.Sprintf("_bakeoff_migration_%s_%d", sanitizeName(table.TableName), sv.ID)
 
 	// Inline path: if no structural DDL change and UUID namespace unchanged,
-	// migrate against the live table.
-	// TODO(phase2b): implement inline detection via schema fingerprint comparison.
-	// For now always use the shadow table path.
+	// migrate against the live table. Detection is not implemented, so this
+	// always takes the shadow table path.
 	inlinePath := false
 
 	if inlinePath {
@@ -255,7 +254,6 @@ func (r *MigrationRunner) runRecordMigrationShadow(
 
 // runRecordMigrationInline migrates records against the live table (no shadow).
 func (r *MigrationRunner) runRecordMigrationInline(table SchemaTable) error {
-	// TODO(phase2b): implement inline record migration.
 	return fmt.Errorf("inline migration path not yet implemented for table %q", table.TableName)
 }
 
@@ -613,10 +611,7 @@ func (r *MigrationRunner) resumeGate(ctx context.Context) error {
 	for _, name := range orphans {
 		log.Printf("  %s", name)
 	}
-	log.Printf("[migrate] Options: (c)ontinue, (r)ollback, (i)nspect")
-	log.Printf("[migrate] Continuing automatically (use --rollback flag to drop orphans).")
-	// Non-interactive mode: continue (resume semantics). CLI flag --rollback would drop here.
-	// TODO(phase2b): wire --rollback flag to drop all orphan shadow tables.
+	log.Printf("[migrate] Continuing automatically (resume semantics); drop them manually if unwanted.")
 	return nil
 }
 

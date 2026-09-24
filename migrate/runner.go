@@ -242,7 +242,9 @@ func (r *MigrationRunner) runRecordMigrationShadow(
 			return err
 		}
 		// Drop state table entirely if empty.
-		r.maybeDropStateTable(ctx, stateTable)
+		if err := r.maybeDropStateTable(ctx, stateTable); err != nil {
+			return fmt.Errorf("drop state table: %w", err)
+		}
 	} else if stats.rejected > 0 {
 		return fmt.Errorf("%d records rejected during migration of %s (shadow table preserved for inspection)",
 			stats.rejected, table.TableName)
@@ -311,7 +313,7 @@ func (r *MigrationRunner) migrateRecords(
 
 		// Randomize order after first rejection to avoid starvation.
 		if firstRejection {
-			rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] })
+			rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] }) //nolint:gosec // row order is randomized only to avoid migration starvation, not for security
 		}
 
 		processStart := time.Now()
@@ -573,14 +575,16 @@ func (r *MigrationRunner) dropCheckpoint(ctx context.Context, stateTable, tableN
 }
 
 // maybeDropStateTable drops _bakeoff_migration_state if it has no rows left.
-func (r *MigrationRunner) maybeDropStateTable(ctx context.Context, stateTable string) {
+func (r *MigrationRunner) maybeDropStateTable(ctx context.Context, stateTable string) error {
 	var count int
 	if err := r.conn.QueryRow(ctx, fmt.Sprintf("SELECT COUNT(*) FROM %s", stateTable)).Scan(&count); err != nil {
-		return
+		return err
 	}
 	if count == 0 {
-		r.conn.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stateTable)) //nolint:errcheck // state cleanup is best-effort after migration completion
+		_, err := r.conn.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", stateTable))
+		return err
 	}
+	return nil
 }
 
 // resumeGate detects orphan shadow tables and prompts the operator.

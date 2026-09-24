@@ -7,6 +7,7 @@ package migrate
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"math"
@@ -544,7 +545,7 @@ func (r *MigrationRunner) loadCheckpoint(ctx context.Context, stateTable, tableN
 	err := r.conn.QueryRow(ctx,
 		fmt.Sprintf("SELECT last_row_id FROM %s WHERE table_name=$1 AND version_id=$2", stateTable),
 		tableName, versionID).Scan(&lastID)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return 0, nil
 	}
 	if err != nil {
@@ -627,7 +628,7 @@ func (r *MigrationRunner) loadSchemaVersion(ctx context.Context, id int) (Schema
 		       schema_migration_script, record_migration_script
 		FROM schema_versions WHERE schema_version_id = $1`, id).
 		Scan(&sv.ID, &sv.Description, &sv.AllowMigration, &sv.SchemaMigrationScript, &sv.RecordMigrationScript)
-	if err == pgx.ErrNoRows {
+	if errors.Is(err, pgx.ErrNoRows) {
 		return sv, fmt.Errorf("schema version %d not found", id)
 	}
 	return sv, err

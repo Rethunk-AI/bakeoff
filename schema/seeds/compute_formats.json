@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "table": "compute_formats",
+  "description": "Numeric precision formats that TFLOPS figures are quoted for. New values require admin review before insertion.",
+  "rows": [
+    {"name": "fp64", "description": "IEEE 754 double precision"},
+    {"name": "fp32", "description": "IEEE 754 single precision"},
+    {"name": "tf32", "description": "TensorFloat-32 (tensor core)"},
+    {"name": "fp16", "description": "IEEE 754 half precision"},
+    {"name": "bf16", "description": "Brain float 16"},
+    {"name": "fp8", "description": "8-bit float (E4M3 / E5M2)"},
+    {"name": "fp4", "description": "4-bit float"},
+    {"name": "int8", "description": "8-bit integer"},
+    {"name": "int4", "description": "4-bit integer"}
+  ]
+}

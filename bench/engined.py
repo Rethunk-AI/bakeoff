@@ -270,8 +270,12 @@ def down() -> None:
     _held_ids = []
     _held_engined_url = None
 
+    # The second call (atexit after finally) finds nothing to remove, and a
+    # reload then would only churn engined for no change.
+    if not FRAGMENT_PATH.exists():
+        return
     try:
-        FRAGMENT_PATH.unlink(missing_ok=True)
+        FRAGMENT_PATH.unlink()
     except Exception as e:
         print(f"[engined-down-err] unlink fragment: {e}", file=sys.stderr)
 

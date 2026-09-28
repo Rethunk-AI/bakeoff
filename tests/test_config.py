@@ -5,10 +5,12 @@ from __future__ import annotations
 import pytest
 
 from bench.config import (
+    DEFAULT_ENGINED_MODELS_DIR,
     ConfigError,
     ValidationIssue,
     config_hash,
     load_config,
+    resolve_models_dir,
     validate_config,
 )
 
@@ -256,7 +258,7 @@ class TestJudge:
 # --- validate_config — server numeric fields --------------------------------
 
 
-_SERVER_FIELDS = ["ctx", "ngl", "ubatch", "boot_timeout_s", "swap_port", "backend_start_port"]
+_SERVER_FIELDS = ["ctx", "ngl", "ubatch"]
 
 
 class TestServerNumerics:
@@ -353,3 +355,35 @@ class TestValidationIssue:
     def test_str(self):
         v = ValidationIssue(path="models[0].id", message="required")
         assert str(v) == "models[0].id: required"
+
+
+# --- resolve_models_dir ------------------------------------------------------
+
+
+class TestResolveModelsDir:
+    def test_default_is_engined_models_dir(self):
+        assert str(resolve_models_dir({})).endswith(DEFAULT_ENGINED_MODELS_DIR.removeprefix("~/"))
+
+    def test_explicit_path_expanded_and_absolute(self, tmp_path):
+        p = resolve_models_dir({"models_dir": str(tmp_path) + "/models"})
+        assert p.is_absolute()
+        assert p == (tmp_path / "models").resolve()
+
+
+# --- engined.hold validation --------------------------------------------------
+
+
+class TestEnginedHold:
+    def test_hold_list_of_strings_ok(self):
+        cfg = _cfg(engined={"hold": ["comfy", "llama"]})
+        assert validate_config(cfg) == []
+
+    def test_hold_non_list_rejected(self):
+        cfg = _cfg(engined={"hold": "comfy"})
+        issues = validate_config(cfg)
+        assert any(i.path == "engined.hold" for i in issues)
+
+    def test_hold_non_string_items_rejected(self):
+        cfg = _cfg(engined={"hold": [1, 2]})
+        issues = validate_config(cfg)
+        assert any(i.path == "engined.hold" for i in issues)

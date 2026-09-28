@@ -17,11 +17,13 @@ import yaml
 # Minimal valid config shared by multiple tests.
 _BASE_CFG = {
     "run": {"seed": 42},
+    "engined": {
+        "spec_dir": "/usr/local/src/com.github/Rethunk-Tech/engined/engines/llama",
+        "models_dir": "/tmp/models",
+    },
     "server": {
-        "image": "ghcr.io/ggml-org/llama.cpp:server-vulkan",
         "ctx": 4096,
         "ngl": 99,
-        "models_dir": "/tmp/models",
     },
     "dataset": {"n": 5, "domains": ["qa"]},
     "models": [
@@ -290,9 +292,8 @@ class TestStoreWiring:
         with (
             patch("sys.argv", ["runner", "--config", str(config_path)]),
             patch("bench.runner.write_jsonl"),
-            patch("bench.runner._proxy_start", return_value=None),
-            patch("bench.runner._proxy_stop"),
-            patch("bench.runner._write_proxy_config"),
+            patch("bench.runner.engined.up"),
+            patch("bench.runner.engined.down"),
             patch("bench.runner._run_model_phases", return_value=fake_records),
             patch("bench.runner.run_judge_phase", return_value=[]),
             patch(
@@ -302,7 +303,6 @@ class TestStoreWiring:
             patch("bench.runner.build_model_metadata", return_value={}),
             patch("bench.runner.enrich_model_metadata", return_value={}),
             patch("bench.runner.collect_hardware_context", return_value={}),
-            patch("bench.runner.LAUNCHER", config_path),  # make LAUNCHER.exists() True
         ):
             return main()
 

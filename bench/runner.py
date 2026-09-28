@@ -1,59 +1,60 @@
-"""Benchmark runner: sequential model phases over a llama-swap proxy.
+"""Benchmark runner: sequential model phases over engined.
 
 Phases:
   1. Generate dataset.
-  2. Start llama-swap proxy in front of podman + llama.cpp backends.
-  3. For each model: warmup (triggers the swap) -> run all
+  2. Declare the `llama-bench` engine + one route per model/judge to
+     engined (a `config.d` fragment) and reload it.
+  3. For each model: warmup (triggers engined's swap) -> run all
      (task x prompt) calls -> next model.
   4. Judge phase (optional): warmup the judge model -> run judgements
      over stored A/B responses.
-  5. Stop the proxy (SIGTERM + sweep any bench-llama-* containers).
+  5. Release any exclusivity holds, delete the fragment, reload engined.
   6. Emit reports (JSON + Markdown + static HTML dashboard).
 
 Invariants (AGENTS.md):
 
-  - **One model in VRAM at a time.** llama-swap's default behaviour
-    unloads the current backend before starting the next; we never
-    configure groups or exclusive profiles, so the default applies.
-    The runner additionally iterates per-model-sequentially — all
-    calls for model A complete before any call for model B — so a
-    full benchmark incurs exactly N swaps (N+1 with judge), not one
-    per matrix cell. Changing to a round-robin outer loop would
-    silently trigger a swap per call and invalidate the energy and
-    latency numbers.
+  - **One model in VRAM at a time.** The `llama-bench` engine declares
+    `models_max = 1`, so engined unloads the current backend before
+    starting the next. The runner additionally iterates
+    per-model-sequentially — all calls for model A complete before any
+    call for model B — so a full benchmark incurs exactly N swaps (N+1
+    with judge), not one per matrix cell. Changing to a round-robin
+    outer loop would silently trigger a swap per call and invalidate
+    the energy and latency numbers.
   - **Warmup absorbs swap + first-batch cost.** The first call to a
-    previously-unseen model name triggers llama-swap's boot. We make
-    that call outside the PowerSampler so the swap energy does not
-    leak into any row.
+    previously-unseen model name triggers engined's boot. We make that
+    call outside the PowerSampler so the swap energy does not leak into
+    any row.
   - **Judge is its own model entry**, not a live subprocess of the
-    runner. Running it through llama-swap keeps the timing model
-    identical to the A/B phase.
+    runner. Running it through engined keeps the timing model identical
+    to the A/B phase.
 """
 
 from __future__ import annotations
 
 import argparse
+import atexit
 import itertools
 import json
 import random
 import resource
-import subprocess
 import sys
 import time
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
-import yaml
+import httpx
 
-from bench import llama_swap
+from bench import engined
 from bench.clients import ChatClient, ChatResult
 from bench.config import (
     DEFAULT_CONFIG,
+    DEFAULT_ENGINED_ENGINE,
+    DEFAULT_ENGINED_URL,
     ConfigError,
     judge_id,
     load_config,
-    resolve_models_dir,
     validate_config,
 )
 from bench.dataset import Task, generate, load_floor_tasks, write_jsonl
@@ -88,64 +89,6 @@ from bench.resume import (
 from bench.scoring import model_rollup, run_status_from_scores
 
 HERE = Path(__file__).resolve().parent.parent
-LAUNCHER = HERE / "bin" / "llama-swap.sh"
-LLAMA_SWAP_CONFIG = HERE / ".cache" / "llama-swap" / "config.yaml"
-
-
-# --- llama-swap lifecycle ---------------------------------------------------
-
-
-def _write_proxy_config(
-    bakeoff_cfg: dict[str, Any],
-    models_dir: Path,
-    target: Path,
-) -> None:
-    ls_cfg = llama_swap.build(bakeoff_cfg, str(models_dir))
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(yaml.safe_dump(ls_cfg, sort_keys=False))
-
-
-def _launcher_args(*extra: str) -> list[str]:
-    return [str(LAUNCHER), *extra]
-
-
-def _proxy_start(listen: str, config_path: Path, boot_timeout_s: int) -> subprocess.Popen[bytes]:
-    """Launch llama-swap as a child process; block until it is accepting requests.
-
-    The launcher script handles the pre-start sweep of stale
-    `bench-llama-*` containers and then execs the binary, so the
-    Popen pid tracks the binary once exec completes.
-    """
-    print(f"[proxy] starting llama-swap on {listen}", file=sys.stderr)
-    proc = subprocess.Popen(
-        _launcher_args("up", str(config_path), listen),
-        stdout=sys.stderr.fileno(),
-        stderr=subprocess.STDOUT,
-    )
-    try:
-        subprocess.run(
-            _launcher_args("wait", listen, str(boot_timeout_s)),
-            check=True,
-        )
-    except Exception:
-        _proxy_stop(proc)
-        raise
-    print("[proxy] ready", file=sys.stderr)
-    return proc
-
-
-def _proxy_stop(proc: subprocess.Popen[bytes]) -> None:
-    print("[proxy] stopping llama-swap", file=sys.stderr)
-    if proc.poll() is None:
-        proc.terminate()
-        try:
-            proc.wait(timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.wait(timeout=5)
-    # Defensive: even if the proxy exited cleanly, sweep orphans that a
-    # crashed `cmd` might have left behind.
-    subprocess.run(_launcher_args("sweep"), check=False)
 
 
 # --- Call wrapper -----------------------------------------------------------
@@ -159,6 +102,7 @@ def call_one(
     cost_enabled: bool,
     kwh_rate: float,
     sample_hz: float = 10.0,
+    expected_route: str | None = None,
 ) -> tuple[ChatResult, float | None, float | None, float | None, float | None, float | None]:
     """Run one inference call.
 
@@ -169,6 +113,12 @@ def call_one(
     from energy_wh × kwh_rate. The PowerSampler always runs so VRAM and SM
     utilization are captured regardless of cost_enabled. CPU timing via
     getrusage brackets the call.
+
+    `expected_route`, when given, is the `@/<engine>/<id>` address the call
+    was addressed to. engined's `x-engined-route` response header names the
+    address that actually answered; a mismatch (a chain hop, a stale route)
+    fails the row rather than silently recording a different model's output
+    under this one's id.
     """
     messages = [
         {"role": "system", "content": system},
@@ -178,6 +128,11 @@ def call_one(
     with PowerSampler(hz=sample_hz, gpu_index=gpu_index) as sampler:
         res = client.chat(messages)
     ru_after = resource.getrusage(resource.RUSAGE_SELF)
+
+    if expected_route is not None:
+        got_route = res.raw.get("x-engined-route")
+        if got_route is not None and got_route != expected_route:
+            raise RuntimeError(f"engined answered {got_route!r}, expected {expected_route!r}")
 
     peak_vram = sampler.peak_vram_mb
     mean_sm = sampler.mean_sm_pct
@@ -192,15 +147,21 @@ WARMUP_SYSTEM = "You are a helpful assistant. Answer concisely."
 WARMUP_USER = "Say 'ready' and nothing else."
 
 
-def _warmup(client: ChatClient) -> None:
+def _warmup(client: ChatClient, engined_url: str, addr: str) -> None:
     """Fire one throwaway call so the timed matrix starts hot.
 
-    With llama-swap in front, the first call to a given model name
-    triggers an unload-of-previous + boot-of-requested backend. On
-    unified-memory APUs that can add seconds of graph-build and
-    weight-page-in cost. We absorb that here, outside the PowerSampler
-    wrapper, so it never contaminates a recorded row.
+    With engined's `models_max = 1` on the `llama-bench` engine, the first
+    request for a given address triggers an unload-of-previous +
+    boot-of-requested backend. On unified-memory APUs that can add seconds
+    of graph-build and weight-page-in cost. `POST /engined/v1/start` pays
+    that swap explicitly first; the throwaway chat call that follows then
+    absorbs only first-batch JIT cost, outside the PowerSampler wrapper, so
+    neither contaminates a recorded row.
     """
+    try:
+        httpx.post(f"{engined_url}/engined/v1/start", json={"model": addr}, timeout=120)
+    except Exception as e:
+        print(f"[warmup-start-err] {e}", file=sys.stderr)
     try:
         client.chat(
             [
@@ -227,11 +188,15 @@ def run_model_phase(
     hardware_id: str | None = None,
     peak_tflops: float | None = None,
     floor_tasks: list[Task] | None = None,
+    engined_url: str = DEFAULT_ENGINED_URL,
+    engine: str = DEFAULT_ENGINED_ENGINE,
 ) -> list[dict[str, Any]]:
-    """Run every (task x prompt) cell for one model against the proxy.
+    """Run every (task x prompt) cell for one model against engined.
 
-    `model_cfg["id"]` is the llama-swap routing key (not `alias` — the
-    alias stays inside the generated `cmd` as llama.cpp's `-a` flag).
+    `model_cfg["id"]` is the bare id under `records`/resume/scoring; the
+    OpenAI `model` field engined dispatches on is the address
+    `@/<engine>/<id>` (not `alias` — the alias stays inside the fragment's
+    `filename`, unused by the door).
 
     When `pending` is provided, only (task_id, prompt_id) pairs in that
     set are executed; all others are silently skipped.
@@ -244,17 +209,18 @@ def run_model_phase(
     (prompt_id "floor", empty system) and deterministic scorers only.
     """
     mid = model_cfg["id"]
+    addr = f"@/{engine}/{mid}"
     print(f"[phase] {mid}", file=sys.stderr)
 
     client = ChatClient(
         base_url=base_url,
-        model=mid,
+        model=addr,
         api_key="none",
         timeout_s=timeout_s,
     )
     if warmup:
         print(f"[warmup] {mid}", file=sys.stderr)
-        _warmup(client)
+        _warmup(client, engined_url, addr)
 
     cost_enabled = bool(cost_cfg.get("enabled"))
     kwh = float(cost_cfg.get("kwh_rate_usd", 0.0))
@@ -275,7 +241,7 @@ def run_model_phase(
     for ft in floor_tasks or []:
         try:
             res, _wh, _vram, _sm, _cu, _cs = call_one(
-                client, "", ft.user_prompt, gpu_i, False, kwh, sample_hz
+                client, "", ft.user_prompt, gpu_i, False, kwh, sample_hz, expected_route=addr
             )
             records.append(
                 {
@@ -314,7 +280,14 @@ def run_model_phase(
             continue
         try:
             res, wh, peak_vram, mean_sm, cpu_user_ms, cpu_sys_ms = call_one(
-                client, prm["system"], task.user_prompt, gpu_i, cost_enabled, kwh, sample_hz
+                client,
+                prm["system"],
+                task.user_prompt,
+                gpu_i,
+                cost_enabled,
+                kwh,
+                sample_hz,
+                expected_route=addr,
             )
             records.append(
                 {
@@ -388,6 +361,8 @@ def _run_model_phases(
     hardware_id: str | None = None,
     peak_tflops: float | None = None,
     floor_tasks: list[Task] | None = None,
+    engined_url: str = DEFAULT_ENGINED_URL,
+    engine: str = DEFAULT_ENGINED_ENGINE,
 ) -> list[dict[str, Any]]:
     """Iterate per-model-sequentially, honouring resume pending sets.
 
@@ -412,6 +387,8 @@ def _run_model_phases(
             hardware_id=hardware_id,
             peak_tflops=peak_tflops,
             floor_tasks=floor_tasks,
+            engined_url=engined_url,
+            engine=engine,
         )
         if prior_run_id is not None:
             recs = tag_fresh(recs, prior_run_id)
@@ -586,6 +563,8 @@ def run_judge_phase(
     warmup: bool = True,
     pending_pairs: set | None = None,
     pending_scores: set | None = None,
+    engined_url: str = DEFAULT_ENGINED_URL,
+    engine: str = DEFAULT_ENGINED_ENGINE,
 ) -> list[dict[str, Any]]:
     """Dispatch judge phase based on judge.mode.
 
@@ -608,17 +587,18 @@ def run_judge_phase(
         return []
 
     jid = judge_id(judge_cfg)
+    addr = f"@/{engine}/{jid}"
     print(f"[phase] judge ({jid}), mode={mode}", file=sys.stderr)
 
     judge = ChatClient(
         base_url=base_url,
-        model=jid,
+        model=addr,
         api_key="none",
         timeout_s=timeout_s,
     )
     if warmup:
-        print(f"[warmup] {judge_id}", file=sys.stderr)
-        _warmup(judge)
+        print(f"[warmup] {jid}", file=sys.stderr)
+        _warmup(judge, engined_url, addr)
 
     if mode == "pairwise_all":
         rng = random.Random(seed)
@@ -721,7 +701,6 @@ def main() -> int:
 
     run_cfg = cfg.get("run", {})
     ds_cfg = cfg["dataset"]
-    server_cfg = cfg["server"]
     cost_cfg = cfg.get("cost", {})
     judge_cfg = cfg.get("judge", {})
     out_cfg = cfg.get("output", {})
@@ -755,16 +734,11 @@ def main() -> int:
     print(f"[dataset] {len(tasks)} tasks -> {ds_path}", file=sys.stderr)
 
     if args.dry_run:
-        # Also exercise the llama-swap generator so a misconfigured
-        # models[] block trips CI's dry-run step instead of a live
-        # benchmark run. The yaml round-trip guards against a future
-        # regression where a non-primitive (e.g. pathlib.Path) leaks
-        # into the emitted config — safe_dump would fail at runtime
-        # otherwise; here it fails in CI.
-        models_dir = resolve_models_dir(server_cfg)
-        ls_cfg = llama_swap.build(cfg, str(models_dir))
-        yaml.safe_dump(ls_cfg, sort_keys=False)
-        n_backends = len(ls_cfg.get("models", {}))
+        # Also exercise the fragment generator so a misconfigured models[]
+        # block trips CI's dry-run step instead of a live benchmark run.
+        fragment = engined.render_fragment(cfg)
+        print(fragment, file=sys.stderr)
+        n_backends = len(engined.route_ids(cfg))
         n_prompts = len(cfg.get("prompts") or [])
         n_cells = len(tasks) * n_prompts
         judge_mode = "off"
@@ -782,19 +756,14 @@ def main() -> int:
         )
         return 0
 
-    if not LAUNCHER.exists():
-        print(f"[error] missing launcher: {LAUNCHER}", file=sys.stderr)
-        return 2
-
-    models_dir = resolve_models_dir(server_cfg)
+    engined_cfg = cfg.get("engined", {})
+    engined_url = str(engined_cfg.get("url", DEFAULT_ENGINED_URL)).rstrip("/")
+    engine = str(engined_cfg.get("engine", DEFAULT_ENGINED_ENGINE))
     prompts = cfg["prompts"]
     models = cfg["models"]
     timeout_s = float(run_cfg.get("timeout_s", 180))
     warmup = bool(run_cfg.get("warmup", True))
-    swap_port = int(server_cfg.get("swap_port", 8080))
-    boot_timeout = int(server_cfg.get("boot_timeout_s", 300))
-    listen = f"127.0.0.1:{swap_port}"
-    base_url = f"http://{listen}/v1"
+    base_url = f"{engined_url}/openai/v1"
 
     # 2. Resume: load prior run, plan pending cells.
     seed = int(run_cfg.get("seed", 42))
@@ -922,8 +891,10 @@ def main() -> int:
     )
     _queue_terminal_status = "error"
 
-    _write_proxy_config(cfg, models_dir, LLAMA_SWAP_CONFIG)
-    proxy = _proxy_start(listen, LLAMA_SWAP_CONFIG, boot_timeout)
+    # A fragment left behind whose GGUF later vanishes makes engined refuse
+    # to boot, so cleanup must run even on a hard interpreter exit.
+    atexit.register(engined.down)
+    engined.up(cfg, engined_url)
 
     try:
         # 3. Per-model phases (sequential — see invariant above).
@@ -940,6 +911,8 @@ def main() -> int:
             hardware_id=hardware_id,
             peak_tflops=peak_tflops,
             floor_tasks=floor_tasks,
+            engined_url=engined_url,
+            engine=engine,
         )
         all_records = reused_records + fresh_records
 
@@ -956,11 +929,13 @@ def main() -> int:
             warmup=warmup,
             pending_pairs=pending_pairs,
             pending_scores=pending_scores,
+            engined_url=engined_url,
+            engine=engine,
         )
         judgements = reused_judgements + fresh_judgements
         _queue_terminal_status = "complete"
     finally:
-        _proxy_stop(proxy)
+        engined.down()
         # Move queue record from pending to completed regardless of outcome.
         _store_write(
             "run_queue/completed",
@@ -978,8 +953,7 @@ def main() -> int:
 
     # 5. Emit
     out_json = out_dir / f"run-{ts}.json"
-    binary_dir = LLAMA_SWAP_CONFIG.parent
-    provenance = collect_provenance(cfg, seed=seed, repo_root=HERE, binary_dir=binary_dir)
+    provenance = collect_provenance(cfg, seed=seed, repo_root=HERE)
     hf_mode = args.hf_enrichment or run_cfg.get("hf_enrichment", "off")
     model_metadata = build_model_metadata(cfg)
     model_metadata = enrich_model_metadata(model_metadata, hf_mode, provenance["warnings"])

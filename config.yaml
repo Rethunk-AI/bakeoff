@@ -1,33 +1,39 @@
-# A/B benchmark config. LM Studio GGUFs served via llama.cpp podman image.
-# Matrix = models x prompt_variants x dataset; runner boots one model at a time
-# (unified-memory APU constraint) and tears down between phases.
+# A/B benchmark config. GGUFs served through engined, which owns the pinned
+# llama.cpp build and model lifecycle. Matrix = models x prompt_variants x
+# dataset; the runner runs one model at a time (unified-memory APU
+# constraint) and lets engined swap between phases.
 
 run:
   name: "ab-run-001"
   seed: 42
-  timeout_s: 180      # per HTTP call (first call after boot can be slow)
-  warmup: true        # throw away one call after each boot (JIT / first-batch skew)
+  timeout_s: 180 # per HTTP call (first call after boot can be slow)
+  warmup: true # throw away one call after each boot (JIT / first-batch skew)
+
+# ---------- engined -----------------------------------------------------------
+# bakeoff declares its own engine (`engine`, id `llama-bench` by default) and
+# one chat route per model + judge in a config.d/*.toml fragment, then asks
+# the running engined to reload. `hold` names other engines (e.g. comfy) to
+# stop and keep stopped for the run's duration — exclusivity is bakeoff's own
+# concern; engined adds nothing for it.
+engined:
+  url: "http://127.0.0.1:29200"
+  engine: "llama-bench"
+  spec_dir: "/usr/local/src/com.github/Rethunk-Tech/engined/engines/llama"
+  models_dir: "~/.local/share/engined-models/llm-bench"
+  models_max: 1
+  hold: []
 
 # ---------- Serving ---------------------------------------------------------
-# The harness runs a llama-swap proxy in front of a llama.cpp Vulkan
-# container. llama-swap owns the lifecycle of each backend container and
-# swaps them on demand; the runner talks to a single stable port
-# (`swap_port`). Per-model overrides live under models[].
+# Flags every route's [route.args] carries into the engined fragment.
+# Per-model overrides live under models[].
 server:
-  models_dir: "~/.lmstudio/models"
-  image: "ghcr.io/ggml-org/llama.cpp:server-vulkan"
-  swap_port: 8080             # llama-swap listens on 127.0.0.1:<swap_port>
-  backend_start_port: 5800    # llama-swap allocates ${PORT} for backend
-                              # containers starting here (one port per
-                              # active model).
-  ctx: 4096                   # small on purpose — benchmark prompts are short
-  ngl: 99                     # offload all layers (Strix Halo unified memory)
+  ctx: 4096 # small on purpose — benchmark prompts are short
+  ngl: 99 # offload all layers (Strix Halo unified memory)
   ubatch: 512
   cache_type_k: "q8_0"
   cache_type_v: "q8_0"
   flash_attn: true
-  jinja: true                 # respect chat template in the GGUF
-  boot_timeout_s: 300          # model load can take a while on first run
+  jinja: true # respect chat template in the GGUF
 
 # ---------- Dataset ---------------------------------------------------------
 dataset:
@@ -35,7 +41,7 @@ dataset:
   domains: [qa, code, summarize, classify]
 
 # ---------- Models (A/B) ----------------------------------------------------
-# gguf paths are RELATIVE to server.models_dir.
+# gguf paths are RELATIVE to engined.models_dir.
 # First two entries are A and B for the pairwise judge.
 # Skip mmproj-* files (vision projectors, not standalone text models).
 # See QUEUE.md for the full P0/P1/P2 testing queue.
@@ -44,7 +50,7 @@ models:
   - id: qwen3_5_9b_q4
     alias: "qwen3.5-9b-q4"
     gguf: "lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf"
-    ctx: 4096                 # override server.ctx per model if needed
+    ctx: 4096 # override server.ctx per model if needed
 
   # P0 — small-active-param MoE (3B active / 35B total)
   - id: qwen3_6_35b_a3b_q4
@@ -89,10 +95,10 @@ prompts:
 #   5 models: pairwise_all = 400;        scored = 200
 judge:
   enabled: true
-  mode: "pairwise_all"        # or "scored"
+  mode: "pairwise_all" # or "scored"
   alias: "judge"
   gguf: "lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf"
-  ctx: 8192                   # pairwise prompt contains both responses
+  ctx: 8192 # pairwise prompt contains both responses
 
 # ---------- Hardware --------------------------------------------------------
 # Identifies the test host and provides GPU peak TFLOPS for efficiency
@@ -100,8 +106,8 @@ judge:
 # when unknown. peak_tflops is theoretical peak at the relevant precision
 # (FP16 for most local inference; BF16 for Strix Halo).
 hardware:
-  id: "amd-8060s"           # short string written into every run record
-  peak_tflops: 39.0         # Strix Halo (Radeon 890M) theoretical FP16 peak
+  id: "amd-8060s" # short string written into every run record
+  peak_tflops: 39.0 # Strix Halo (Radeon 890M) theoretical FP16 peak
 
 # ---------- Cost ------------------------------------------------------------
 # Energy-based. NVIDIA: nvidia-smi power.draw. AMD: rocm-smi --showpower.
@@ -110,8 +116,9 @@ cost:
   enabled: true
   kwh_rate_usd: 0.15
   gpu_index: 0
-  sample_hz: 10               # background power sampler rate (Hz). Trapezoidal
-                              # integration over the call window.
+  sample_hz:
+    10 # background power sampler rate (Hz). Trapezoidal
+    # integration over the call window.
 
 # ---------- Output ----------------------------------------------------------
 output:

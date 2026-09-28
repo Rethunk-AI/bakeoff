@@ -55,11 +55,21 @@ def config_hash(cfg: dict[str, Any]) -> str:
     return hashlib.sha256(canonical).hexdigest()[:16]
 
 
-def resolve_models_dir(server_cfg: dict[str, Any]) -> Path:
-    """Resolve models directory path from server config, expanding ~ and making absolute."""
+DEFAULT_ENGINED_MODELS_DIR = "~/.local/share/engined-models/llm-bench"
+DEFAULT_ENGINED_URL = "http://127.0.0.1:29200"
+DEFAULT_ENGINED_ENGINE = "llama-bench"
+
+
+def resolve_models_dir(engined_cfg: dict[str, Any]) -> Path:
+    """Resolve the GGUF root from `engined.models_dir`, expanding ~ and making absolute.
+
+    Must match what the `llama-bench` fragment declares — GGUFs are mounted
+    into the engined container from this exact tree, and a symlink into
+    another dir breaks once inside it.
+    """
     import os
 
-    p = server_cfg.get("models_dir", "~/.lmstudio/models")
+    p = engined_cfg.get("models_dir", DEFAULT_ENGINED_MODELS_DIR)
     return Path(os.path.expanduser(p)).resolve()
 
 
@@ -183,10 +193,18 @@ def validate_config(cfg: dict[str, Any]) -> list[ValidationIssue]:
 
     # Server — positive numeric fields
     server = cfg.get("server") or {}
-    for field in ("ctx", "ngl", "ubatch", "boot_timeout_s", "swap_port", "backend_start_port"):
+    for field in ("ctx", "ngl", "ubatch"):
         v = server.get(field)
         if v is not None and (not isinstance(v, (int, float)) or v <= 0):
             err(f"server.{field}", f"must be a positive number, got {v!r}")
+
+    # engined — required url + engine, optional hold list of engine ids
+    engined = cfg.get("engined") or {}
+    hold = engined.get("hold")
+    if hold is not None and (
+        not isinstance(hold, list) or not all(isinstance(h, str) for h in hold)
+    ):
+        err("engined.hold", f"must be a list of engine ids, got {hold!r}")
 
     # Cost
     cost = cfg.get("cost") or {}

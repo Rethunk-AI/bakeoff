@@ -7,7 +7,9 @@ tests cover the pure parsers only.
 
 from __future__ import annotations
 
-from bench.clients import _extract_delta, _parse_sse_chunk
+import httpx
+
+from bench.clients import _engined_headers, _extract_delta, _parse_sse_chunk
 
 
 def test_parse_sse_chunk_plain():
@@ -65,6 +67,23 @@ def test_extract_delta_empty_delta():
     c, r = _extract_delta({"choices": [{"delta": {}}]})
     assert c == ""
     assert r == ""
+
+
+def test_engined_headers_captures_route_and_queue_ms():
+    headers = httpx.Headers({"x-engined-route": "@/llama-bench/m_a", "x-engined-queue-ms": "12"})
+    assert _engined_headers(headers) == {
+        "x-engined-route": "@/llama-bench/m_a",
+        "x-engined-queue-ms": "12",
+    }
+
+
+def test_engined_headers_absent_when_not_engined():
+    assert _engined_headers(httpx.Headers({})) == {}
+
+
+def test_engined_headers_route_only():
+    headers = httpx.Headers({"x-engined-route": "@/llama-bench/judge"})
+    assert _engined_headers(headers) == {"x-engined-route": "@/llama-bench/judge"}
 
 
 def test_extract_delta_usage_chunk_has_no_delta():

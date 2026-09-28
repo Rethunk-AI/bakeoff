@@ -1,17 +1,17 @@
-"""Fetch GGUFs from Hugging Face into the LM Studio layout.
+"""Fetch GGUFs from Hugging Face into engined's model tree.
 
 Two modes:
 
     python -m bench.download [--config config.yaml] [--list]
         Read config, download every `gguf:` referenced under `models[]` and
-        `judge` that is missing under `server.models_dir`.
+        `judge` that is missing under `engined.models_dir`.
 
     python -m bench.download <repo_id> <filename> [--config config.yaml] [--list]
         Ad-hoc. `repo_id` like `lmstudio-community/Qwen3.5-9B-GGUF`,
         `filename` like `Qwen3.5-9B-Q4_K_M.gguf` (may include subdirs).
 
-Writes to `<models_dir>/<repo_id>/<filename>` so the existing `gguf:` paths
-in `config.yaml` resolve without edits.
+Writes to `<engined.models_dir>/<repo_id>/<filename>` so the existing `gguf:`
+paths in `config.yaml` resolve without edits.
 
 Auth: honors `HF_TOKEN` env or a cached `hf auth login` credential. Gated
 repos (Llama, Gemma) surface a 401/403 with a pointer.
@@ -201,13 +201,12 @@ def main() -> int:
     if args.repo_id:
         # Ad-hoc mode: still need models_dir from config (or fall back to default).
         cfg_path = Path(args.config)
-        server_cfg = load_config(cfg_path).get("server", {}) if cfg_path.exists() else {}
-        models_dir = resolve_models_dir(server_cfg)
+        engined_cfg = load_config(cfg_path).get("engined", {}) if cfg_path.exists() else {}
+        models_dir = resolve_models_dir(engined_cfg)
         pairs = [(args.repo_id, args.filename)]
     else:
         cfg = load_config(Path(args.config))
-        server_cfg = cfg.get("server", {})
-        models_dir = resolve_models_dir(server_cfg)
+        models_dir = resolve_models_dir(cfg.get("engined", {}))
         pairs = collect_from_config(cfg)
         if not pairs:
             print("no gguf entries found in config.", file=sys.stderr)

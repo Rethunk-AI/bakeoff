@@ -41,7 +41,7 @@ class TestInferQuantization:
 class TestBuildModelMetadata:
     def _cfg(self, models=None, server_ctx=4096):
         return {
-            "server": {"ctx": server_ctx, "image": "ghcr.io/ggml-org/llama.cpp:server-vulkan"},
+            "server": {"ctx": server_ctx},
             "models": models
             or [
                 {"id": "m_a", "alias": "alpha", "gguf": "org/repo/model-Q4_K_M.gguf"},
@@ -92,7 +92,7 @@ class TestBuildModelMetadata:
 class TestCollect:
     def _cfg(self):
         return {
-            "server": {"ctx": 4096, "image": "ghcr.io/ggml-org/llama.cpp:server-vulkan"},
+            "server": {"ctx": 4096},
             "models": [{"id": "m_a", "gguf": "org/repo/a-Q4_K_M.gguf"}],
             "dataset": {"n": 10, "domains": ["qa"]},
             "prompts": [{"id": "p1"}],
@@ -101,8 +101,7 @@ class TestCollect:
     def test_returns_required_keys(self, tmp_path):
         with (
             patch("bench.provenance._git_info") as git_mock,
-            patch("bench.provenance._podman_version", return_value="4.9.0"),
-            patch("bench.provenance._llama_swap_version", return_value="0.0.8"),
+            patch("bench.provenance._engined_image_commit", return_value="abc1234"),
             patch("bench.provenance._package_versions", return_value={"httpx": "0.27.0"}),
         ):
             git_mock.return_value = {"sha": "abc1234", "branch": "main", "dirty": False}
@@ -115,9 +114,8 @@ class TestCollect:
             "python",
             "platform",
             "packages",
-            "podman_version",
-            "llama_swap_version",
-            "server_image",
+            "engined_image",
+            "engined_image_commit",
             "warnings",
         ):
             assert key in prov
@@ -125,8 +123,7 @@ class TestCollect:
     def test_git_sha_present(self, tmp_path):
         with (
             patch("bench.provenance._git_info") as git_mock,
-            patch("bench.provenance._podman_version", return_value=None),
-            patch("bench.provenance._llama_swap_version", return_value=None),
+            patch("bench.provenance._engined_image_commit", return_value=None),
             patch("bench.provenance._package_versions", return_value={}),
         ):
             git_mock.return_value = {"sha": "deadbeef", "branch": "main", "dirty": True}
@@ -139,8 +136,7 @@ class TestCollect:
     def test_missing_git_adds_warning(self, tmp_path):
         with (
             patch("bench.provenance._git_info") as git_mock,
-            patch("bench.provenance._podman_version", return_value=None),
-            patch("bench.provenance._llama_swap_version", return_value=None),
+            patch("bench.provenance._engined_image_commit", return_value=None),
             patch("bench.provenance._package_versions", return_value={}),
         ):
             git_mock.return_value = {"sha": None, "branch": None, "dirty": False}
@@ -148,24 +144,22 @@ class TestCollect:
 
         assert any("git" in w for w in prov["warnings"])
 
-    def test_missing_podman_adds_warning(self, tmp_path):
+    def test_missing_engined_image_commit_adds_warning(self, tmp_path):
         with (
             patch("bench.provenance._git_info") as git_mock,
-            patch("bench.provenance._podman_version", return_value=None),
-            patch("bench.provenance._llama_swap_version", return_value="1.0"),
+            patch("bench.provenance._engined_image_commit", return_value=None),
             patch("bench.provenance._package_versions", return_value={}),
         ):
             git_mock.return_value = {"sha": "abc", "branch": "main", "dirty": False}
             prov = collect(self._cfg(), seed=0, repo_root=tmp_path)
 
-        assert any("podman" in w for w in prov["warnings"])
+        assert any("engined image" in w for w in prov["warnings"])
 
     def test_config_hash_stable(self, tmp_path):
         cfg = self._cfg()
         with (
             patch("bench.provenance._git_info") as git_mock,
-            patch("bench.provenance._podman_version", return_value="4.0"),
-            patch("bench.provenance._llama_swap_version", return_value="0.8"),
+            patch("bench.provenance._engined_image_commit", return_value="0.8"),
             patch("bench.provenance._package_versions", return_value={}),
         ):
             git_mock.return_value = {"sha": "abc", "branch": "main", "dirty": False}
@@ -175,17 +169,17 @@ class TestCollect:
         assert p1["config_hash"] == p2["config_hash"]
         assert len(p1["config_hash"]) == 16
 
-    def test_server_image_captured(self, tmp_path):
+    def test_engined_image_captured(self, tmp_path):
         with (
             patch("bench.provenance._git_info") as git_mock,
-            patch("bench.provenance._podman_version", return_value="4.0"),
-            patch("bench.provenance._llama_swap_version", return_value="0.8"),
+            patch("bench.provenance._engined_image_commit", return_value="0.8"),
             patch("bench.provenance._package_versions", return_value={}),
         ):
             git_mock.return_value = {"sha": "abc", "branch": "main", "dirty": False}
             prov = collect(self._cfg(), seed=42, repo_root=tmp_path)
 
-        assert prov["server_image"] == "ghcr.io/ggml-org/llama.cpp:server-vulkan"
+        assert prov["engined_image"] == "engined-llama-cpp:local"
+        assert prov["engined_image_commit"] == "0.8"
 
 
 # --- enrich_model_metadata --------------------------------------------------

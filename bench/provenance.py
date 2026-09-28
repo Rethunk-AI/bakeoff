@@ -22,6 +22,9 @@ from typing import Any
 
 from bench.config import config_hash
 
+ENGINED_LLAMA_IMAGE = "engined-llama-cpp:local"
+_ENGINED_REVISION_LABEL = "org.opencontainers.image.revision"
+
 
 def _run(cmd: list[str]) -> str | None:
     """Run a command and return stripped stdout, or None on any error."""
@@ -41,34 +44,15 @@ def _git_info(repo_root: Path) -> dict[str, Any]:
     return {"sha": sha, "branch": branch, "dirty": dirty}
 
 
-def _podman_version() -> str | None:
-    out = _run(["podman", "version", "--format", "{{.Version}}"])
-    if out:
-        return out
-    # fallback: first word of `podman version` free-form output
-    full = _run(["podman", "version"])
-    if full:
-        m = re.search(r"Version:\s+(\S+)", full)
-        if m:
-            return m.group(1)
-    return None
+def _engined_image_commit(image: str = ENGINED_LLAMA_IMAGE) -> str | None:
+    """The llama.cpp commit engined's own image was built from.
 
-
-def _llama_swap_version(binary_dir: Path | None) -> str | None:
-    candidates: list[Path] = []
-    if binary_dir:
-        for p in binary_dir.glob("llama-swap*"):
-            if p.is_file():
-                candidates.append(p)
-    if not candidates:
-        return None
-    out = _run([str(candidates[0]), "--version"])
-    if out:
-        # typically "llama-swap version X.Y.Z" or just "X.Y.Z"
-        m = re.search(r"(\d+\.\d+[\.\d]*)", out)
-        if m:
-            return m.group(1)
-    return None
+    engined's `engines/llama/Dockerfile` labels the final image with the
+    upstream commit it built (`org.opencontainers.image.revision`) — the
+    provenance-grade identifier since engined, not bakeoff, owns the build.
+    """
+    fmt = f'{{{{index .Config.Labels "{_ENGINED_REVISION_LABEL}"}}}}'
+    return _run(["docker", "inspect", "--format", fmt, image])
 
 
 def _package_versions(packages: list[str]) -> dict[str, str | None]:
@@ -87,7 +71,7 @@ def collect(
     cfg: dict[str, Any],
     seed: int,
     repo_root: Path,
-    binary_dir: Path | None = None,
+    engined_image: str = ENGINED_LLAMA_IMAGE,
 ) -> dict[str, Any]:
     """Return the provenance dict to embed in the result payload."""
     warnings: list[str] = []
@@ -96,17 +80,11 @@ def collect(
     if git["sha"] is None:
         warnings.append("git SHA unavailable")
 
-    podman_ver = _podman_version()
-    if podman_ver is None:
-        warnings.append("podman version unavailable")
-
-    llama_swap_ver = _llama_swap_version(binary_dir)
-    if llama_swap_ver is None:
-        warnings.append("llama-swap version unavailable")
+    engined_image_commit = _engined_image_commit(engined_image)
+    if engined_image_commit is None:
+        warnings.append("engined image commit label unavailable")
 
     pkg_versions = _package_versions(["httpx", "pyyaml", "huggingface_hub"])
-
-    server_cfg = cfg.get("server") or {}
 
     return {
         "git": git,
@@ -115,9 +93,8 @@ def collect(
         "python": sys.version,
         "platform": platform.platform(),
         "packages": pkg_versions,
-        "podman_version": podman_ver,
-        "llama_swap_version": llama_swap_ver,
-        "server_image": server_cfg.get("image"),
+        "engined_image": engined_image,
+        "engined_image_commit": engined_image_commit,
         "warnings": warnings,
     }
 

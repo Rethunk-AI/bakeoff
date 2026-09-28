@@ -250,10 +250,10 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
             parts.append(f"config `{prov['config_hash']}`")
         if prov.get("seed") is not None:
             parts.append(f"seed `{prov['seed']}`")
-        if prov.get("llama_swap_version"):
-            parts.append(f"llama-swap `{prov['llama_swap_version']}`")
-        if prov.get("server_image"):
-            parts.append(f"image `{prov['server_image']}`")
+        if prov.get("engined_image_commit"):
+            parts.append(f"engined image `{prov['engined_image_commit']}`")
+        elif prov.get("engined_image"):
+            parts.append(f"engined image `{prov['engined_image']}`")
         if prov.get("python"):
             py = prov["python"].split()[0]
             parts.append(f"Python `{py}`")
@@ -836,8 +836,10 @@ def _html_prov_line(prov: dict[str, Any]) -> str:
         parts.append(f"config <code>{prov['config_hash']}</code>")
     if prov.get("seed") is not None:
         parts.append(f"seed <code>{prov['seed']}</code>")
-    if prov.get("llama_swap_version"):
-        parts.append(f"llama-swap <code>{prov['llama_swap_version']}</code>")
+    if prov.get("engined_image_commit"):
+        parts.append(f"engined image <code>{prov['engined_image_commit']}</code>")
+    elif prov.get("engined_image"):
+        parts.append(f"engined image <code>{prov['engined_image']}</code>")
     if not parts:
         return ""
     return " · " + " · ".join(parts)

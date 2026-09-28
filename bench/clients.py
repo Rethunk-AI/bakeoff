@@ -39,6 +39,25 @@ def _parse_sse_chunk(line: str) -> dict[str, Any] | None:
         return None
 
 
+def _engined_headers(headers: httpx.Headers) -> dict[str, Any]:
+    """Pull engined's own response headers into the record `raw` dict.
+
+    `x-engined-route` is the address that actually answered (never the
+    bare model id) — the runner compares it against what it asked for and
+    fails the row on a mismatch. `x-engined-queue-ms` is absent on a
+    non-engined door and on plenty of dispatches even against engined, so
+    it is only ever added when present.
+    """
+    out: dict[str, Any] = {}
+    route = headers.get("x-engined-route")
+    if route is not None:
+        out["x-engined-route"] = route
+    queue_ms = headers.get("x-engined-queue-ms")
+    if queue_ms is not None:
+        out["x-engined-queue-ms"] = queue_ms
+    return out
+
+
 def _extract_delta(chunk: dict[str, Any]) -> tuple[str, str]:
     """Return (content_delta, reasoning_delta) from a streamed chunk."""
     choices = chunk.get("choices") or []
@@ -82,6 +101,7 @@ class ChatClient:
             r = c.post(url, json=body, headers=headers)
             r.raise_for_status()
             data = r.json()
+            data.update(_engined_headers(r.headers))
         latency = time.perf_counter() - t0
 
         msg = data["choices"][0]["message"]
@@ -128,6 +148,7 @@ class ChatClient:
             c.stream("POST", url, json=body, headers=headers) as r,
         ):
             r.raise_for_status()
+            response_headers = _engined_headers(r.headers)
             for line in r.iter_lines():
                 if not line:
                     continue
@@ -154,6 +175,7 @@ class ChatClient:
         pt = int(usage.get("prompt_tokens", 0))
         ct = int(usage.get("completion_tokens", 0))
         tps = (ct / latency) if latency > 0 and ct > 0 else 0.0
+        last_chunk.update(response_headers)
 
         return ChatResult(
             text=text,

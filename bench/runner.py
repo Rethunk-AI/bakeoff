@@ -94,6 +94,18 @@ HERE = Path(__file__).resolve().parent.parent
 # --- Call wrapper -----------------------------------------------------------
 
 
+def engined_fields(res: ChatResult) -> dict[str, Any]:
+    """The answering route and its queue wait, kept per record.
+
+    A slow cell and a queued one look identical in wall-clock time alone.
+    """
+    queue_ms = res.raw.get("x-engined-queue-ms")
+    return {
+        "engined_route": res.raw.get("x-engined-route"),
+        "engined_queue_ms": int(queue_ms) if queue_ms is not None else None,
+    }
+
+
 def call_one(
     client: ChatClient,
     system: str,
@@ -131,7 +143,7 @@ def call_one(
 
     if expected_route is not None:
         got_route = res.raw.get("x-engined-route")
-        if got_route is not None and got_route != expected_route:
+        if got_route != expected_route:
             raise RuntimeError(f"engined answered {got_route!r}, expected {expected_route!r}")
 
     peak_vram = sampler.peak_vram_mb
@@ -254,6 +266,7 @@ def run_model_phase(
                     "text": res.text,
                     "wall_clock_seconds": res.latency_s,
                     "quality_heuristic": score_heuristic(ft.scorer, ft.expected, res.text),
+                    **engined_fields(res),
                     "failure_code": None,
                     "failure_detail": None,
                     "error": None,
@@ -318,6 +331,7 @@ def run_model_phase(
                     "flops_per_token_theoretical": fpt,
                     "tflops_utilization_pct": None,  # filled below when possible
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
+                    **engined_fields(res),
                     "tier": "main",
                     "failure_code": None,
                     "failure_detail": None,

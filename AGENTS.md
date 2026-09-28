@@ -1,6 +1,6 @@
 # AGENTS.md — LLM onboarding
 
-Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap` proxy in front of `podman` + `ghcr.io/ggml-org/llama.cpp:server-vulkan` containers, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on `llama-swap`'s singleton swap to unload the previous backend before the next boots. Judge runs as its own swap target after the model phases.
+Local LLM N-vs-N benchmark harness. Every candidate model and the judge are served by [`engined`](https://github.com/Rethunk-Tech/engined) — bakeoff declares its own engine (`llama-bench`) and one route per model in a `config.d/*.toml` fragment, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on the `llama-bench` engine's `models_max = 1` to unload the previous backend before the next boots. Judge runs as its own route after the model phases.
 
 **Claude Code:** `CLAUDE.md` is `@AGENTS.md`. Edit **AGENTS.md**.
 
@@ -8,9 +8,8 @@ Local LLM N-vs-N benchmark harness. Serves LM Studio GGUFs through a `llama-swap
 
 ## Layout
 
-```
-config.yaml          single source of truth (server, models, prompts, dataset, judge, cost, output)
-bin/llama-swap.sh    llama-swap launcher: up / down / sweep / wait
+```text
+config.yaml          single source of truth (engined, server, models, prompts, dataset, judge, cost, output)
 bench/
   clients.py         httpx OpenAI-compat client; prefers content, falls back to reasoning_content
   compare.py         diff two result JSON files → Markdown report
@@ -18,32 +17,32 @@ bench/
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
   descriptor.py      model descriptor reader/validator/persister
   download.py        huggingface_hub fetcher
+  engined.py         bakeoff config.yaml → engined config.d fragment; up/down lifecycle
   failure.py         failure-reason taxonomy (9 codes)
   hardware.py        best-effort hardware context collector
-  llama_swap.py      bakeoff config.yaml → llama-swap proxy config
   metrics.py         heuristic scorers + judge prompts + power sampling
   provenance.py      run provenance collector (git SHA, platform, optional HF enrichment)
   publish.py         validate/package/sign/submit result bundles for bakeoff-results
   queue.py           opt-in disk-backed run queue (pending/ + completed/)
   report.py          JSON + Markdown + single-file HTML dashboard
   resume.py          resume support from a prior partial result
-  runner.py          start proxy → warmup + matrix per model → judge → stop proxy
+  runner.py          declare fragment → warmup + matrix per model → judge → release fragment
   worker.py          opt-in distributed pull client (claim / heartbeat / submit / fail)
   scoring.py         completeness-weighted partial score rollup
   signing.py         Ed25519 sign/verify for result envelopes
   store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR
 migrate/             Go module: bakeoff migration runner (#27)
-run.sh               uv sync + pinned llama-swap bootstrap + uv run; fetch → bench.download
-.cache/ datasets/ results/   generated artifacts (gitignored)
+run.sh               uv sync + uv run; fetch → bench.download
+datasets/ results/   generated artifacts (gitignored)
 ```
 
 ## Design invariants (don't break silently)
 
-- **One model in VRAM at a time.** Unified-memory APU (Strix Halo / Radeon 8060S) can't hold A + B + judge concurrently. `llama-swap`'s default behaviour — unload current before starting next — enforces this at the proxy. No groups, no exclusive profiles; the default applies. `globalTTL: 0` (and per-model `ttl: 0`) in the generated config stops an idle model from silently unloading mid-matrix and forcing a silent re-boot inside a timed call.
+- **One model in VRAM at a time.** Unified-memory APU (Strix Halo / Radeon 8060S) can't hold A + B + judge concurrently. The `llama-bench` engine's `models_max = 1` in the generated fragment enforces this inside engined: no groups, no exclusive profiles. `parallel = 1` in every route's `[route.args]` stops a batched concurrent caller from sharing a resident model's ctx pool mid-matrix.
 - **Runner iterates per-model-sequentially.** All (task × prompt) cells for model A finish before any call lands for model B. A full benchmark incurs exactly N swaps (N+1 with judge), not one per cell. A round-robin outer loop would turn every cell into a swap and invalidate the energy + latency numbers. Preserve this iteration order if you touch `run_model_phase` / `main`.
-- **Warmup absorbs swap + first-batch cost.** The first call to a model id is made outside the `PowerSampler` wrapper so the swap (which can pay graph-build + weight-page-in) does not leak into any recorded row.
-- **`sendLoadingState: false` in the generated proxy config.** Otherwise `llama-swap` injects a loading message into `reasoning_content` during boot; the `ChatClient` falls back to `reasoning_content` when `content` is empty, so warmup could silently capture the loading text as the answer.
-- **Judge runs as its own proxy entry** (`models[<judge_id>]`), not a separate subprocess of the runner. The judge swap follows the last A/B model's teardown exactly once.
+- **Warmup absorbs swap + first-batch cost.** `POST /engined/v1/start` pays the swap explicitly; the throwaway chat call that follows, made outside the `PowerSampler` wrapper, absorbs only first-batch JIT cost. Neither contaminates a recorded row.
+- **The runner checks `x-engined-route` on every response.** A row whose answering address doesn't match what was asked for is a failure, not a silent misattribution — see `bench/clients.py` and `call_one`'s `expected_route`.
+- **Judge runs as its own route**, not a separate subprocess of the runner. The judge swap follows the last A/B model's teardown exactly once.
 - **Pairwise order randomized per call** (seeded from `run.seed`); swapped verdicts inverted before counting. Every judgement records `order: "AB" | "BA"`. Mitigates 5-15% positional bias.
 - **Cost axis is energy, not tokens.** `nvidia-smi --query-gpu=power.draw` or `rocm-smi --showpower` sampled during the call. Neither available → `energy_wh` / `cost_usd` set to `null`. Do not substitute latency.
 - **`mmproj-*` files are vision projectors, not standalone models.** Never list under `models:`. The generator rejects them outright.
@@ -65,9 +64,10 @@ run.sh               uv sync + pinned llama-swap bootstrap + uv run; fetch → b
 
 ## When editing
 
-- `config.yaml` is the contract. Add new knobs there first, then wire through `runner.py` and/or `llama_swap.py`. Don't hard-code.
-- Backend container flags (image args, ctx, ngl, etc.) are rendered into `cmd` strings inside `bench/llama_swap.py`. Changes there are covered by `tests/test_llama_swap.py` — keep the structural assertions current.
-- Bumping the pinned `llama-swap` version means updating `LLAMA_SWAP_VERSION` **and** the matching per-platform SHA256 constants in `run.sh`. A mismatch aborts the bootstrap; never silence the check.
+- `config.yaml` is the contract. Add new knobs there first, then wire through `runner.py` and/or `bench/engined.py`. Don't hard-code.
+- Backend flags (ctx, ngl, ubatch, etc.) are rendered into each route's `[route.args]` inside `bench/engined.py`'s `render_fragment`. Changes there are covered by `tests/test_engined.py` — keep the `tomllib` structural assertions current.
+- `bench/engined.up`/`down` write and delete `~/.config/engined/config.d/bakeoff.toml` and reload the running `engined` — never start, stop, or build it. `down` must stay idempotent and exception-safe: it runs from both `finally` and `atexit`, and a fragment left behind whose GGUF later vanished makes engined refuse to boot.
+- Exclusivity (holding other engines like `comfy` off the box) is `engined.hold` in config.yaml, renewed by a background thread in `bench/engined.py` — not anything engined itself decides.
 - Every new scorer/judge mode must preserve the JSON record shape in `results/run-<ts>.json` — the HTML dashboard reads it verbatim.
 - Publication is explicit: `bench.publish` packages a completed result for `Rethunk-AI/bakeoff-results`; normal benchmark runs still leave `results/` gitignored and local.
 - Python env: `uv`. No `python -m venv`, no bare `pip`.

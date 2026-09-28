@@ -1,6 +1,6 @@
 # Security Policy
 
-This is a local benchmark harness. It runs unprivileged containers against models on disk and makes HTTP calls to `127.0.0.1`. There is no network service, no multi-tenant surface, and no persistent credential store.
+This is a local benchmark harness. It makes HTTP calls to `127.0.0.1`, where `engined` serves models from disk; bakeoff itself runs no containers. There is no network service, no multi-tenant surface, and no persistent credential store.
 
 ## Supported versions
 
@@ -22,7 +22,6 @@ Please include:
 ## In scope
 
 - Command injection or path traversal via `config.yaml` or CLI flags
-- Container escape or privilege escalation from `bin/llama-swap.sh`
 - Arbitrary code execution via a malicious GGUF path or model alias
 - SSRF or request forgery from the HTTP client in `bench/clients.py`
 - Credential leakage (logs, results artifacts)
@@ -30,6 +29,6 @@ Please include:
 ## Out of scope
 
 - Issues requiring root on the benchmark host
-- Bugs in `llama.cpp`, `podman`, or upstream container images (report those upstream)
+- Bugs in `llama.cpp`, `engined`, or upstream container images (report those upstream, or to `Rethunk-Tech/engined` directly)
 - Denial of service caused by loading an oversized model (this is a resource-sizing question, not a vulnerability)
 - Findings in third-party dependencies without a demonstrable exploit path through this repo

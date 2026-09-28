@@ -23,7 +23,7 @@ labels: bug
 - OS / kernel:
 - GPU / APU:
 - Backend (Vulkan / ROCm / CUDA):
-- `podman --version`:
+- `engined` version (`GET /engined/v1/engines` or the systemd unit):
 - `uv --version`:
 - Commit: <!-- `git rev-parse HEAD` -->
 

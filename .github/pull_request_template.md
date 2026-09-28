@@ -24,7 +24,7 @@
 
 - [ ] `ruff check bench/`
 - [ ] `pyrefly check bench/`
-- [ ] `shellcheck bin/llama-swap.sh run.sh`
+- [ ] `shellcheck run.sh`
 - [ ] `python -m bench.runner --config config.yaml --dry-run`
 - [ ] End-to-end run against real models (if serving or judge logic changed)
 

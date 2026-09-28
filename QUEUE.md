@@ -5,9 +5,9 @@ Models enter the testing queue in tier order. Priority numbers do not shift —
 a P2 model stays P2 until explicitly promoted. Management passes to the queue
 itself once testing begins.
 
-GGUF paths are relative to `server.models_dir` in `config.yaml` (default
-`~/.lmstudio/models`). Paths marked **TBD** have not yet been confirmed
-available on the test host.
+GGUF paths are relative to `engined.models_dir` in `config.yaml` (default
+`~/.local/share/engined-models/llm-bench`). Paths marked **TBD** have not yet
+been confirmed available on the test host.
 
 ---
 
@@ -17,7 +17,7 @@ Commodity hardware, sub-15B, dense or small-active-param MoE. These form the
 baseline cohort.
 
 | Model | Weights | GGUF path | Status |
-|-------|---------|-----------|--------|
+| ------- | --------- | ----------- | -------- |
 | llama3.2 | 1B | `lmstudio-community/Llama-3.2-1B-Instruct-GGUF/Llama-3.2-1B-Instruct-Q4_K_M.gguf` | TBD |
 | llama3.2 | 3B | `lmstudio-community/Llama-3.2-3B-Instruct-GGUF/Llama-3.2-3B-Instruct-Q4_K_M.gguf` | TBD |
 | llama3.1 | 8B | `lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf` | TBD |
@@ -41,7 +41,7 @@ baseline cohort.
 Next cycle after P0 baseline is published.
 
 | Model | Weights | GGUF path |
-|-------|---------|-----------|
+| ------- | --------- | ----------- |
 | qwen3 | 14B | `lmstudio-community/Qwen3-14B-GGUF/Qwen3-14B-Q4_K_M.gguf` |
 | qwen2.5-coder | 7B | `lmstudio-community/Qwen2.5-Coder-7B-Instruct-GGUF/Qwen2.5-Coder-7B-Instruct-Q4_K_M.gguf` |
 | qwen2.5-coder | 14B | `lmstudio-community/Qwen2.5-Coder-14B-Instruct-GGUF/Qwen2.5-Coder-14B-Instruct-Q4_K_M.gguf` |
@@ -58,7 +58,7 @@ Next cycle after P0 baseline is published.
 Deferred: large VRAM requirement or lower relative priority.
 
 | Model | Weights | Reason |
-|-------|---------|--------|
+| ------- | --------- | -------- |
 | qwen3 | 30B, 32B, 235B | Exceeds comfortable VRAM budget |
 | qwen2.5-coder | 32B | Large |
 | Qwopus models | — | Lower priority |
@@ -75,5 +75,5 @@ Deferred: large VRAM requirement or lower relative priority.
 - Mark a model's status as **Tested** once a result bundle has been published
   to the results repo and update its row above.
 - To promote a model between tiers: edit this file and note the reason.
-- TBD paths: confirm via `ls ~/.lmstudio/models/` or download from
-  [LM Studio](https://lmstudio.ai/) / HuggingFace before seeding into config.
+- TBD paths: confirm via `fd -e gguf . ~/.local/share/engined-models/llm-bench/`
+  or fetch with `./run.sh fetch` before seeding into config.

@@ -10,7 +10,7 @@
 
 ---
 
-Serves GGUFs from `~/.lmstudio/models/` through a [`llama-swap`](https://github.com/mostlygeek/llama-swap) proxy in front of `llama.cpp` podman containers. Benchmarks **quality**, **latency**, and **cost** (energy) across `tasks × prompt_variants × models`. Judge modes: `pairwise_all` tournament or `scored` rubric. Emits JSON, Markdown, and a single-file HTML dashboard under `results/`.
+Serves GGUFs through [`engined`](https://github.com/Rethunk-Tech/engined), which owns the pinned `llama.cpp` build and model lifecycle. Benchmarks **quality**, **latency**, and **cost** (energy) across `tasks × prompt_variants × models`. Judge modes: `pairwise_all` tournament or `scored` rubric. Emits JSON, Markdown, and a single-file HTML dashboard under `results/`.
 
 ## Quick start
 
@@ -22,7 +22,7 @@ Prerequisites, install, and configuration: [HUMANS.md](HUMANS.md).
 
 ## Highlights
 
-- `llama-swap` + llama.cpp Vulkan podman image; OpenAI-compatible client
+- Served through `engined`'s pinned llama.cpp Vulkan build; OpenAI-compatible client
 - `pairwise_all` tournament or `scored` 1–5 rubric; heuristic fallbacks
 - Quality, latency, and energy-based cost metrics
 - JSON, Markdown, and single-file HTML dashboard output

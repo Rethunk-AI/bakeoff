@@ -13,11 +13,11 @@ content here; we deliberately keep it in one place.
   model in VRAM at a time, judge runs as its own phase, energy-as-cost, etc.
   Violating these silently will get a PR bounced.
 - **The contract:** [`config.yaml`](config.yaml). Every new knob goes here
-  first, then gets wired through `runner.py` / `llama-swap.sh`. Don't hard-code.
+  first, then gets wired through `runner.py` / `engined.py`. Don't hard-code.
 
 ## Setup
 
-Base environment (podman, `uv`, GGUFs): [`HUMANS.md` § Prerequisites](HUMANS.md#prerequisites). Don't re-derive that here.
+Base environment (a running `engined`, `uv`, GGUFs): [`HUMANS.md` § Prerequisites](HUMANS.md#prerequisites). Don't re-derive that here.
 
 Dev extras (ruff, pyrefly, pytest, types-PyYAML) on top of the base venv:
 
@@ -52,7 +52,7 @@ If you added a new config knob, the dry-run should parse it without error.
 
 - **Conventional Commits**: `type(scope): subject`. `feat`, `fix`, `docs`,
   `refactor`, `test`, `ci`, `build`, `style`, `chore`. Scope is the module
-  (`runner`, `report`, `clients`, `metrics`, `llama-swap`) or a docs tier
+  (`runner`, `report`, `clients`, `metrics`, `engined`) or a docs tier
   (`readme`, `agents`).
 - **Body explains _why_**, not _what_. A diff already shows the what.
 - **One logical unit per commit.** If a PR is a bundle of unrelated changes,

@@ -4,21 +4,18 @@ Operator runbook: prerequisites, install, run, configure, troubleshoot, clean up
 
 ## Prerequisites
 
-- **`podman`** — runs the llama.cpp container that `llama-swap` drives.
+- **A running [`engined`](https://github.com/Rethunk-Tech/engined)** on this box, reachable at `engined.url` (default `http://127.0.0.1:29200`) — it owns the llama.cpp build and container lifecycle. bakeoff never starts, stops, or builds anything on its behalf.
 - **`uv`** — Python env management. See [installation](https://docs.astral.sh/uv/getting-started/installation/).
-- **`curl`** + `sha256sum` (or `shasum`) — bootstrap fetches the pinned `llama-swap` binary.
-- One or more GGUFs under `~/.lmstudio/models/` (or `server.models_dir`). Fetch with `./run.sh fetch`.
-- First container run pulls `ghcr.io/ggml-org/llama.cpp:server-vulkan` (~1 GB).
+- `systemctl --user` access to reload the `engined` unit after bakeoff writes its config fragment.
+- One or more GGUFs under `engined.models_dir` (default `~/.local/share/engined-models/llm-bench`). Fetch with `./run.sh fetch`.
 
-The pinned `llama-swap` binary lands in `.cache/llama-swap/` on first run with SHA256 verification. Bump version in `run.sh` — see [AGENTS § When editing](AGENTS.md#when-editing).
-
-AMD: Vulkan image works on ROCm-supported GPUs/APUs without a fully functional ROCm userspace stack.
+AMD: engined's Vulkan image works on ROCm-supported GPUs/APUs without a fully functional ROCm userspace stack.
 
 ## Install & run
 
 ```sh
 ./run.sh                       # dataset + all phases + reports
-./run.sh --dry-run             # validate config + gen dataset; no proxy or network
+./run.sh --dry-run             # validate config + gen dataset; no engined calls
 ./run.sh --config other.yaml   # alternate config
 ```
 
@@ -29,7 +26,7 @@ uv sync
 uv run python -m bench.runner --config config.yaml
 ```
 
-**Dry-run** validates config, generates the dataset, and exercises the proxy config generator without starting a container or making HTTP calls. Run after every `config.yaml` edit.
+**Dry-run** validates config, generates the dataset, and exercises the engined fragment generator without reloading engined or making HTTP calls. Run after every `config.yaml` edit.
 
 ## Downloading models
 
@@ -46,13 +43,14 @@ Existing files are skipped. Gated repos: `hf auth login` or `HF_TOKEN=<token>`. 
 
 `config.yaml` is the single source of truth. Common edits:
 
-- **Add models** — append under `models:`. First two entries are A/B for pairwise judging. `id` is the routing key; `alias` is what llama.cpp reports via `-a`.
+- **Add models** — append under `models:`. First two entries are A/B for pairwise judging. `id` is the engined route's model id (lowercase, `[a-z0-9_-]`).
 - **Prompt variants** — `prompts:` list; every task runs against every prompt against every model.
 - **Judge mode** — `judge.mode: pairwise_all` (default) or `scored`. Thresholds in [AGENTS § Judge mode selection](AGENTS.md#judge-mode-selection).
 - **Skip judge** — `judge.enabled: false`. Tasks with `scorer: "judge"` emit `null`.
 - **Per-model context** — `ctx:` overrides `server.ctx`.
 - **MoE OOM** — `n_cpu_moe: 999` spills experts to CPU.
-- **Ports** — `server.swap_port` (default `8080`), `server.backend_start_port` (default `5800`).
+- **engined address** — `engined.url` (default `http://127.0.0.1:29200`), `engined.engine` (default `llama-bench`).
+- **Hold other engines during a run** — `engined.hold: [comfy]` stops and keeps `comfy` (or any engine id) stopped for the run's duration.
 - **Skip `mmproj-*`** — vision projectors, not standalone text models.
 
 ### Benchmark profiles
@@ -89,24 +87,22 @@ Add `--sign` when `cosign` is installed and you accept Sigstore/Rekor public rec
 
 | Symptom | Cause / fix |
 | --------- | ------------- |
-| `llama-swap.sh: binary not found` | Run `./run.sh` once; bootstrap fetches into `.cache/llama-swap/`. |
-| `SHA256 mismatch for ...` | Update `LLAMA_SWAP_VERSION` and matching `LLAMA_SWAP_SHA256_*` in `run.sh`. Never bypass. |
-| Port `server.swap_port` in use | Stop the other process or change `server.swap_port`. |
-| Dry-run: `gguf must be '<org>/<repo>/<file>.gguf' form` | List files with `fd -e gguf . ~/.lmstudio/models/` and fix path shape. |
+| `engined config_error after reload` | The fragment engined loaded is broken — check `GET /engined/v1/engines` on `engined.url` for the named field. |
+| `engined never listed: @/llama-bench/...` | engined never brought the route up within timeout — check `engined`'s own logs, not bakeoff's. |
+| Dry-run: `gguf must be '<org>/<repo>/<file>.gguf' form` | List files with `fd -e gguf . ~/.local/share/engined-models/llm-bench/` and fix path shape. |
 | `[config] ...` errors on startup | Fix named field in `config.yaml`; re-run `--dry-run`. |
 | `[config] model IDs must be unique` | Give each model a distinct `id:`. |
-| `HTTPError 404 /v1/chat/completions` | Backend still loading; raise `server.boot_timeout_s`. |
 | `cost_usd: null` everywhere | Normal on Strix Halo and non-GPU hosts. |
 | Judge returns mostly TIE | Swap `judge.gguf` to a stronger model or increase `judge.ctx`. |
 | Judge cost high with >4 models | Switch to `judge.mode: scored`. |
 | Reasoning model answers missing | Client prefers `content`, falls back to `reasoning_content`. |
-| `bench-llama-*` container left behind | `./bin/llama-swap.sh sweep` or `down`. |
+| Fragment left behind after a crash | `rm ~/.config/engined/config.d/bakeoff.toml && systemctl --user reload engined`. |
 
 ## Clean-up
 
 ```sh
-./bin/llama-swap.sh down              # stop proxy + sweep bench-llama-* containers
-rm -rf .venv results datasets .cache  # nuke generated state incl. pinned llama-swap binary
+rm ~/.config/engined/config.d/bakeoff.toml   # only if a crash left it behind
+rm -rf .venv results datasets                # nuke bakeoff's own generated state
 ```
 
 ## HuggingFace metadata enrichment

@@ -2,7 +2,7 @@
 
 Local LLM N-vs-N benchmark harness. Every candidate model and the judge are served by [`engined`](https://github.com/Rethunk-Tech/engined) — bakeoff declares its own engine (`llama-bench`) and one route per model in a `config.d/*.toml` fragment, over OpenAI-compatible `/v1/chat/completions`. Matrix is `tasks × prompt_variants × models`; the runner iterates per-model-sequentially and relies on the `llama-bench` engine's `models_max = 1` to unload the previous backend before the next boots. Judge runs as its own route after the model phases.
 
-**Claude Code:** `CLAUDE.md` is `@AGENTS.md`. Edit **AGENTS.md**.
+**Claude Code:** `CLAUDE.md` is a symlink to `AGENTS.md`. Edit **AGENTS.md**.
 
 **Operator runbook:** [`HUMANS.md`](HUMANS.md). Global harness rules live in `~/.claude/CLAUDE.md` — not restated here.
 

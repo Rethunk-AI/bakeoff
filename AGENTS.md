@@ -53,7 +53,6 @@ datasets/ results/   generated artifacts (gitignored)
 ## Hardware caveats
 
 - Strix Halo `rocm-smi` typically fails on `libdrm_amdgpu.so`. `cost_usd: null` in results is expected, not a bug.
-- Vulkan image works on AMD/NVIDIA/Intel without per-backend wrangling. Don't switch to a ROCm-specific image "to fix" Strix Halo — that regresses portability.
 - MoE models (`Qwen3.6-35B-A3B` etc.): if boot OOMs, set `n_cpu_moe: 999` on the model entry to spill experts to CPU.
 
 ## Judge mode selection

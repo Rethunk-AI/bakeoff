@@ -991,7 +991,7 @@ def main() -> int:
 
     # Persist the run record to the store so it is addressable by run ID.
     # The store record IS the payload dict; the flat results/ file remains
-    # for backwards compatibility (e.g. existing --resume-from callers).
+    # as the portable output that --resume-from reads.
     _store_write("runs", payload["run_id"], payload)
     print(f"[store] runs/{payload['run_id']}.json", file=sys.stderr)
 

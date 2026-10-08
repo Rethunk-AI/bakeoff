@@ -31,7 +31,7 @@ bench/
   scoring.py         completeness-weighted partial score rollup
   signing.py         Ed25519 sign/verify for result envelopes
   store.py           atomic JSON record I/O under BAKEOFF_DATA_DIR
-migrate/             Go module: bakeoff migration runner (#27)
+migrate/             Go module: bakeoff migration runner
 run.sh               uv sync + uv run; fetch → bench.download
 datasets/ results/   generated artifacts (gitignored)
 ```
@@ -46,7 +46,7 @@ datasets/ results/   generated artifacts (gitignored)
 - **Pairwise order randomized per call** (seeded from `run.seed`); swapped verdicts inverted before counting. Every judgement records `order: "AB" | "BA"`. Mitigates 5-15% positional bias.
 - **Cost axis is energy, not tokens.** `nvidia-smi --query-gpu=power.draw` or `rocm-smi --showpower` sampled during the call. Neither available → `energy_wh` / `cost_usd` set to `null`. Do not substitute latency.
 - **`mmproj-*` files are vision projectors, not standalone models.** Never list under `models:`. The generator rejects them outright.
-- **Disk-persistence layer is directory-per-table, UUID-filename JSON.** `bench/store.py` owns all atomic I/O under `BAKEOFF_DATA_DIR` (env-configurable; default `~/.local/share/bakeoff`). `schema_version` is a plain integer (currently 1); missing or unexpected values are hard errors. `run_queue/` is the only ephemeral sub-tree. The runner writes each completed run to `runs/<run_id>.json` (canonical, addressable by run ID) and maintains a `run_queue/pending` → `run_queue/completed` lifecycle record per real run. `results/run-<ts>.json` is retained for backwards compatibility. `--resume-run-id <id>` loads from the store; `--resume-from <file>` loads from the flat file.
+- **Disk-persistence layer is directory-per-table, UUID-filename JSON.** `bench/store.py` owns all atomic I/O under `BAKEOFF_DATA_DIR` (env-configurable; default `~/.local/share/bakeoff`). `schema_version` is a plain integer (currently 1); missing or unexpected values are hard errors. `run_queue/` is the only ephemeral sub-tree. The runner writes each completed run to `runs/<run_id>.json` (canonical, addressable by run ID) and maintains a `run_queue/pending` → `run_queue/completed` lifecycle record per real run. `results/run-<ts>.json` is the flat, self-contained per-run file: it is the portable output, easy to copy, diff and hand to `--resume-from <file>`, which resumes a run from that file alone without the store. `--resume-run-id <id>` resumes from the store instead.
 - **No database in `bench/`.** Never add psycopg/sqlite imports to any `bench/` module. Database access lives in `migrate/` (Go), which is the sole runtime consumer of `schema/schema.sql`. The `migrate/` package is a separate Go module (`go.mod` at `migrate/`) — it does not import any Python packages and is not reachable from `bench/`.
 - **Worker mode is opt-in.** `bench.worker` polls a bakeoff-results queue; it must not be wired into the default `bench.runner` matrix loop. Empty queue and paused runners sleep. Execute failures report `/fail` rather than abandoning the claim. `--models` on the runner is the execute seam so a claimed job still loads one model at a time.
 

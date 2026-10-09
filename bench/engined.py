@@ -1,4 +1,4 @@
-"""Bridge bakeoff's config.yaml to engined, which now serves every model.
+"""Bridge bakeoff's config.yaml to engined, which serves every model.
 
 engined owns the pinned llama.cpp build and model lifecycle; bakeoff's job is
 to declare its own engine (`llama-bench`) and one chat route per candidate

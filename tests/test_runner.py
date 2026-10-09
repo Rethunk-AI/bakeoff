@@ -151,7 +151,7 @@ class TestSelectModels:
 
 
 class TestScoreAssembly:
-    """Pure post-hoc rollup (no proxy/network) — Rethunk-AI/bakeoff#23."""
+    """Pure post-hoc rollup (no proxy/network)."""
 
     def _main_ok(self, mid, task_id, q):
         return {

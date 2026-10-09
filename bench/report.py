@@ -78,9 +78,8 @@ def _rollup(
     """Aggregate per-record metrics into per-model rollup dicts.
 
     cost_usd_total is derived at display time from energy_wh_total × kwh_rate
-    rather than being stored per-record. Legacy result files that carry
-    cost_usd on each record are still handled: if stored values are present
-    they are summed directly; if absent and kwh_rate is known the cost is
+    rather than being stored per-record. If records carry a stored cost_usd
+    it is summed directly; if absent and kwh_rate is known the cost is
     derived from the aggregated energy.
     """
     by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
@@ -98,7 +97,7 @@ def _rollup(
         qh = _extract_field(rows, "quality_heuristic")
         energy_total = sum(wh) if wh else None
 
-        # cost_usd: use stored per-record values when present (legacy runs);
+        # cost_usd: use stored per-record values when present (older result files);
         # otherwise derive from total energy × kwh_rate at display time.
         stored_usd = _extract_field(rows, "cost_usd")
         if stored_usd:
@@ -132,7 +131,7 @@ def _rollup(
 def _detect_mode(judgements: list[dict[str, Any]]) -> str | None:
     if not judgements:
         return None
-    # Prefer explicit tag; fall back to shape inference for legacy payloads.
+    # Prefer explicit tag; fall back to shape inference for untagged payloads.
     for j in judgements:
         m = j.get("mode")
         if m in {"pairwise", "scored"}:
@@ -307,7 +306,7 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
         )
     lines.append("")
 
-    # TTFT may be all-None on legacy runs that predate streaming; skip then.
+    # TTFT may be all-None on runs that predate streaming; skip then.
     if any(r.get("ttft_mean_s") is not None for r in roll.values()):
         lines.append("## Time-to-first-token (s)")
         lines.append("")
@@ -483,9 +482,8 @@ function percentile(xs, p) {{
   return s[lo] + (s[hi] - s[lo]) * (k - lo);
 }}
 
-// cost_usd is no longer stored per record; derive from energy at display time.
-// Legacy result files that carry cost_usd are still handled (stored values
-// are summed directly; derivation is used only when no stored values present).
+// cost_usd is derived from energy at display time; stored per-record values
+// (older result files) are summed directly and take precedence.
 const _kwh_rate = data.config?.cost?.enabled ? (data.config?.cost?.kwh_rate_usd ?? null) : null;
 
 function rollup(records) {{
@@ -509,7 +507,7 @@ function rollup(records) {{
     const energy_total = sum(v.wh);
     let cost_total = null;
     if (v.storedUsd.length) {{
-      cost_total = sum(v.storedUsd);  // legacy: per-record stored value
+      cost_total = sum(v.storedUsd);  // per-record stored value
     }} else if (energy_total != null && _kwh_rate != null) {{
       cost_total = energy_total / 1000 * _kwh_rate;  // derived at display time
     }}

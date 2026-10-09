@@ -1,7 +1,6 @@
 // bakeoff-migrate — migration runner CLI.
 // Usage: bakeoff-migrate [flags] <schema_version_id>
 //
-// Design: bakeoff#27 (Phase 1 sign-off 050558ZJUN26).
 // Phase 1 gate: squirrel + pgx/v5 + Tengo scripting engine.
 // Phase 2b: batch sizing, shadow table, resume — implemented in runner.go.
 package main

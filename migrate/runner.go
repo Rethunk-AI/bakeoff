@@ -3,7 +3,6 @@ package migrate
 // runner.go — Core migration runner.
 // Implements schema_migration_script and record_migration_script execution,
 // shadow table strategy, batch sizing, resume gate, and FK ordering.
-// Design: bakeoff#27 (Phase 1 sign-off 050558ZJUN26, Phase 2 spec).
 
 import (
 	"context"
@@ -274,7 +273,7 @@ func (r *MigrationRunner) migrateRecords(
 ) (migrationStats, error) {
 	var stats migrationStats
 
-	// Dynamic batch state — 6 variables per bakeoff#27 (050558ZJUN26).
+	// Dynamic batch state — 6 variables.
 	var (
 		totalRecords        int
 		lastBatchSize       int

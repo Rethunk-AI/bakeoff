@@ -31,7 +31,7 @@ def _fail(failure_code: str = "timeout") -> dict:
 
 
 def _error(msg: str = "some error") -> dict:
-    """Legacy-style error record (no failure_code)."""
+    """Error record (no failure_code)."""
     return {"error": msg}
 
 

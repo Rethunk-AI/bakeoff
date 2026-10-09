@@ -217,7 +217,7 @@ def run_model_phase(
     floor suite runs FIRST, while this model is already loaded — so it adds
     no extra swap (invariant: exactly N swaps per run) and a model that
     later crashes the main matrix still has a floor score if it booted at
-    all (Rethunk-AI/bakeoff#23). Floor cells use a single fixed prompt
+    all. Floor cells use a single fixed prompt
     (prompt_id "floor", empty system) and deterministic scorers only.
     """
     mid = model_cfg["id"]
@@ -249,7 +249,7 @@ def run_model_phase(
 
     # Minimal-capability floor suite — runs first, within this single model
     # load (no extra swap). Single fixed prompt, deterministic scorers, binary
-    # per-cell score. See run-level docstring + Rethunk-AI/bakeoff#23.
+    # per-cell score. See run-level docstring.
     for ft in floor_tasks or []:
         try:
             res, _wh, _vram, _sm, _cu, _cs = call_one(
@@ -320,7 +320,7 @@ def run_model_phase(
                     "gpu_sm_utilization_pct": mean_sm,
                     # Path 1: kernel wall time from cudaEventElapsedTime() /
                     # hipEventElapsedTime(). None until the CUDA/ROCm event API
-                    # path is wired; the field exists now so the schema is stable.
+                    # path is wired; the field keeps the schema stable.
                     "gpu_event_seconds": None,
                     # Path 2: utilization-weighted GPU time.
                     # wall_clock_seconds x mean(gpu_sm_utilization_pct / 100).
@@ -415,7 +415,7 @@ def assemble_model_scores(
     records: list[dict[str, Any]],
     cells_total: int,
 ) -> tuple[list[dict[str, Any]], str]:
-    """Post-hoc per-model rollup + run-level status (Rethunk-AI/bakeoff#23).
+    """Post-hoc per-model rollup + run-level status.
 
     Pure: no network, no proxy. `cells_total` is the main-suite cell count C
     per model (len(tasks) * len(prompts)). Floor records (tier == "dumb_model")
@@ -873,7 +873,7 @@ def main() -> int:
             file=sys.stderr,
         )
 
-    # Minimal-capability floor tier (Rethunk-AI/bakeoff#23): runs per model
+    # Minimal-capability floor tier: runs per model
     # within its existing load (no extra swap). Fresh runs only — resume reruns
     # focus on pending main cells. Config-gated, default enabled.
     dumb_cfg = cfg.get("dumb_model_tier", {})

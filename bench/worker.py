@@ -1,7 +1,7 @@
 """Distributed worker: pull jobs from bakeoff-results and run them locally.
 
 The standalone ``bench.runner`` matrix loop is unchanged. This module is the
-opt-in pull client for Rethunk-AI/bakeoff#37 — poll, claim, heartbeat, execute,
+opt-in pull client for the bakeoff-results queue: poll, claim, heartbeat, execute,
 sign, submit. Empty or paused queues sleep. Execute failures report ``/fail``.
 """
 

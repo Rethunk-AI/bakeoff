@@ -1,7 +1,6 @@
 package migrate
 
 // schema_builtins.go — Tengo built-ins for schema_migration_script (DDL context).
-// Design: bakeoff#27 Phase 1 sign-off (050558ZJUN26).
 //
 // Each built-in executes SQL against the database immediately and returns
 // an empty string on success or an error string on failure.

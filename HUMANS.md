@@ -139,7 +139,7 @@ Completed model rows are copied; missing/errored cells re-run. Judge phase alway
 export BAKEOFF_DATA_DIR=/data/bakeoff   # default ~/.local/share/bakeoff
 ```
 
-Store/queue modules write JSON under `models/`, `run_queue/pending/`, `run_queue/completed/`. The standalone runner does **not** use this by default — opt-in for multi-runner scenarios.
+Store/queue modules write JSON under `models/`, `runs/`, `run_queue/pending/`, `run_queue/completed/`. Every real run of the standalone runner writes `runs/<run_id>.json` and moves a `run_queue` record from pending to completed here.
 
 ## Distributed worker mode
 

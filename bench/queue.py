@@ -45,6 +45,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from bench import store
+
 _PENDING = "pending"
 _COMPLETED = "completed"
 
@@ -61,7 +63,7 @@ _STATUS_CANCELLED = "CANCELLED"
 
 
 # ---------------------------------------------------------------------------
-# Datetime helpers (py310-safe: fromisoformat() rejects trailing 'Z' on <3.11)
+# Datetime helpers
 # ---------------------------------------------------------------------------
 
 _ISO_FMT = "%Y-%m-%dT%H:%M:%SZ"
@@ -69,11 +71,6 @@ _ISO_FMT = "%Y-%m-%dT%H:%M:%SZ"
 
 def _utc_now() -> str:
     return datetime.now(UTC).strftime(_ISO_FMT)
-
-
-def _parse_dt(s: str) -> datetime:
-    """Parse an ISO-8601 UTC string (always ends in Z) into an aware datetime."""
-    return datetime.strptime(s, _ISO_FMT).replace(tzinfo=UTC)
 
 
 def _now_dt() -> datetime:
@@ -86,9 +83,7 @@ def _now_dt() -> datetime:
 
 
 def _queue_dir() -> Path:
-    from bench.store import data_dir
-
-    return data_dir() / "run_queue"
+    return store.data_dir() / "run_queue"
 
 
 def _pending_dir() -> Path:
@@ -201,7 +196,7 @@ def claim(runner_id: str) -> dict[str, Any] | None:
         retry_after = data.get("retry_after")
         if retry_after:
             try:
-                if _parse_dt(retry_after) > now:
+                if store.parse_utc(retry_after) > now:
                     continue
             except ValueError:
                 pass
@@ -393,7 +388,7 @@ def reap_stale_claims(timeout_minutes: int = 10) -> list[str]:
         if not claimed_at_str:
             continue
         try:
-            claimed_dt = _parse_dt(claimed_at_str)
+            claimed_dt = store.parse_utc(claimed_at_str)
         except ValueError:
             continue
         if now - claimed_dt < timeout:

@@ -23,9 +23,11 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import tempfile
 from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 from uuid import UUID, uuid5
@@ -63,6 +65,17 @@ def data_dir() -> Path:
 
 def _utc_now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def parse_utc(value: str) -> datetime:
+    """Parse any ISO-8601 timestamp (``Z``, offset, fractional seconds) to an aware UTC datetime.
+
+    A timestamp with no offset is read as UTC, the zone every writer here stamps in.
+    """
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
 
 
 def _stamp_audit(existing: dict[str, Any] | None, record: dict[str, Any]) -> dict[str, Any]:
@@ -196,6 +209,21 @@ def model_uuid(model_hash: str) -> str:
     return str(uuid5(BAKEOFF_MODEL_NAMESPACE, model_hash))
 
 
+def canonical_number(value: float | int | None) -> str:
+    """Plain decimal text with no exponent and no trailing zeros; ``None`` is empty.
+
+    ``8.0``, ``8`` and ``8.00`` are all ``"8"``; ``0.5`` is ``"0.5"``; ``1e9`` is
+    ``"1000000000"``. Floats go through ``repr`` (shortest round-trip text).
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        raise TypeError("canonical_number: bool is not a number")
+    if isinstance(value, float) and not math.isfinite(value):
+        raise ValueError(f"canonical_number: {value!r} is not finite")
+    return format(Decimal(repr(value)).normalize(), "f")
+
+
 def provisional_model_uuid(
     source_url: str,
     parameter_count_b: float | None,
@@ -203,10 +231,11 @@ def provisional_model_uuid(
 ) -> str:
     """Provisional UUID for a model before the weights hash is known.
 
-    UUID5(BAKEOFF_MODEL_NAMESPACE, "{url}|{params}|{size}").
-    Matches the dedup key pattern from constants.py and schema.sql.
+    UUID5(BAKEOFF_MODEL_NAMESPACE, "{url}|{params}|{size}") with each number in the
+    canonical form of :func:`canonical_number`, so any other implementation
+    (the future database side) that follows that rule derives the same key.
     """
-    key = f"{source_url}|{parameter_count_b}|{source_size}"
+    key = f"{source_url}|{canonical_number(parameter_count_b)}|{canonical_number(source_size)}"
     return str(uuid5(BAKEOFF_MODEL_NAMESPACE, key))
 
 

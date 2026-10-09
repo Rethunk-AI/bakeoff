@@ -148,3 +148,68 @@ def test_provisional_creator_uuid():
     # creator_uuid and provisional_creator_uuid use the same namespace with the same input
     # but different semantic inputs in practice; confirm reproducibility here.
     assert isinstance(u, str) and len(u) == 36
+
+
+# ---------------------------------------------------------------------------
+# Provisional UUID inputs and timestamp parsing
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        (None, ""),
+        (8, "8"),
+        (8.0, "8"),
+        (0.5, "0.5"),
+        (7.62, "7.62"),
+        (1e9, "1000000000"),
+        (1.5e-7, "0.00000015"),
+        (0.0, "0"),
+        (10, "10"),
+        (4_000_000_000, "4000000000"),
+    ],
+)
+def test_canonical_number(value, expected):
+    assert store.canonical_number(value) == expected
+
+
+def test_canonical_number_rejects_non_numbers():
+    with pytest.raises(TypeError):
+        store.canonical_number(True)
+    with pytest.raises(ValueError, match="finite"):
+        store.canonical_number(float("nan"))
+
+
+def test_provisional_uuid_ignores_numeric_spelling():
+    url = "https://example.test/m"
+    assert store.provisional_model_uuid(url, 8, 4_000_000_000) == store.provisional_model_uuid(
+        url, 8.0, 4_000_000_000
+    )
+    assert store.provisional_model_uuid(url, 8.0, 1e9) == store.provisional_model_uuid(
+        url, 8.0, 1_000_000_000
+    )
+    assert store.provisional_model_uuid(url, 8.0, 1) != store.provisional_model_uuid(url, 8.5, 1)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "2026-10-09T12:30:45Z",
+        "2026-10-09T12:30:45.123456Z",
+        "2026-10-09T12:30:45+00:00",
+        "2026-10-09T12:30:45.123456+00:00",
+        "2026-10-09T14:30:45+02:00",
+        "2026-10-09T12:30:45",
+    ],
+)
+def test_parse_utc_accepts_every_iso_shape(text):
+    parsed = store.parse_utc(text)
+    assert parsed.utcoffset().total_seconds() == 0
+    assert (parsed.year, parsed.month, parsed.day, parsed.hour, parsed.minute) == (
+        2026,
+        10,
+        9,
+        12,
+        30,
+    )

@@ -4,7 +4,7 @@
 
 [![ci](https://github.com/Rethunk-AI/bakeoff/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Rethunk-AI/bakeoff/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/Rethunk-AI/bakeoff)](LICENSE)
-[![python](https://img.shields.io/badge/python-%E2%89%A53.10-blue)](pyproject.toml)
+[![python](https://img.shields.io/badge/python-%E2%89%A53.12-blue)](pyproject.toml)
 
 </div>
 

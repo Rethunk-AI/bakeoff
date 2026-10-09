@@ -71,3 +71,7 @@ datasets/ results/   generated artifacts (gitignored)
 - Publication is explicit: `bench.publish` packages a completed result for `Rethunk-AI/bakeoff-results`; normal benchmark runs still leave `results/` gitignored and local.
 - Python env: `uv`. No `python -m venv`, no bare `pip`.
 - Match style in touched files; no drive-by refactors.
+
+## Gate budget
+
+Measured 2026-10-09 under load 8-11 on 32 cores: warm `gate --profile` 4.5 s wall and about 9 s CPU; cold (fresh rsync copy, no .venv or tool caches, shared Go cache) 5.3 s wall and about 11 s CPU. Both are under the 10 s warm and 30 s cold bar, so nothing in the gate needs trimming. pytest runs single-process (no xdist) and takes 4.5-5.3 s, the slowest step; there is no turbo, so no step is duplicated. Do not add `-n auto`: it oversubscribes 32 cores for a suite this size.

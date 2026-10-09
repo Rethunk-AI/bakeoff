@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "bakeoff"
 version = "0.1.0"
-description = "Local LLM N-vs-N benchmark harness (llama.cpp podman + OpenAI-compat)."
+description = "Local LLM N-vs-N benchmark harness (models served through engined, OpenAI-compat)."
 requires-python = ">=3.12"
 readme = "README.md"
 license = { file = "LICENSE" }

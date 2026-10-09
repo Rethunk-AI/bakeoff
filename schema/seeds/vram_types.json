@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "table": "vram_types",
+  "description": "Video memory technologies (#38).",
+  "rows": [
+    {
+      "name": "GDDR5",
+      "description": "Graphics DDR5"
+    },
+    {
+      "name": "GDDR5X",
+      "description": "Graphics DDR5X"
+    },
+    {
+      "name": "GDDR6",
+      "description": "Graphics DDR6"
+    },
+    {
+      "name": "GDDR6X",
+      "description": "Graphics DDR6X (PAM4)"
+    },
+    {
+      "name": "GDDR7",
+      "description": "Graphics DDR7"
+    },
+    {
+      "name": "HBM2",
+      "description": "High Bandwidth Memory 2"
+    },
+    {
+      "name": "HBM2e",
+      "description": "High Bandwidth Memory 2e"
+    },
+    {
+      "name": "HBM3",
+      "description": "High Bandwidth Memory 3"
+    },
+    {
+      "name": "HBM3e",
+      "description": "High Bandwidth Memory 3e"
+    },
+    {
+      "name": "LPDDR5",
+      "description": "Low-power DDR5, shared with system memory"
+    },
+    {
+      "name": "LPDDR5X",
+      "description": "Low-power DDR5X, shared with system memory"
+    }
+  ]
+}

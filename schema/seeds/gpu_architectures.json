@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "table": "gpu_architectures",
+  "description": "GPU microarchitectures (#38).",
+  "rows": [
+    {
+      "name": "Pascal",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "Volta",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "Turing",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "Ampere",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "Ada Lovelace",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "Hopper",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "Blackwell",
+      "vendor": "NVIDIA"
+    },
+    {
+      "name": "RDNA 2",
+      "vendor": "AMD"
+    },
+    {
+      "name": "RDNA 3",
+      "vendor": "AMD"
+    },
+    {
+      "name": "RDNA 3.5",
+      "vendor": "AMD"
+    },
+    {
+      "name": "RDNA 4",
+      "vendor": "AMD"
+    },
+    {
+      "name": "CDNA 2",
+      "vendor": "AMD"
+    },
+    {
+      "name": "CDNA 3",
+      "vendor": "AMD"
+    },
+    {
+      "name": "Alchemist",
+      "vendor": "Intel"
+    },
+    {
+      "name": "Battlemage",
+      "vendor": "Intel"
+    }
+  ]
+}

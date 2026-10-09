@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "table": "tflops_sources",
+  "description": "Where a peak-TFLOPS figure came from (#38).",
+  "rows": [
+    {
+      "name": "vendor_spec",
+      "description": "Peak figure from the vendor's published specification"
+    },
+    {
+      "name": "lookup_table",
+      "description": "Peak figure from the harness's built-in model lookup table (bench/metrics.py)"
+    },
+    {
+      "name": "measured",
+      "description": "Peak figure measured by the harness"
+    }
+  ]
+}

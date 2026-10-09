@@ -31,11 +31,38 @@ def _run(*args: str, timeout: int = 5) -> str:
     return ""
 
 
+_NVIDIA_FIELDS = (
+    "name,memory.total,power.limit,driver_version,"
+    "pci.device_id,pci.sub_device_id,clocks.max.memory,clocks.boost.graphics,"
+    "pcie.link.gen.max,pcie.link.width.max,pcie.link.gen.current,pcie.link.width.current"
+)
+
+
+def split_pci_id(value: str) -> tuple[str, str] | None:
+    """Split nvidia-smi's combined ``0xDDDDVVVV`` PCI id into ``(vendor, device)``.
+
+    The high 16 bits are the device (or subsystem device) id and the low 16 the vendor
+    (or subsystem vendor) id, as in a PCI config dword. Anything else returns None.
+    """
+    m = re.fullmatch(r"0x([0-9a-fA-F]{8})", value.strip())
+    if not m:
+        return None
+    digits = m.group(1).lower()
+    return f"0x{digits[4:]}", f"0x{digits[:4]}"
+
+
+def pcie_description(gen: str, width: str) -> str | None:
+    """The interface_type description of a PCIe link (``PCIe 4.0 x16``); None for a bad reading."""
+    if gen.isdigit() and width.isdigit() and int(gen) > 0 and int(width) > 0:
+        return f"PCIe {int(gen)}.0 x{int(width)}"
+    return None
+
+
 def _nvidia_info() -> dict[str, Any]:
-    """Query nvidia-smi for GPU model, VRAM, power limit, and driver version."""
+    """Query nvidia-smi for GPU model, VRAM, power limit, driver, PCI ids, clocks and PCIe links."""
     out = _run(
         "nvidia-smi",
-        "--query-gpu=name,memory.total,power.limit,driver_version",
+        f"--query-gpu={_NVIDIA_FIELDS}",
         "--format=csv,noheader,nounits",
     )
     if not out:
@@ -53,6 +80,20 @@ def _nvidia_info() -> dict[str, Any]:
             result["power_limit_w"] = float(parts[2])
     if len(parts) >= 4 and parts[3]:
         result["driver_version"] = parts[3]
+    if len(parts) >= 5 and (device := split_pci_id(parts[4])):
+        result["pci_vendor_id"], result["pci_device_id"] = device
+    if len(parts) >= 6 and (sub := split_pci_id(parts[5])):
+        result["pci_subsystem_vendor_id"], result["pci_subsystem_device_id"] = sub
+    if len(parts) >= 7:
+        with contextlib.suppress(ValueError, TypeError):
+            result["clock_memory_mhz"] = int(float(parts[6]))
+    if len(parts) >= 8:
+        with contextlib.suppress(ValueError, TypeError):
+            result["clock_graphics_boost_mhz"] = int(float(parts[7]))
+    if len(parts) >= 10 and (native := pcie_description(parts[8], parts[9])):
+        result["slot_native_interface"] = native
+    if len(parts) >= 12 and (actual := pcie_description(parts[10], parts[11])):
+        result["actual_interface"] = actual
     return result
 
 
@@ -152,6 +193,9 @@ def collect_hardware_context() -> dict[str, Any]:
 
     Returns a dict with keys:
         gpu_model, vram_mb, power_limit_w,
+        pci_vendor_id, pci_device_id, pci_subsystem_vendor_id, pci_subsystem_device_id,
+        clock_memory_mhz, clock_graphics_boost_mhz,
+        slot_native_interface, actual_interface (interface_type descriptions),
         cpu_model, cpu_cores, ram_gb,
         os_name, os_version, driver_version
 
@@ -162,6 +206,14 @@ def collect_hardware_context() -> dict[str, Any]:
         "gpu_model": None,
         "vram_mb": None,
         "power_limit_w": None,
+        "pci_vendor_id": None,
+        "pci_device_id": None,
+        "pci_subsystem_vendor_id": None,
+        "pci_subsystem_device_id": None,
+        "clock_memory_mhz": None,
+        "clock_graphics_boost_mhz": None,
+        "slot_native_interface": None,
+        "actual_interface": None,
         "cpu_model": None,
         "cpu_cores": None,
         "ram_gb": None,

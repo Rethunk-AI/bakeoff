@@ -26,6 +26,7 @@ jobs:
         with:
           go-version-file: migrate/go.mod
           run-lint: "true"
+          lint-version: v2.14.0
           run-govulncheck: "true"
 
       - name: Vet

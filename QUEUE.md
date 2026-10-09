@@ -70,7 +70,7 @@ Deferred: large VRAM requirement or lower relative priority.
 
 - Models are tested in P0 → P1 → P2 order.
 - To run a model: copy the relevant entry into `config.yaml` `models:` block,
-  confirm the GGUF is available at `server.models_dir/<path>`, and run the
+  confirm the GGUF is available at `engined.models_dir/<path>`, and run the
   harness.
 - Mark a model's status as **Tested** once a result bundle has been published
   to the results repo and update its row above.

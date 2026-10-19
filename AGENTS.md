@@ -4,7 +4,7 @@ Local LLM N-vs-N benchmark harness. Every candidate model and the judge are serv
 
 **Claude Code:** `CLAUDE.md` is a symlink to `AGENTS.md`. Edit **AGENTS.md**.
 
-**Operator runbook:** [`HUMANS.md`](HUMANS.md). Global harness rules live in `~/.claude/CLAUDE.md` — not restated here.
+**Operator runbook:** [`HUMANS.md`](HUMANS.md).
 
 ## Layout
 

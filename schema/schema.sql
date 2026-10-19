@@ -353,7 +353,7 @@ ALTER TABLE run_model_metrics
 
 -- ---------------------------------------------------------------------------
 -- interface_type
--- GPU interface / interconnect types (#17). Seed data in seeds/interface_types.json.
+-- GPU interface / interconnect types. Seed data in seeds/interface_types.json.
 -- bandwidth_peak_gb_s is the universal comparable field, bidirectional aggregate.
 -- For PCIe it is lane_transfer_rate * lane_count * 2 / 8.
 -- lane_transfer_rate (GT/s per lane) and lane_count are NULL for non-PCIe interfaces.
@@ -401,7 +401,7 @@ INSERT INTO interface_type (description, interface_family, lane_transfer_rate, l
 
 -- ---------------------------------------------------------------------------
 -- vram_type
--- Video memory technology lookup (#38). Seed data in seeds/vram_types.json.
+-- Video memory technology lookup. Seed data in seeds/vram_types.json.
 -- ---------------------------------------------------------------------------
 CREATE TABLE vram_type (
     vram_type_id SERIAL PRIMARY KEY,
@@ -424,7 +424,7 @@ INSERT INTO vram_type (name, description) VALUES
 
 -- ---------------------------------------------------------------------------
 -- gpu_architecture
--- GPU microarchitecture lookup (#38). Seed data in seeds/gpu_architectures.json.
+-- GPU microarchitecture lookup. Seed data in seeds/gpu_architectures.json.
 -- ---------------------------------------------------------------------------
 CREATE TABLE gpu_architecture (
     gpu_architecture_id SERIAL PRIMARY KEY,
@@ -451,7 +451,7 @@ INSERT INTO gpu_architecture (name, vendor) VALUES
 
 -- ---------------------------------------------------------------------------
 -- tflops_source
--- Where a peak-TFLOPS figure came from (#38). Seed data in seeds/tflops_sources.json.
+-- Where a peak-TFLOPS figure came from. Seed data in seeds/tflops_sources.json.
 -- ---------------------------------------------------------------------------
 CREATE TABLE tflops_source (
     tflops_source_id SERIAL PRIMARY KEY,
@@ -466,7 +466,7 @@ INSERT INTO tflops_source (name, description) VALUES
 
 -- ---------------------------------------------------------------------------
 -- system_hardware
--- The fixed physical host (#19). system_id is a stable per-host UUID generated once
+-- The fixed physical host. system_id is a stable per-host UUID generated once
 -- at first run; rows upsert on it.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_hardware (
@@ -479,7 +479,7 @@ CREATE TABLE system_hardware (
 
 -- ---------------------------------------------------------------------------
 -- system_software
--- Runtime environment snapshot for one run (#19). Not deduplicated: one row per run.
+-- Runtime environment snapshot for one run. Not deduplicated: one row per run.
 -- ---------------------------------------------------------------------------
 CREATE TABLE system_software (
     system_software_id SERIAL PRIMARY KEY,
@@ -494,7 +494,7 @@ CREATE TABLE system_software (
 
 -- ---------------------------------------------------------------------------
 -- gpu_hardware
--- Die-level GPU intrinsics (#18, #38): a model-level record shared by every system with
+-- Die-level GPU intrinsics: a model-level record shared by every system with
 -- that GPU, deduplicated on (pci_device_id, pci_subsystem_device_id) else normalised gpu_name.
 -- memory_bandwidth_peak_gb_s is stored, not derived.
 -- ---------------------------------------------------------------------------
@@ -524,7 +524,7 @@ CREATE UNIQUE INDEX gpu_hardware_pci_identity_idx
 
 -- ---------------------------------------------------------------------------
 -- system_gpu_link
--- A slot of a host and the GPU in it (#20). The slot is the fixed property, so the GPU
+-- A slot of a host and the GPU in it. The slot is the fixed property, so the GPU
 -- is data, not key. is_slot_limited is not stored: it is
 -- slot_native_interface_type_id <> actual_interface_type_id.
 -- ---------------------------------------------------------------------------
@@ -541,7 +541,7 @@ CREATE INDEX system_gpu_link_gpu_hardware_idx ON system_gpu_link (gpu_hardware_i
 
 -- ---------------------------------------------------------------------------
 -- run_hardware_metrics
--- Hardware context for a run (one row per run, #21). (system_hardware_id, slot_index)
+-- Hardware context for a run (one row per run). (system_hardware_id, slot_index)
 -- names the system_gpu_link row active for the run, so the GPU comes from the link.
 -- ---------------------------------------------------------------------------
 CREATE TABLE run_hardware_metrics (

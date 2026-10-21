@@ -24,3 +24,6 @@ datasets/
 .DS_Store
 *.swp
 *.swo
+
+# Claude Code agent worktrees: full nested checkouts of this repo.
+/.claude/worktrees/

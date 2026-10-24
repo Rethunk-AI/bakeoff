@@ -22,7 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: Rethunk-Tech/gh-actions/setup-go@5992e857707202bc73acf8a0a854add36ece781e # v1.21
+      - uses: Rethunk-Tech/gh-actions/setup-go@67ec8bd68343d915462729ad119c355740cf6205 # v1.22
         with:
           go-version-file: migrate/go.mod
           run-lint: "true"
@@ -47,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: Rethunk-Tech/gh-actions/setup-python@5992e857707202bc73acf8a0a854add36ece781e # v1.21
+      - uses: Rethunk-Tech/gh-actions/setup-python@67ec8bd68343d915462729ad119c355740cf6205 # v1.22
         with:
           python-version: ${{ matrix.python-version }}
           install-args: --all-extras

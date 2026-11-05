@@ -107,7 +107,7 @@ def _make_handler(fake: QueueFake) -> type[BaseHTTPRequestHandler]:
 def queue_http():
     fake = QueueFake()
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), _make_handler(fake))
-    thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+    thread = threading.Thread(target=httpd.serve_forever, args=(0.01,), daemon=True)
     thread.start()
     url = f"http://127.0.0.1:{httpd.server_port}"
     try:

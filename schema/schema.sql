@@ -231,12 +231,19 @@ CREATE TABLE prompts (
 );
 
 -- ---------------------------------------------------------------------------
+-- Status enums
+-- Value sets are closed lifecycles the runner and queue code switch on.
+-- ---------------------------------------------------------------------------
+CREATE TYPE runner_status    AS ENUM ('ACTIVE', 'IDLE', 'DEAD');
+CREATE TYPE run_status       AS ENUM ('complete', 'incomplete', 'failed');
+CREATE TYPE run_queue_status AS ENUM ('PENDING', 'CLAIMED', 'IN_PROGRESS', 'COMPLETE', 'FAILED', 'CANCELLED');
+
+-- ---------------------------------------------------------------------------
 -- runners
 -- One row per registered runner.
 -- Merged: Ed25519 signing identity + queue worker tracking.
 -- public_key is base64-encoded Ed25519 public key.
 -- hostname/process_id/effective_user/last_heartbeat populated by queue worker mode.
--- TODO(deferred P2): migrate status TEXT+CHECK to ENUM once schema stabilises.
 -- ---------------------------------------------------------------------------
 CREATE TABLE runners (
     runner_id      TEXT        PRIMARY KEY,
@@ -245,8 +252,7 @@ CREATE TABLE runners (
     process_id     INT,                                      -- runner PID
     effective_user TEXT,                                     -- OS user
     last_heartbeat TIMESTAMPTZ,                              -- updated every 60s by queue worker
-    status         TEXT        NOT NULL DEFAULT 'ACTIVE'
-                               CHECK (status IN ('ACTIVE', 'IDLE', 'DEAD')),
+    status         runner_status NOT NULL DEFAULT 'ACTIVE',
     registered_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     started_at     TIMESTAMPTZ,                              -- when this process started
     description    TEXT
@@ -269,8 +275,7 @@ CREATE TABLE runs (
 
 -- Extend runs: run-level completeness status
 ALTER TABLE runs
-    ADD COLUMN IF NOT EXISTS run_status TEXT
-        CHECK (run_status IN ('complete', 'incomplete', 'failed'));
+    ADD COLUMN IF NOT EXISTS run_status run_status;
 
 -- ---------------------------------------------------------------------------
 -- run_queue
@@ -283,8 +288,7 @@ CREATE TABLE run_queue (
     run_id        UUID        NOT NULL REFERENCES runs ON DELETE CASCADE,
     prompt_id     INT         NOT NULL REFERENCES prompts,
     priority      INT         NOT NULL DEFAULT 100,   -- lower = claimed sooner
-    status        TEXT        NOT NULL DEFAULT 'PENDING'
-                              CHECK (status IN ('PENDING', 'CLAIMED', 'IN_PROGRESS', 'COMPLETE', 'FAILED', 'CANCELLED')),
+    status        run_queue_status NOT NULL DEFAULT 'PENDING',
     attempt_count INT         NOT NULL DEFAULT 0,
     max_attempts  INT         NOT NULL DEFAULT 5,
     claimed_by    TEXT,                               -- runner_id of claiming runner

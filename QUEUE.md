@@ -72,7 +72,7 @@ Deferred: large VRAM requirement or lower relative priority.
 - To run a model: copy the relevant entry into `config.yaml` `models:` block,
   confirm the GGUF is available at `engined.models_dir/<path>`, and run the
   harness.
-- P0 cohort ran together on 2026-11-05 (`scored` judge, Qwen3.6-35B-A3B); `llama3.1` 8B scored 0.026 heuristic / 1.50 judge and needs a chat-template check before its row is trusted. Descriptors for Qwen3-1.7B and Qwen3-4B were refused by `descriptor submit` (upstream declares no license).
+- P0 cohort ran together on 2026-11-05 (`scored` judge, Qwen3.6-35B-A3B); `llama3.1` 8B first scored 0.026 heuristic / 1.50 judge because its GGUF template treats unset `tools` as present and answered every prompt with a function-call JSON; rerun with `chat_template_kwargs: {tools: null}` on the model entry scored 0.658 heuristic / 4.88 ± 0.33 judge (`results/run-20261105-231504.json`). Use that entry for any Llama-3.1 template. Descriptors for Qwen3-1.7B and Qwen3-4B were refused by `descriptor submit` (upstream declares no license).
 - Mark a model's status as **Tested** once a result bundle has been published
   to the results repo and update its row above.
 - To promote a model between tiers: edit this file and note the reason.

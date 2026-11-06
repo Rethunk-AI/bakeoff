@@ -7,6 +7,7 @@ future schema drift surfaces here instead of at a live `systemctl reload`.
 
 from __future__ import annotations
 
+import json
 import tomllib
 
 import pytest
@@ -127,6 +128,18 @@ class TestRoutes:
         parsed = _parse(cfg)
         args = next(r for r in parsed["route"] if r["model"] == "m_a")["args"]
         assert args["n-cpu-moe"] == 999
+
+    def test_chat_template_kwargs_render_as_json_route_arg(self):
+        cfg = _cfg()
+        cfg["models"][0]["chat_template_kwargs"] = {"tools": None}
+        parsed = _parse(cfg)
+        args = next(r for r in parsed["route"] if r["model"] == "m_a")["args"]
+        assert json.loads(args["chat-template-kwargs"]) == {"tools": None}
+
+    def test_chat_template_kwargs_absent_when_not_set(self):
+        parsed = _parse(_cfg())
+        args = next(r for r in parsed["route"] if r["model"] == "m_a")["args"]
+        assert "chat-template-kwargs" not in args
 
     def test_n_cpu_moe_absent_when_not_set(self):
         parsed = _parse(_cfg())

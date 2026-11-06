@@ -88,6 +88,9 @@ def _route_args(entry: dict[str, Any], server_cfg: dict[str, Any]) -> dict[str, 
     n_cpu_moe = entry.get("n_cpu_moe")
     if n_cpu_moe is not None:
         args["n-cpu-moe"] = int(n_cpu_moe)
+    kwargs = entry.get("chat_template_kwargs")
+    if kwargs:
+        args["chat-template-kwargs"] = json.dumps(kwargs)
     return args
 
 

@@ -49,6 +49,7 @@ Existing files are skipped. Gated repos: `hf auth login` or `HF_TOKEN=<token>`. 
 - **Skip judge** — `judge.enabled: false`. Tasks with `scorer: "judge"` emit `null`.
 - **Per-model context** — `ctx:` overrides `server.ctx`.
 - **MoE OOM** — `n_cpu_moe: 999` spills experts to CPU.
+- **Template emits tool calls** — Llama-3.1's GGUF template treats an unset `tools` as present and wraps every user turn in a function-calling prompt. Set `chat_template_kwargs: {tools: null}` on that model entry.
 - **engined address** — `engined.url` (default `http://127.0.0.1:29200`), `engined.engine` (default `llama-bench`).
 - **Hold other engines during a run** — `engined.hold: [comfy]` stops and keeps `comfy` (or any engine id) stopped for the run's duration.
 - **Skip `mmproj-*`** — vision projectors, not standalone text models.

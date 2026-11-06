@@ -101,10 +101,7 @@ func (r *MigrationRunner) Run(ctx context.Context, schemaVersionID int) error {
 	if err != nil {
 		return fmt.Errorf("load schema tables: %w", err)
 	}
-	orderedTables, err := r.topologicalOrder(ctx, tables)
-	if err != nil {
-		return fmt.Errorf("topological sort: %w", err)
-	}
+	orderedTables := r.topologicalOrder(ctx, tables)
 
 	// 4. Execute schema_migration_script (DDL phase).
 	if sv.SchemaMigrationScript != nil && *sv.SchemaMigrationScript != "" {
@@ -263,6 +260,123 @@ type migrationStats struct {
 	ignored  int
 }
 
+// migrateState accumulates per-run counters and rejects across batches.
+type migrateState struct {
+	stats          migrationStats
+	rejects        []rejectEntry
+	firstRejection bool
+}
+
+// batchTimings holds the running totals the dynamic batch sizer needs.
+type batchTimings struct {
+	totalRecords        int
+	lastBatchSize       int
+	totalProcessingTime float64
+	totalCommitTime     float64
+	lastProcessingTime  float64
+	lastCommitTime      float64
+}
+
+// reject records a rejected row and fails once --max-rejects is exceeded.
+func (r *MigrationRunner) reject(st *migrateState, tableName string, row map[string]any, reason string) error {
+	st.rejects = append(st.rejects, rejectEntry{RowID: primaryKeyOf(row), Table: tableName, Reason: reason})
+	st.stats.rejected++
+	st.firstRejection = true
+	if r.cfg.MaxRejects >= 0 && st.stats.rejected > r.cfg.MaxRejects {
+		return fmt.Errorf("max-rejects (%d) exceeded; aborting", r.cfg.MaxRejects)
+	}
+	return nil
+}
+
+// migrateRow runs the record script against one row and reports whether the
+// row counted as migrated (false for rejected or ignored rows).
+func (r *MigrationRunner) migrateRow(ctx context.Context, st *migrateState, row map[string]any, table SchemaTable, script, shadowTable string) (bool, error) {
+	rec := NewRecord(row)
+	compiled, err := compileScript(script, recordBuiltins(ctx, r.conn, rec))
+	if err != nil {
+		// Script compile error is fatal.
+		return false, fmt.Errorf("record script compile error (fatal): %w", err)
+	}
+
+	// Inject `this` variable.
+	if err := compiled.Set("this", rec.toTengoMap()); err != nil {
+		return false, fmt.Errorf("script set this: %w", err)
+	}
+
+	if !r.cfg.DryRun {
+		if err := compiled.Run(); err != nil {
+			// Runtime template error counts as implicit reject.
+			return false, r.reject(st, table.TableName, row, fmt.Sprintf("script runtime error: %v", err))
+		}
+	}
+
+	rejected, rejectMsg, ignored, ignoreMsg := rec.disposition()
+	if rejected {
+		return false, r.reject(st, table.TableName, row, rejectMsg)
+	}
+
+	if ignored {
+		log.Printf("[migrate] ignored record in %s: %s", table.TableName, ignoreMsg)
+		st.stats.ignored++
+		if r.cfg.IgnoreIsFatal {
+			return false, fmt.Errorf("--ignore-is-fatal: record ignored in %s: %s", table.TableName, ignoreMsg)
+		}
+		return false, nil
+	}
+
+	if !r.cfg.DryRun {
+		if err := r.writeRecordToShadow(ctx, shadowTable, rec.MergedRow()); err != nil {
+			return false, fmt.Errorf("write to shadow table: %w", err)
+		}
+	}
+	return true, nil
+}
+
+// migrateBatch migrates every row of a batch and returns how many were migrated.
+func (r *MigrationRunner) migrateBatch(ctx context.Context, st *migrateState, rows []map[string]any, table SchemaTable, script, shadowTable string) (int, error) {
+	migrated := 0
+	for _, row := range rows {
+		ok, err := r.migrateRow(ctx, st, row, table, script, shadowTable)
+		if err != nil {
+			return migrated, err
+		}
+		if ok {
+			migrated++
+		}
+	}
+	return migrated, nil
+}
+
+// lastRowID returns the int64 "id" of the batch's last row, or fallback when absent.
+func lastRowID(rows []map[string]any, fallback int64) int64 {
+	if len(rows) == 0 {
+		return fallback
+	}
+	if id, ok := rows[len(rows)-1]["id"].(int64); ok {
+		return id
+	}
+	return fallback
+}
+
+// nextBatchSize computes the dynamic batch size from the observed timings,
+// returning current when there is not enough data to adjust.
+func (r *MigrationRunner) nextBatchSize(t *batchTimings, current, fetched int) int {
+	if r.cfg.BatchSize != 0 || t.totalRecords == 0 || fetched != current {
+		return current
+	}
+	if t.lastCommitTime <= 0 || t.lastProcessingTime <= 0 {
+		return current
+	}
+	nextByProcessing := r.cfg.ProcessingTimeTarget *
+		(3*(float64(t.totalRecords)/t.totalProcessingTime) + (float64(t.lastBatchSize) / t.lastProcessingTime)) / 4
+	nextByCommit := r.cfg.CommitTimeTarget *
+		(3*(float64(t.totalRecords)/t.totalCommitTime) + (float64(t.lastBatchSize) / t.lastCommitTime)) / 4
+	next := max(math.Min(nextByProcessing, nextByCommit), 1)
+	size := int(math.Round(next))
+	log.Printf("[migrate] dynamic batch: next=%d (by_proc=%.0f, by_commit=%.0f)", size, nextByProcessing, nextByCommit)
+	return size
+}
+
 // migrateRecords runs the record migration loop with dynamic batch sizing.
 func (r *MigrationRunner) migrateRecords(
 	ctx context.Context,
@@ -271,170 +385,69 @@ func (r *MigrationRunner) migrateRecords(
 	script, shadowTable, stateTable string,
 	resumeFromID int64,
 ) (migrationStats, error) {
-	var stats migrationStats
-
-	// Dynamic batch state — 6 variables.
-	var (
-		totalRecords        int
-		lastBatchSize       int
-		totalProcessingTime float64
-		totalCommitTime     float64
-		lastProcessingTime  float64
-		lastCommitTime      float64
-	)
+	st := &migrateState{}
+	var timings batchTimings
 
 	currentBatchSize := 64 // Batch 0 always 64 records.
 	if r.cfg.BatchSize > 0 {
 		currentBatchSize = r.cfg.BatchSize
 	}
 
-	var rejects []rejectEntry
 	warnedTimeLimitOnce := false
-	firstRejection := false
 	lastID := resumeFromID
 
 	for {
 		// Fetch a batch from the source table, ordered by primary key.
 		rows, err := r.fetchBatch(ctx, table.TableName, lastID, currentBatchSize)
 		if err != nil {
-			return stats, fmt.Errorf("fetchBatch: %w", err)
+			return st.stats, fmt.Errorf("fetchBatch: %w", err)
 		}
 		if len(rows) == 0 {
 			break // All records processed.
 		}
 
 		// Randomize order after first rejection to avoid starvation.
-		if firstRejection {
+		if st.firstRejection {
 			rand.Shuffle(len(rows), func(i, j int) { rows[i], rows[j] = rows[j], rows[i] }) //nolint:gosec // row order is randomized only to avoid migration starvation, not for security
 		}
 
 		processStart := time.Now()
-
-		batchMigrated := 0
-		for _, row := range rows {
-			rec := NewRecord(row)
-			// Build per-record builtins with this record's context.
-			recBuiltins := recordBuiltins(ctx, r.conn, rec)
-			compiled, err := compileScript(script, recBuiltins)
-			if err != nil {
-				// Script compile error is fatal.
-				return stats, fmt.Errorf("record script compile error (fatal): %w", err)
-			}
-
-			// Inject `this` variable.
-			if err := compiled.Set("this", rec.toTengoMap()); err != nil {
-				return stats, fmt.Errorf("script set this: %w", err)
-			}
-
-			if !r.cfg.DryRun {
-				if err := compiled.Run(); err != nil {
-					// Runtime template error counts as implicit reject.
-					rejects = append(rejects, rejectEntry{
-						RowID:  primaryKeyOf(row),
-						Table:  table.TableName,
-						Reason: fmt.Sprintf("script runtime error: %v", err),
-					})
-					stats.rejected++
-					if !firstRejection {
-						firstRejection = true
-					}
-					if r.cfg.MaxRejects >= 0 && stats.rejected > r.cfg.MaxRejects {
-						return stats, fmt.Errorf("max-rejects (%d) exceeded; aborting", r.cfg.MaxRejects)
-					}
-					continue
-				}
-			}
-
-			rejected, rejectMsg, ignored, ignoreMsg := rec.disposition()
-			if rejected {
-				rejects = append(rejects, rejectEntry{
-					RowID:  primaryKeyOf(row),
-					Table:  table.TableName,
-					Reason: rejectMsg,
-				})
-				stats.rejected++
-				if !firstRejection {
-					firstRejection = true
-				}
-				if r.cfg.MaxRejects >= 0 && stats.rejected > r.cfg.MaxRejects {
-					return stats, fmt.Errorf("max-rejects (%d) exceeded; aborting", r.cfg.MaxRejects)
-				}
-				continue
-			}
-
-			if ignored {
-				log.Printf("[migrate] ignored record in %s: %s", table.TableName, ignoreMsg)
-				stats.ignored++
-				if r.cfg.IgnoreIsFatal {
-					return stats, fmt.Errorf("--ignore-is-fatal: record ignored in %s: %s", table.TableName, ignoreMsg)
-				}
-				continue
-			}
-
-			if !r.cfg.DryRun {
-				if err := r.writeRecordToShadow(ctx, shadowTable, rec.MergedRow()); err != nil {
-					return stats, fmt.Errorf("write to shadow table: %w", err)
-				}
-			}
-			batchMigrated++
+		batchMigrated, err := r.migrateBatch(ctx, st, rows, table, script, shadowTable)
+		if err != nil {
+			return st.stats, err
 		}
-
 		processingDur := time.Since(processStart).Seconds()
 
 		// Update last seen row ID for checkpointing.
-		if len(rows) > 0 {
-			if id, ok := rows[len(rows)-1]["id"]; ok {
-				if idInt, ok := id.(int64); ok {
-					lastID = idInt
-				}
-			}
-		}
+		lastID = lastRowID(rows, lastID)
 
 		// Commit batch.
 		commitStart := time.Now()
 		if !r.cfg.DryRun {
 			if err := r.saveCheckpoint(ctx, stateTable, table.TableName, sv.ID, lastID); err != nil {
-				return stats, err
+				return st.stats, err
 			}
 		}
 		commitDur := time.Since(commitStart).Seconds()
 
-		stats.migrated += batchMigrated
+		st.stats.migrated += batchMigrated
 
 		// Update dynamic batch state.
-		totalRecords += len(rows)
-		lastBatchSize = len(rows)
-		totalProcessingTime += processingDur
-		totalCommitTime += commitDur
-		lastProcessingTime = processingDur
-		lastCommitTime = commitDur
+		timings.totalRecords += len(rows)
+		timings.lastBatchSize = len(rows)
+		timings.totalProcessingTime += processingDur
+		timings.totalCommitTime += commitDur
+		timings.lastProcessingTime = processingDur
+		timings.lastCommitTime = commitDur
 
 		// Check time limits and warn once.
-		if !warnedTimeLimitOnce {
-			if processingDur > r.cfg.ProcessingTimeTarget || commitDur > r.cfg.CommitTimeTarget {
-				log.Printf("[migrate] WARNING: batch time exceeded targets (processing=%.2fs target=%.2fs, commit=%.2fs target=%.2fs)",
-					processingDur, r.cfg.ProcessingTimeTarget, commitDur, r.cfg.CommitTimeTarget)
-				warnedTimeLimitOnce = true
-			}
+		if !warnedTimeLimitOnce && (processingDur > r.cfg.ProcessingTimeTarget || commitDur > r.cfg.CommitTimeTarget) {
+			log.Printf("[migrate] WARNING: batch time exceeded targets (processing=%.2fs target=%.2fs, commit=%.2fs target=%.2fs)",
+				processingDur, r.cfg.ProcessingTimeTarget, commitDur, r.cfg.CommitTimeTarget)
+			warnedTimeLimitOnce = true
 		}
 
-		// Compute next batch size if dynamic.
-		if r.cfg.BatchSize == 0 && totalRecords > 0 && len(rows) == currentBatchSize {
-			// After batch 0 (or when we have data), compute.
-			if lastCommitTime > 0 && lastProcessingTime > 0 {
-				nextByProcessing := r.cfg.ProcessingTimeTarget *
-					(3*(float64(totalRecords)/totalProcessingTime) + (float64(lastBatchSize) / lastProcessingTime)) / 4
-				nextByCommit := r.cfg.CommitTimeTarget *
-					(3*(float64(totalRecords)/totalCommitTime) + (float64(lastBatchSize) / lastCommitTime)) / 4
-				next := math.Min(nextByProcessing, nextByCommit)
-				if next < 1 {
-					next = 1
-				}
-				currentBatchSize = int(math.Round(next))
-				log.Printf("[migrate] dynamic batch: next=%d (by_proc=%.0f, by_commit=%.0f)",
-					currentBatchSize, nextByProcessing, nextByCommit)
-			}
-		}
+		currentBatchSize = r.nextBatchSize(&timings, currentBatchSize, len(rows))
 
 		if len(rows) < currentBatchSize {
 			break // Last batch was smaller than requested — we're done.
@@ -442,14 +455,14 @@ func (r *MigrationRunner) migrateRecords(
 	}
 
 	// Report all rejects at the end.
-	if len(rejects) > 0 {
+	if len(st.rejects) > 0 {
 		log.Printf("[migrate] REJECTS for %s:", table.TableName)
-		for _, re := range rejects {
+		for _, re := range st.rejects {
 			log.Printf("  row=%v reason=%s", re.RowID, re.Reason)
 		}
 	}
 
-	return stats, nil
+	return st.stats, nil
 }
 
 // rejectEntry records a rejected record for end-of-run reporting.
@@ -652,7 +665,7 @@ func (r *MigrationRunner) loadSchemaTables(ctx context.Context) ([]SchemaTable, 
 
 // topologicalOrder returns schema_tables ordered by FK dependency (leaves first).
 // Cycles (self-referential) are moved to end of list with a warning.
-func (r *MigrationRunner) topologicalOrder(ctx context.Context, tables []SchemaTable) ([]SchemaTable, error) {
+func (r *MigrationRunner) topologicalOrder(ctx context.Context, tables []SchemaTable) []SchemaTable {
 	// Build adjacency: table_name → set of FK-referenced table_names
 	// using information_schema.referential_constraints + key_column_usage.
 	deps := make(map[string]map[string]bool, len(tables))
@@ -660,33 +673,8 @@ func (r *MigrationRunner) topologicalOrder(ctx context.Context, tables []SchemaT
 		deps[t.TableName] = make(map[string]bool)
 	}
 
-	fkRows, err := r.conn.Query(ctx, `
-		SELECT
-			tc.table_name   AS src,
-			ccu.table_name  AS dst
-		FROM information_schema.table_constraints tc
-		JOIN information_schema.referential_constraints rc
-			ON tc.constraint_name = rc.constraint_name
-		JOIN information_schema.key_column_usage kcu
-			ON tc.constraint_name = kcu.constraint_name
-		JOIN information_schema.constraint_column_usage ccu
-			ON rc.unique_constraint_name = ccu.constraint_name
-		WHERE tc.constraint_type = 'FOREIGN KEY'
-		AND tc.table_schema = 'public'
-		GROUP BY tc.table_name, ccu.table_name`)
-	if err != nil {
-		return tables, nil // Degrade gracefully if query fails.
-	}
-	defer fkRows.Close()
-
-	for fkRows.Next() {
-		var src, dst string
-		if err := fkRows.Scan(&src, &dst); err != nil {
-			continue
-		}
-		if _, ok := deps[src]; ok {
-			deps[src][dst] = true
-		}
+	if !r.loadFKDeps(ctx, deps) {
+		return tables // Degrade gracefully if query fails.
 	}
 
 	// Kahn's topological sort.
@@ -746,7 +734,41 @@ func (r *MigrationRunner) topologicalOrder(ctx context.Context, tables []SchemaT
 		}
 	}
 
-	return ordered, nil
+	return ordered
+}
+
+// loadFKDeps fills deps (table to referenced tables) from the foreign-key
+// catalog and reports whether the catalog query succeeded.
+func (r *MigrationRunner) loadFKDeps(ctx context.Context, deps map[string]map[string]bool) bool {
+	fkRows, err := r.conn.Query(ctx, `
+		SELECT
+			tc.table_name   AS src,
+			ccu.table_name  AS dst
+		FROM information_schema.table_constraints tc
+		JOIN information_schema.referential_constraints rc
+			ON tc.constraint_name = rc.constraint_name
+		JOIN information_schema.key_column_usage kcu
+			ON tc.constraint_name = kcu.constraint_name
+		JOIN information_schema.constraint_column_usage ccu
+			ON rc.unique_constraint_name = ccu.constraint_name
+		WHERE tc.constraint_type = 'FOREIGN KEY'
+		AND tc.table_schema = 'public'
+		GROUP BY tc.table_name, ccu.table_name`)
+	if err != nil {
+		return false
+	}
+	defer fkRows.Close()
+
+	for fkRows.Next() {
+		var src, dst string
+		if err := fkRows.Scan(&src, &dst); err != nil {
+			continue
+		}
+		if _, ok := deps[src]; ok {
+			deps[src][dst] = true
+		}
+	}
+	return true
 }
 
 // compileScript compiles a Tengo script with the given builtins pre-defined.

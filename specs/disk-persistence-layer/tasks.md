@@ -15,9 +15,9 @@
 ## P2 (deferred)
 
 - [ ] URL-submit -> upstream-metadata-pull -> validate ingestion pipeline (`bench/descriptor.py`).
-- [ ] Embedded GGUF metadata cross-check against descriptor fields.
+- [x] Embedded GGUF metadata cross-check against descriptor fields.
 - [ ] DB-sync: write store records to `schema/schema.sql` Postgres tables when a DB connection is available.
-- [ ] Descriptor CLI entry point (`python -m bench.descriptor ingest <file>`).
+- [x] Descriptor CLI entry point (`python -m bench.descriptor ingest <file>`).
 - [ ] Runner registration (`bench/queue.py` runner heartbeat + `runners/` table).
 - [x] Canonicalize provisional-UUID numeric formatting (`parameter_count_b`/`source_size`) so disk-side and future DB-ingestion side derive identical UUID5 keys (currently relies on Python f-string formatting matching on both sides).
 - [x] Harden descriptor/store timestamp parsing to accept all ISO-8601 shapes (microseconds, explicit `+00:00` offset); current `%Y-%m-%dT%H:%M:%SZ` parser only handles whole-second `Z` form.

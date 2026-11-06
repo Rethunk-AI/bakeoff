@@ -8,6 +8,7 @@ derivation (hash vs provisional).
 from __future__ import annotations
 
 import json
+import struct
 
 import pytest
 
@@ -188,3 +189,78 @@ def test_save_provisional_descriptor():
     assert uuid == descriptor.descriptor_uuid(PROVISIONAL_DESCRIPTOR)
     record = store.read_record("models", uuid)
     assert record["name"] == "ProvisionalModel-Q4_K_M"
+
+
+# ---------------------------------------------------------------------------
+# GGUF cross-check + CLI
+# ---------------------------------------------------------------------------
+
+
+def _kv_str(key: str, val: str) -> bytes:
+    k, v = key.encode(), val.encode()
+    return struct.pack("<Q", len(k)) + k + struct.pack("<IQ", 8, len(v)) + v
+
+
+def _kv_u32(key: str, val: int) -> bytes:
+    k = key.encode()
+    return struct.pack("<Q", len(k)) + k + struct.pack("<II", 4, val)
+
+
+def _write_gguf(path, *, file_type: int = 15, ctx: int = 32768) -> int:
+    kvs = [
+        _kv_str("general.architecture", "llama"),
+        _kv_u32("general.file_type", file_type),
+        _kv_u32("llama.context_length", ctx),
+    ]
+    path.write_bytes(b"GGUF" + struct.pack("<IQQ", 3, 0, len(kvs)) + b"".join(kvs))
+    return path.stat().st_size
+
+
+def _write_descriptor(path, **overrides) -> None:
+    path.write_text(json.dumps({**VALID_DESCRIPTOR, **overrides}))
+
+
+def test_ingest_gguf_matches(tmp_path, capsys):
+    gguf = tmp_path / "m.gguf"
+    desc = tmp_path / "m.json"
+    assert _write_gguf(gguf) < 4096
+    _write_descriptor(desc)
+    assert descriptor.main(["ingest", str(desc), "--gguf", str(gguf)]) == 0
+    uuid = capsys.readouterr().out.strip()
+    assert store.read_record("models", uuid)["name"] == "TestModel-Q4_K_M"
+
+
+def test_ingest_gguf_file_with_descriptor_flag(tmp_path):
+    gguf = tmp_path / "m.gguf"
+    desc = tmp_path / "m.json"
+    _write_gguf(gguf)
+    _write_descriptor(desc)
+    assert descriptor.main(["ingest", str(gguf), "--descriptor", str(desc)]) == 0
+
+
+def test_ingest_gguf_mismatch_names_both_values(tmp_path, capsys):
+    gguf = tmp_path / "m.gguf"
+    desc = tmp_path / "m.json"
+    _write_gguf(gguf, file_type=7, ctx=8192)
+    _write_descriptor(desc)
+    assert descriptor.main(["ingest", str(desc), "--gguf", str(gguf)]) == 1
+    err = capsys.readouterr().err
+    assert "descriptor 'q4_k_m' != gguf 'q8_0'" in err
+    assert "descriptor 32768 != gguf 8192" in err
+    assert not (store.data_dir() / "models").exists() or not store.list_records("models")
+
+
+def test_cli_invalid_input_exits_nonzero(tmp_path, capsys):
+    bad = tmp_path / "bad.json"
+    bad.write_text("{not json")
+    assert descriptor.main(["ingest", str(bad)]) == 1
+    assert "invalid JSON" in capsys.readouterr().err
+
+
+def test_cli_not_a_gguf(tmp_path, capsys):
+    gguf = tmp_path / "x.gguf"
+    desc = tmp_path / "m.json"
+    gguf.write_bytes(b"nope" * 8)
+    _write_descriptor(desc)
+    assert descriptor.main(["ingest", str(desc), "--gguf", str(gguf)]) == 1
+    assert "bad magic" in capsys.readouterr().err

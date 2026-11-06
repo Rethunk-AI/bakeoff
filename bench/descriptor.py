@@ -1,9 +1,8 @@
 """Model descriptor reader, validator, and persister for the bakeoff harness.
 
-SCOPE: handles manual/admin/seed JSON descriptors only. The full pipeline
-(URL-submit → upstream-metadata-pull → embedded-GGUF-metadata cross-check)
-is explicitly DEFERRED to P2 per bakeoff#15 design agreement. The only
-ingestion path handled here is hand-crafted or admin-supplied JSON files.
+SCOPE: handles manual/admin/seed JSON descriptors only, optionally cross-checked
+against an embedded GGUF header (``python -m bench.descriptor ingest``). The
+URL-submit → upstream-metadata-pull stage is still DEFERRED to P2 per bakeoff#15.
 
 Descriptor JSON layout mirrors the ``models`` table in schema/schema.sql
 with embedded ``creator`` (1:1) and ``sources`` array (model_sources, 1:many):
@@ -57,11 +56,13 @@ Validation rules (mirroring bench.config error-collection style):
 
 from __future__ import annotations
 
+import argparse
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
-from bench import store
+from bench import gguf_meta, store
 
 SCHEMA_VERSION = 1
 
@@ -197,3 +198,55 @@ def save_descriptor(data: dict[str, Any]) -> str:
     payload["uuid"] = uuid
     store.write_record("models", uuid, payload)
     return uuid
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+
+def ingest(file: Path, descriptor_path: Path | None, gguf_path: Path | None) -> str:
+    """Load, validate, cross-check against GGUF metadata (if any) and store.
+
+    *file* is a descriptor JSON, or a ``.gguf`` when *descriptor_path* is given.
+    Returns the stored UUID; raises DescriptorError on any invalid input.
+    """
+    if file.suffix.lower() == ".gguf":
+        if descriptor_path is None:
+            raise DescriptorError(f"{file}: a .gguf input needs --descriptor <file.json>")
+        gguf_path, descriptor_path = file, descriptor_path
+    else:
+        descriptor_path = descriptor_path or file
+
+    data = load_descriptor(descriptor_path)
+    issues = validate_descriptor(data)
+    if gguf_path is not None:
+        try:
+            meta = gguf_meta.read_metadata(gguf_path)
+        except gguf_meta.GGUFError as e:
+            raise DescriptorError(str(e)) from e
+        issues += [f"gguf: {i}" for i in gguf_meta.cross_check(data, meta)]
+    if issues:
+        raise DescriptorError("invalid descriptor:\n- " + "\n- ".join(issues))
+    return save_descriptor(data)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="python -m bench.descriptor")
+    sub = parser.add_subparsers(dest="command", required=True)
+    p = sub.add_parser("ingest", help="validate a descriptor and store it")
+    p.add_argument("file", type=Path, help="descriptor JSON, or a .gguf with --descriptor")
+    p.add_argument("--descriptor", type=Path, help="descriptor JSON (required for a .gguf file)")
+    p.add_argument("--gguf", type=Path, help="GGUF file to cross-check the descriptor against")
+    args = parser.parse_args(argv)
+    try:
+        uuid = ingest(args.file, args.descriptor, args.gguf)
+    except DescriptorError as e:
+        print(f"error: {e}", file=sys.stderr)
+        return 1
+    print(uuid)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

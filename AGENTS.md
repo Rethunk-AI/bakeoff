@@ -16,6 +16,7 @@ bench/
   config.py          config loading + validation gate
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
   descriptor.py      model descriptor reader/validator/persister
+  gguf_meta.py       read-only bounded GGUF header reader + descriptor cross-check
   download.py        huggingface_hub fetcher
   engined.py         bakeoff config.yaml → engined config.d fragment; up/down lifecycle
   failure.py         failure-reason taxonomy (9 codes)

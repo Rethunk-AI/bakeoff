@@ -24,7 +24,7 @@ bench/
   metrics.py         heuristic scorers + judge prompts + power sampling
   provenance.py      run provenance collector (git SHA, platform, optional HF enrichment)
   publish.py         validate/package/sign/submit result bundles for bakeoff-results
-  queue.py           opt-in disk-backed run queue (pending/ + completed/)
+  queue.py           opt-in disk-backed run queue (pending/ + completed/) + runner register/heartbeat (claim needs a live runner)
   report.py          JSON + Markdown + single-file HTML dashboard
   resume.py          resume support from a prior partial result
   runner.py          declare fragment → warmup + matrix per model → judge → release fragment

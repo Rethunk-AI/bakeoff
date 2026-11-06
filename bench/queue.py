@@ -27,6 +27,7 @@ Claim race-safety (concurrent runners):
 
 OPT-IN seam for queue workers:
     A future queue-driven runner can call:
+        queue.register(runner_id)  # claim() refuses runners that are not live
         item = queue.claim(runner_id)
         if item: queue.mark_in_progress(item["queue_id"], runner_id)
         # ... run the benchmark cell ...
@@ -38,9 +39,14 @@ OPT-IN seam for queue workers:
 from __future__ import annotations
 
 import contextlib
+import getpass
 import json
 import os
+import socket
+import sys
 import tempfile
+import threading
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -140,6 +146,156 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
+# Runner registration + heartbeat (runners/<runner_id>.json, mirrors schema `runners`)
+# ---------------------------------------------------------------------------
+
+_RUNNERS = "runners"
+_RUNNER_ACTIVE = "ACTIVE"
+_RUNNER_DEAD = "DEAD"
+
+
+@dataclass(frozen=True)
+class LivenessSettings:
+    """A runner is dead once ``missed_beats`` consecutive intervals pass without a heartbeat."""
+
+    heartbeat_interval_s: float = 60.0
+    missed_beats: int = 3
+
+    def __post_init__(self) -> None:
+        if self.heartbeat_interval_s <= 0 or self.missed_beats < 1:
+            raise ValueError("queue: heartbeat_interval_s must be > 0 and missed_beats >= 1")
+
+    @property
+    def dead_after(self) -> timedelta:
+        return timedelta(seconds=self.heartbeat_interval_s * self.missed_beats)
+
+    @classmethod
+    def from_config(cls, cfg: dict[str, Any]) -> LivenessSettings:
+        """Read the ``queue:`` section of config.yaml; absent keys keep their defaults."""
+        section = cfg.get("queue") or {}
+        defaults = cls()
+        return cls(
+            heartbeat_interval_s=float(
+                section.get("heartbeat_interval_s", defaults.heartbeat_interval_s)
+            ),
+            missed_beats=int(section.get("missed_beats", defaults.missed_beats)),
+        )
+
+
+def register(
+    runner_id: str,
+    *,
+    public_key: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Create or refresh the runner record and count it as alive now."""
+    now = _utc_now()
+    record: dict[str, Any]
+    try:
+        record = store.read_record(_RUNNERS, runner_id)
+    except store.StoreError:
+        record = {"runner_id": runner_id, "registered_at": now}
+    record.update(
+        public_key=public_key if public_key is not None else record.get("public_key"),
+        description=description if description is not None else record.get("description"),
+        hostname=socket.gethostname(),
+        process_id=os.getpid(),
+        effective_user=getpass.getuser(),
+        started_at=now,
+        last_heartbeat=now,
+        status=_RUNNER_ACTIVE,
+    )
+    store.write_record(_RUNNERS, runner_id, record)
+    return record
+
+
+def heartbeat(runner_id: str) -> dict[str, Any]:
+    """Record a beat for a registered runner; revives one a sweep marked DEAD."""
+    record = store.read_record(_RUNNERS, runner_id)
+    record["last_heartbeat"] = _utc_now()
+    record["status"] = _RUNNER_ACTIVE
+    store.write_record(_RUNNERS, runner_id, record)
+    return record
+
+
+def _is_live(record: dict[str, Any], settings: LivenessSettings) -> bool:
+    beat = record.get("last_heartbeat")
+    if not beat:
+        return False
+    try:
+        return _now_dt() - store.parse_utc(beat) <= settings.dead_after
+    except ValueError:
+        return False
+
+
+def is_live(runner_id: str, settings: LivenessSettings | None = None) -> bool:
+    """True when *runner_id* is registered and its last beat is within the dead-after window."""
+    try:
+        record = store.read_record(_RUNNERS, runner_id)
+    except store.StoreError:
+        return False
+    return _is_live(record, settings or LivenessSettings())
+
+
+def sweep_runners(settings: LivenessSettings | None = None) -> dict[str, int]:
+    """Mark runners past the dead-after window DEAD and log counts (zeros included)."""
+    settings = settings or LivenessSettings()
+    live = newly_dead = dead = 0
+    for runner_id in store.list_records(_RUNNERS):
+        try:
+            record = store.read_record(_RUNNERS, runner_id)
+        except store.StoreError:
+            continue
+        if _is_live(record, settings):
+            live += 1
+        elif record.get("status") == _RUNNER_DEAD:
+            dead += 1
+        else:
+            # Re-read: a beat landing between the first read and this write must win.
+            fresh = store.read_record(_RUNNERS, runner_id)
+            if _is_live(fresh, settings):
+                live += 1
+                continue
+            fresh["status"] = _RUNNER_DEAD
+            store.write_record(_RUNNERS, runner_id, fresh)
+            newly_dead += 1
+            dead += 1
+    counts = {"live": live, "newly_dead": newly_dead, "dead": dead}
+    print(
+        f"[queue] heartbeat sweep: live={live} newly_dead={newly_dead} dead={dead}",
+        file=sys.stderr,
+    )
+    return counts
+
+
+class Heartbeat:
+    """Context manager: register on enter, beat + sweep every interval on a daemon thread."""
+
+    def __init__(self, runner_id: str, settings: LivenessSettings | None = None) -> None:
+        self.runner_id = runner_id
+        self.settings = settings or LivenessSettings()
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+
+    def _loop(self) -> None:
+        while not self._stop.wait(self.settings.heartbeat_interval_s):
+            try:
+                heartbeat(self.runner_id)
+                sweep_runners(self.settings)
+            except (OSError, store.StoreError) as exc:
+                print(f"[queue] heartbeat failed: {exc}", file=sys.stderr)
+
+    def __enter__(self) -> Heartbeat:
+        register(self.runner_id)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc: object) -> None:
+        self._stop.set()
+        self._thread.join()
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -162,8 +318,10 @@ def enqueue(item: dict[str, Any]) -> str:
     return queue_id
 
 
-def claim(runner_id: str) -> dict[str, Any] | None:
+def claim(runner_id: str, settings: LivenessSettings | None = None) -> dict[str, Any] | None:
     """Claim the next eligible PENDING item for *runner_id*.
+
+    Only a live runner (registered, beat within the dead-after window) is assigned work.
 
     Eligibility: status == PENDING, retry_after is null or in the past.
     Selection: lowest priority first, then oldest created_at.
@@ -181,6 +339,8 @@ def claim(runner_id: str) -> dict[str, Any] | None:
 
     Returns the claimed item dict, or None if no eligible items.
     """
+    if not is_live(runner_id, settings):
+        return None
     pending = _pending_dir()
     now = _now_dt()
 

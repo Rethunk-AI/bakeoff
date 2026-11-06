@@ -9,12 +9,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import contextlib
+import time
 import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from bench import queue
+from bench import queue, store
 
 
 @pytest.fixture(autouse=True)
@@ -22,6 +23,12 @@ def isolated_data_dir(tmp_path, monkeypatch):
     """Point BAKEOFF_DATA_DIR at a per-test temp directory."""
     monkeypatch.setenv("BAKEOFF_DATA_DIR", str(tmp_path))
     return tmp_path
+
+
+@pytest.fixture(autouse=True)
+def live_runners(isolated_data_dir):
+    for rid in ("runner-1", "r1", "r2"):
+        queue.register(rid)
 
 
 def _item(extra: dict | None = None) -> dict:
@@ -263,6 +270,9 @@ def test_concurrent_claim_exactly_one_winner():
     for round_num in range(rounds):
         queue.enqueue(_item())
 
+        for i in range(workers):
+            queue.register(f"runner-{i}")
+
         def try_claim(runner_id: str) -> dict | None:
             return queue.claim(runner_id)
 
@@ -278,3 +288,52 @@ def test_concurrent_claim_exactly_one_winner():
         if winners:
             with contextlib.suppress(Exception):
                 queue.complete(winners[0]["queue_id"])
+
+
+# ---------------------------------------------------------------------------
+# Runner registration + heartbeat
+# ---------------------------------------------------------------------------
+
+
+def _age_heartbeat(runner_id: str, seconds: int) -> None:
+    rec = store.read_record("runners", runner_id)
+    rec["last_heartbeat"] = (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat()
+    store.write_record("runners", runner_id, rec)
+
+
+def test_claim_only_assigns_to_live_runners(capsys):
+    settings = queue.LivenessSettings(heartbeat_interval_s=10, missed_beats=3)
+    queue.enqueue(_item())
+    assert queue.claim("unregistered", settings) is None
+
+    _age_heartbeat("r1", 31)  # 3 missed beats
+    assert queue.claim("r1", settings) is None
+    counts = queue.sweep_runners(settings)
+    assert counts["newly_dead"] == 1
+    assert "heartbeat sweep: live=2 newly_dead=1 dead=1" in capsys.readouterr().err
+
+    queue.heartbeat("r1")  # revives
+    assert queue.claim("r1", settings) is not None
+
+
+def test_sweep_logs_zero_counts(capsys):
+    assert queue.sweep_runners()["newly_dead"] == 0
+    assert "newly_dead=0" in capsys.readouterr().err
+
+
+def test_liveness_settings_from_config():
+    s = queue.LivenessSettings.from_config(
+        {"queue": {"heartbeat_interval_s": 5, "missed_beats": 2}}
+    )
+    assert s.dead_after == timedelta(seconds=10)
+    assert queue.LivenessSettings.from_config({}) == queue.LivenessSettings()
+    with pytest.raises(ValueError):
+        queue.LivenessSettings(missed_beats=0)
+
+
+def test_heartbeat_context_registers_and_sweeps(capsys):
+    settings = queue.LivenessSettings(heartbeat_interval_s=0.02, missed_beats=3)
+    with queue.Heartbeat("hb-runner", settings):
+        assert queue.is_live("hb-runner")
+        time.sleep(0.15)
+    assert capsys.readouterr().err.count("heartbeat sweep:") >= 2

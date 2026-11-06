@@ -141,6 +141,8 @@ export BAKEOFF_DATA_DIR=/data/bakeoff   # default ~/.local/share/bakeoff
 
 Store/queue modules write JSON under `models/`, `runs/`, `run_queue/pending/`, `run_queue/completed/`. Every real run of the standalone runner writes `runs/<run_id>.json` and moves a `run_queue` record from pending to completed here.
 
+Submit a model by URL: `uv run python -m bench.descriptor submit https://huggingface.co/<org>/<repo>/resolve/main/<file>.gguf [--gguf local.gguf]` pulls the Hugging Face metadata, validates it (license, size, format, optional GGUF header cross-check) and stores the descriptor. `BAKEOFF_NETWORK_TESTS=1 uv run pytest tests/test_upstream.py` adds the live API test.
+
 ## Distributed worker mode
 
 Opt-in pull client against a `bakeoff-results` queue server. The default `./run.sh` matrix is unchanged.

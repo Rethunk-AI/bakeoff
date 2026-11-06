@@ -1,0 +1,75 @@
+{
+  "_id": "6815b8d70e2525074c399975",
+  "author": "Qwen",
+  "cardData": {
+    "base_model": "Qwen/Qwen3-8B",
+    "license": "apache-2.0",
+    "license_link": "https://huggingface.co/Qwen/Qwen3-8B-GGUF/blob/main/LICENSE",
+    "pipeline_tag": "text-generation"
+  },
+  "config": {},
+  "createdAt": "2025-05-03T06:33:59.000Z",
+  "disabled": false,
+  "downloads": 784262,
+  "gated": false,
+  "gguf": {
+    "architecture": "qwen3",
+    "bos_token": "<|endoftext|>",
+    "context_length": 40960,
+    "eos_token": "<|im_end|>",
+    "total": 8190735360,
+    "totalFileSize": 5027783488
+  },
+  "id": "Qwen/Qwen3-8B-GGUF",
+  "lastModified": "2025-05-21T06:31:50.000Z",
+  "likes": 370,
+  "modelId": "Qwen/Qwen3-8B-GGUF",
+  "pipeline_tag": "text-generation",
+  "private": false,
+  "sha": "7c41481f57cb95916b40956ab2f0b139b296d974",
+  "siblings": [
+    {
+      "blobId": "6f9739bb281a3d2ade8fb5f6dd6dde597a739c80",
+      "rfilename": "LICENSE",
+      "size": 11544
+    },
+    {
+      "blobId": "d4ee8ae7f4de3a5046b1a29776a3f011ba28017e",
+      "lfs": {
+        "pointerSize": 135,
+        "sha256": "d98cdcbd03e17ce47681435b5150e34c1417f50b5c0019dd560e4882c5745785",
+        "size": 5027783488
+      },
+      "rfilename": "Qwen3-8B-Q4_K_M.gguf",
+      "size": 5027783488
+    },
+    {
+      "blobId": "954c5db9f4cce8f400022addeb8d7baa1f5e30f6",
+      "lfs": {
+        "pointerSize": 135,
+        "sha256": "408b955510e196121c1c375201744783b5c9a43c7956d73fc78df54c66e883d6",
+        "size": 8709518112
+      },
+      "rfilename": "Qwen3-8B-Q8_0.gguf",
+      "size": 8709518112
+    },
+    {
+      "blobId": "3b55dd0ba5cb12c559f87dea67edf8c48154ec62",
+      "rfilename": "README.md",
+      "size": 7577
+    }
+  ],
+  "tags": [
+    "gguf",
+    "text-generation",
+    "arxiv:2309.00071",
+    "arxiv:2505.09388",
+    "base_model:Qwen/Qwen3-8B",
+    "base_model:quantized:Qwen/Qwen3-8B",
+    "license:apache-2.0",
+    "endpoints_compatible",
+    "region:us",
+    "conversational"
+  ],
+  "usedStorage": 32035074016
+}

@@ -28,6 +28,7 @@ bench/
   report.py          JSON + Markdown + single-file HTML dashboard
   resume.py          resume support from a prior partial result
   runner.py          declare fragment → warmup + matrix per model → judge → release fragment
+  upstream.py        Hugging Face URL → descriptor: URL parse, one timeout-bound fetch, upstream validation
   worker.py          opt-in distributed pull client (claim / heartbeat / submit / fail)
   scoring.py         completeness-weighted partial score rollup
   signing.py         Ed25519 sign/verify for result envelopes

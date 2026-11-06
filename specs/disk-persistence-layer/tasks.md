@@ -14,7 +14,7 @@
 
 ## P2 (deferred)
 
-- [ ] URL-submit -> upstream-metadata-pull -> validate ingestion pipeline (`bench/descriptor.py`).
+- [x] URL-submit -> upstream-metadata-pull -> validate ingestion pipeline (`bench/descriptor.py`).
 - [x] Embedded GGUF metadata cross-check against descriptor fields.
 - [ ] DB-sync: write store records to `schema/schema.sql` Postgres tables when a DB connection is available.
 - [x] Descriptor CLI entry point (`python -m bench.descriptor ingest <file>`).

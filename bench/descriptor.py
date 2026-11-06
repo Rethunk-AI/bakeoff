@@ -1,8 +1,8 @@
 """Model descriptor reader, validator, and persister for the bakeoff harness.
 
-SCOPE: handles manual/admin/seed JSON descriptors only, optionally cross-checked
-against an embedded GGUF header (``python -m bench.descriptor ingest``). The
-URL-submit → upstream-metadata-pull stage is still DEFERRED to P2 per bakeoff#15.
+SCOPE: manual/admin/seed JSON descriptors, optionally cross-checked against an
+embedded GGUF header (``python -m bench.descriptor ingest``), and descriptors pulled
+from a submitted model URL (``python -m bench.descriptor submit``, see bench.upstream).
 
 Descriptor JSON layout mirrors the ``models`` table in schema/schema.sql
 with embedded ``creator`` (1:1) and ``sources`` array (model_sources, 1:many):
@@ -62,7 +62,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from bench import gguf_meta, store
+from bench import gguf_meta, store, upstream
 
 SCHEMA_VERSION = 1
 
@@ -231,6 +231,28 @@ def ingest(file: Path, descriptor_path: Path | None, gguf_path: Path | None) -> 
     return save_descriptor(data)
 
 
+def submit_url(url: str, gguf_path: Path | None = None) -> str:
+    """Pull upstream metadata for a model URL, validate it and store the descriptor.
+
+    *gguf_path* is an optional local copy of the GGUF file to cross-check the
+    pulled fields against its header. Returns the stored UUID.
+    """
+    try:
+        data = upstream.pull_descriptor(url)
+    except upstream.UpstreamError as e:
+        raise DescriptorError(str(e)) from e
+    issues = validate_descriptor(data)
+    if gguf_path is not None:
+        try:
+            meta = gguf_meta.read_metadata(gguf_path)
+        except gguf_meta.GGUFError as e:
+            raise DescriptorError(str(e)) from e
+        issues += [f"gguf: {i}" for i in gguf_meta.cross_check(data, meta)]
+    if issues:
+        raise DescriptorError("invalid descriptor:\n- " + "\n- ".join(issues))
+    return save_descriptor(data)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m bench.descriptor")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -238,9 +260,15 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("file", type=Path, help="descriptor JSON, or a .gguf with --descriptor")
     p.add_argument("--descriptor", type=Path, help="descriptor JSON (required for a .gguf file)")
     p.add_argument("--gguf", type=Path, help="GGUF file to cross-check the descriptor against")
+    u = sub.add_parser("submit", help="pull upstream metadata for a model URL and store it")
+    u.add_argument("url", help="Hugging Face repo or file URL")
+    u.add_argument("--gguf", type=Path, help="local GGUF file to cross-check against")
     args = parser.parse_args(argv)
     try:
-        uuid = ingest(args.file, args.descriptor, args.gguf)
+        if args.command == "submit":
+            uuid = submit_url(args.url, args.gguf)
+        else:
+            uuid = ingest(args.file, args.descriptor, args.gguf)
     except DescriptorError as e:
         print(f"error: {e}", file=sys.stderr)
         return 1

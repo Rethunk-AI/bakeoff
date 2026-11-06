@@ -18,21 +18,21 @@ baseline cohort.
 
 | Model | Weights | GGUF path | Status |
 | ------- | --------- | ----------- | -------- |
-| llama3.2 | 1B | `lmstudio-community/Llama-3.2-1B-Instruct-GGUF/Llama-3.2-1B-Instruct-Q4_K_M.gguf` | TBD |
-| llama3.2 | 3B | `lmstudio-community/Llama-3.2-3B-Instruct-GGUF/Llama-3.2-3B-Instruct-Q4_K_M.gguf` | TBD |
-| llama3.1 | 8B | `lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf` | TBD |
-| qwen3 | 1.7B | `lmstudio-community/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf` | TBD |
-| qwen3 | 4B | `lmstudio-community/Qwen3-4B-GGUF/Qwen3-4B-Q4_K_M.gguf` | TBD |
-| qwen3 | 8B | `lmstudio-community/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf` | TBD |
-| qwen3.5 | 9B | `lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf` | **Seeded in config.yaml** |
-| qwen3.6 | 35B-A3B | `lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf` | **Seeded in config.yaml** |
-| gemma3 | 4B | `lmstudio-community/gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf` | TBD |
-| gemma4 | e2b | `lmstudio-community/gemma-4-e2b-it-GGUF/gemma-4-e2b-it-Q4_K_M.gguf` | TBD |
-| gemma4 | e4b | `lmstudio-community/gemma-4-e4b-it-GGUF/gemma-4-e4b-it-Q4_K_M.gguf` | TBD |
-| phi3.5-mini | 3.8B | `lmstudio-community/Phi-3.5-mini-instruct-GGUF/Phi-3.5-mini-instruct-Q4_K_M.gguf` | TBD |
-| phi4 | 14B | `lmstudio-community/phi-4-GGUF/phi-4-Q4_K_M.gguf` | TBD |
-| ministral | 3B | `lmstudio-community/Ministral-3B-instruct-GGUF/Ministral-3B-instruct-Q4_K_M.gguf` | TBD |
-| ministral | 8B | `lmstudio-community/Ministral-8B-Instruct-2410-GGUF/Ministral-8B-Instruct-2410-Q4_K_M.gguf` | TBD |
+| llama3.2 | 1B | `lmstudio-community/Llama-3.2-1B-Instruct-GGUF/Llama-3.2-1B-Instruct-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| llama3.2 | 3B | `lmstudio-community/Llama-3.2-3B-Instruct-GGUF/Llama-3.2-3B-Instruct-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| llama3.1 | 8B | `lmstudio-community/Meta-Llama-3.1-8B-Instruct-GGUF/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| qwen3 | 1.7B | `lmstudio-community/Qwen3-1.7B-GGUF/Qwen3-1.7B-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| qwen3 | 4B | `lmstudio-community/Qwen3-4B-GGUF/Qwen3-4B-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| qwen3 | 8B | `lmstudio-community/Qwen3-8B-GGUF/Qwen3-8B-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| qwen3.5 | 9B | `lmstudio-community/Qwen3.5-9B-GGUF/Qwen3.5-9B-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| qwen3.6 | 35B-A3B | `lmstudio-community/Qwen3.6-35B-A3B-GGUF/Qwen3.6-35B-A3B-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| gemma3 | 4B | `lmstudio-community/gemma-3-4b-it-GGUF/gemma-3-4b-it-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| gemma4 | e2b | `lmstudio-community/gemma-4-E2B-it-GGUF/gemma-4-E2B-it-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| gemma4 | e4b | `lmstudio-community/gemma-4-E4B-it-GGUF/gemma-4-E4B-it-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| phi3.5-mini | 3.8B | `bartowski/Phi-3.5-mini-instruct-GGUF/Phi-3.5-mini-instruct-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| phi4 | 14B | `lmstudio-community/phi-4-GGUF/phi-4-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| ministral | 3B | `lmstudio-community/Ministral-3-3B-Instruct-2512-GGUF/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
+| ministral | 8B | `bartowski/Ministral-8B-Instruct-2410-GGUF/Ministral-8B-Instruct-2410-Q4_K_M.gguf` | Run 2026-11-05 (unpublished) |
 
 ---
 
@@ -72,6 +72,7 @@ Deferred: large VRAM requirement or lower relative priority.
 - To run a model: copy the relevant entry into `config.yaml` `models:` block,
   confirm the GGUF is available at `engined.models_dir/<path>`, and run the
   harness.
+- P0 cohort ran together on 2026-11-05 (`scored` judge, Qwen3.6-35B-A3B); `llama3.1` 8B scored 0.026 heuristic / 1.50 judge and needs a chat-template check before its row is trusted. Descriptors for Qwen3-1.7B and Qwen3-4B were refused by `descriptor submit` (upstream declares no license).
 - Mark a model's status as **Tested** once a result bundle has been published
   to the results repo and update its row above.
 - To promote a model between tiers: edit this file and note the reason.

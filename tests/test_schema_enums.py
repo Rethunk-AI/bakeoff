@@ -17,9 +17,7 @@ def _enum(name: str) -> set[str]:
 
 
 def test_run_queue_status_matches_queue_constants():
-    used = {
-        v for k, v in vars(queue).items() if k.startswith("_STATUS_") and isinstance(v, str)
-    }
+    used = {v for k, v in vars(queue).items() if k.startswith("_STATUS_") and isinstance(v, str)}
     assert _enum("run_queue_status") == used
 
 

@@ -12,8 +12,9 @@ import tomllib
 
 import pytest
 
+from bench import engined
 from bench.config import ConfigError
-from bench.engined import ENGINE_ID, render_fragment, route_ids
+from bench.engined import ENGINE_ID, down, render_fragment, route_ids, up
 
 SPEC_DIR = "/usr/local/src/com.github/Rethunk-Tech/engined/engines/llama"
 MODELS_DIR = "/home/user/.local/share/engined-models/llm-bench"
@@ -269,3 +270,41 @@ class TestRouteIds:
 
     def test_no_judge_when_disabled(self):
         assert route_ids(_cfg()) == ["m_a", "m_b"]
+
+
+# --- hold lifecycle ----------------------------------------------------------
+
+
+class TestHoldLifecycle:
+    def test_down_unholds_what_up_held(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(engined, "FRAGMENT_PATH", tmp_path / "bakeoff.toml")
+        cfg = _cfg()
+        cfg["engined"]["hold"] = ["comfy"]
+        posts = []
+        monkeypatch.setattr(engined, "subprocess", _NoSubprocess())
+        monkeypatch.setattr(
+            engined, "_post", lambda url, path, **params: posts.append((url, path, params))
+        )
+        monkeypatch.setattr(engined, "_check_no_config_error", lambda url: None)
+        monkeypatch.setattr(engined, "_wait_for_models", lambda url, ids: None)
+
+        up(cfg, "http://engined")
+        down()
+
+        assert posts[0][1] == "/engined/v1/engines/comfy/hold"
+        assert (posts[-1][0], posts[-1][1]) == (
+            "http://engined",
+            "/engined/v1/engines/comfy/unhold",
+        )
+        # Second `down` (atexit after finally) has nothing left to release.
+        before = len(posts)
+        down()
+        assert len(posts) == before
+
+
+class _NoSubprocess:
+    """Stand-in for the `subprocess` module so `up`/`down` never touch systemd."""
+
+    @staticmethod
+    def run(*args, **kwargs):
+        return None

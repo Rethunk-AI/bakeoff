@@ -176,10 +176,9 @@ def render_fragment(cfg: dict[str, Any]) -> str:
 
 # --- Lifecycle ---------------------------------------------------------------
 
-_hold_stop: threading.Event | None = None
-_hold_thread: threading.Thread | None = None
-_held_ids: list[str] = []
-_held_engined_url: str | None = None
+# Renewal thread plus the holds `down()` has to release, in one record so `up`
+# and `down` cannot drift on which of them exists.
+_hold: dict[str, Any] = {"stop": None, "thread": None, "ids": [], "url": None}
 
 
 def _post(engined_url: str, path: str, **params: Any) -> httpx.Response:
@@ -226,8 +225,6 @@ def up(cfg: dict[str, Any], engined_url: str) -> None:
     Starts the hold-renewal thread only once the reload has been confirmed
     live, so a hold is never taken out for a fragment that failed to apply.
     """
-    global _hold_stop, _hold_thread, _held_ids, _held_engined_url
-
     fragment = render_fragment(cfg)
     FRAGMENT_PATH.parent.mkdir(parents=True, exist_ok=True)
     FRAGMENT_PATH.write_text(fragment)
@@ -240,13 +237,12 @@ def up(cfg: dict[str, Any], engined_url: str) -> None:
     if hold_ids:
         for engine_id in hold_ids:
             _post(engined_url, f"/engined/v1/engines/{engine_id}/hold", seconds=HOLD_TTL_S)
-        _held_ids = hold_ids
-        _held_engined_url = engined_url
-        _hold_stop = threading.Event()
-        _hold_thread = threading.Thread(
-            target=_hold_loop, args=(engined_url, hold_ids, _hold_stop), daemon=True
+        stop = threading.Event()
+        _hold.update(ids=hold_ids, url=engined_url, stop=stop)
+        _hold["thread"] = threading.Thread(
+            target=_hold_loop, args=(engined_url, hold_ids, stop), daemon=True
         )
-        _hold_thread.start()
+        _hold["thread"].start()
 
 
 def down() -> None:
@@ -255,23 +251,23 @@ def down() -> None:
     Called from `finally` and `atexit`: a fragment left behind whose GGUF
     later vanishes makes engined refuse to boot, so this must always run.
     """
-    global _hold_stop, _hold_thread, _held_ids, _held_engined_url
+    stop, thread = _hold["stop"], _hold["thread"]
+    _hold.update(stop=None, thread=None)
 
-    if _hold_stop is not None:
-        _hold_stop.set()
-    if _hold_thread is not None:
-        _hold_thread.join(timeout=5)
-    _hold_stop = None
-    _hold_thread = None
+    if stop is not None:
+        stop.set()
+    if thread is not None:
+        thread.join(timeout=5)
 
-    if _held_engined_url is not None:
-        for engine_id in _held_ids:
+    engined_url, held_ids = _hold["url"], list(_hold["ids"])
+    _hold.update(ids=[], url=None)
+
+    if engined_url is not None:
+        for engine_id in held_ids:
             try:
-                _post(_held_engined_url, f"/engined/v1/engines/{engine_id}/unhold")
+                _post(engined_url, f"/engined/v1/engines/{engine_id}/unhold")
             except Exception as e:
                 print(f"[engined-down-err] unhold {engine_id}: {e}", file=sys.stderr)
-    _held_ids = []
-    _held_engined_url = None
 
     # The second call (atexit after finally) finds nothing to remove, and a
     # reload then would only churn engined for no change.

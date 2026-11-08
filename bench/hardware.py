@@ -17,7 +17,7 @@ from typing import Any
 
 def _run(*args: str, timeout: int = 5) -> str:
     """Run a command and return stdout. Returns '' on any error."""
-    try:
+    with contextlib.suppress(Exception):
         result = subprocess.run(
             list(args),
             capture_output=True,
@@ -26,8 +26,6 @@ def _run(*args: str, timeout: int = 5) -> str:
         )
         if result.returncode == 0:
             return result.stdout.strip()
-    except Exception:
-        pass
     return ""
 
 
@@ -138,7 +136,7 @@ def _cpu_info() -> dict[str, Any]:
     """Read CPU model + core/thread counts from /proc/cpuinfo (Linux) or platform fallback."""
     result: dict[str, Any] = {}
     if sys.platform.startswith("linux"):
-        try:
+        with contextlib.suppress(Exception):
             with open("/proc/cpuinfo") as f:
                 content = f.read()
             model_match = re.search(r"^model name\s*:\s*(.+)$", content, re.MULTILINE)
@@ -148,16 +146,12 @@ def _cpu_info() -> dict[str, Any]:
             core_ids = re.findall(r"^cpu cores\s*:\s*(\d+)", content, re.MULTILINE)
             processor_ids = re.findall(r"^processor\s*:\s*(\d+)", content, re.MULTILINE)
             if core_ids:
-                try:
+                with contextlib.suppress(ValueError, TypeError):
                     cores_per_socket = int(core_ids[0])
                     n_sockets = max(len(physical_ids), 1)
                     result["cpu_cores"] = cores_per_socket * n_sockets
-                except (ValueError, TypeError):
-                    pass
             if processor_ids:
                 result["cpu_threads"] = len(processor_ids)
-        except Exception:
-            pass
 
     if "cpu_model" not in result:
         proc = platform.processor()
@@ -180,11 +174,9 @@ def _ram_gb() -> float | None:
 def _os_info() -> dict[str, Any]:
     """Return os_name and os_version."""
     result: dict[str, Any] = {}
-    try:
+    with contextlib.suppress(Exception):
         result["os_name"] = platform.system()
         result["os_version"] = platform.version()
-    except Exception:
-        pass
     return result
 
 
@@ -222,31 +214,23 @@ def collect_hardware_context() -> dict[str, Any]:
         "driver_version": None,
     }
 
-    try:
+    with contextlib.suppress(Exception):
         gpu = _nvidia_info()
         if not gpu:
             gpu = _rocm_info()
         ctx.update({k: v for k, v in gpu.items() if v is not None})
-    except Exception:
-        pass
 
-    try:
+    with contextlib.suppress(Exception):
         cpu = _cpu_info()
         ctx.update({k: v for k, v in cpu.items() if v is not None})
-    except Exception:
-        pass
 
-    try:
+    with contextlib.suppress(Exception):
         ram = _ram_gb()
         if ram is not None:
             ctx["ram_gb"] = ram
-    except Exception:
-        pass
 
-    try:
+    with contextlib.suppress(Exception):
         os_data = _os_info()
         ctx.update({k: v for k, v in os_data.items() if v is not None})
-    except Exception:
-        pass
 
     return ctx

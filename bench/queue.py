@@ -359,6 +359,8 @@ def claim(runner_id: str, settings: LivenessSettings | None = None) -> dict[str,
                 if store.parse_utc(retry_after) > now:
                     continue
             except ValueError:
+                # Unparseable retry_after is treated as due so a corrupt
+                # timestamp cannot park an item forever.
                 pass
         pri = int(data.get("priority", 100))
         created = str(data.get("created_at", ""))

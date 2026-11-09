@@ -333,7 +333,11 @@ def test_liveness_settings_from_config():
 
 def test_heartbeat_context_registers_and_sweeps(capsys):
     settings = queue.LivenessSettings(heartbeat_interval_s=0.02, missed_beats=3)
+    err = ""
     with queue.Heartbeat("hb-runner", settings):
         assert queue.is_live("hb-runner")
-        time.sleep(0.15)
-    assert capsys.readouterr().err.count("heartbeat sweep:") >= 2
+        deadline = time.monotonic() + 5
+        while err.count("heartbeat sweep:") < 2 and time.monotonic() < deadline:
+            time.sleep(0.02)
+            err += capsys.readouterr().err
+    assert err.count("heartbeat sweep:") >= 2

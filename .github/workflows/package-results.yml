@@ -36,8 +36,10 @@ jobs:
 
     - name: Package result (with Sigstore signing)
       id: package
+      env:
+        RESULT_PATH: ${{ inputs.result_path }}
       run: |
-        BUNDLE_DIR=$(uv run bench publish package "${{ inputs.result_path }}" --sign --output-dir bundle | sed 's/\[publish\] bundle: //')
+        BUNDLE_DIR=$(uv run bench publish package "$RESULT_PATH" --sign --output-dir bundle | sed 's/\[publish\] bundle: //')
         echo "bundle_dir=$BUNDLE_DIR" >> "$GITHUB_OUTPUT"
 
     - name: Submit bundle to bakeoff-results

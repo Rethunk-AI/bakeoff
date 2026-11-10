@@ -83,11 +83,5 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - name: Install actionlint
-        run: |
-          # Transient GitHub 502/504 and dropped connections should not fail the run.
-          bash <(curl -fsSL --retry 18 --retry-delay 10 https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
-          echo "$PWD" >> "$GITHUB_PATH"
-
       - name: Lint workflows
-        run: actionlint -color
+        run: scripts/actionlint -color

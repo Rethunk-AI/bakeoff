@@ -16,7 +16,7 @@
 
 - [x] URL-submit -> upstream-metadata-pull -> validate ingestion pipeline (`bench/descriptor.py`).
 - [x] Embedded GGUF metadata cross-check against descriptor fields.
-- [ ] DB-sync: write store records to `schema/schema.sql` Postgres tables when a DB connection is available.
+- [x] DB-sync: write store records to `schema/schema.sql` Postgres tables when a DB connection is available.
 - [x] Descriptor CLI entry point (`python -m bench.descriptor ingest <file>`).
 - [x] Runner registration (`bench/queue.py` runner heartbeat + `runners/` table).
 - [x] Canonicalize provisional-UUID numeric formatting (`parameter_count_b`/`source_size`) so disk-side and future DB-ingestion side derive identical UUID5 keys (currently relies on Python f-string formatting matching on both sides).

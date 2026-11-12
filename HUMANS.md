@@ -142,6 +142,14 @@ export BAKEOFF_DATA_DIR=/data/bakeoff   # default ~/.local/share/bakeoff
 
 Store/queue modules write JSON under `models/`, `runs/`, `run_queue/pending/`, `run_queue/completed/`. Every real run of the standalone runner writes `runs/<run_id>.json` and moves a `run_queue` record from pending to completed here.
 
+Upsert that store and `results/*.json` into Postgres when a connection is available (`migrate/` is the only database consumer):
+
+```sh
+DATABASE_URL=postgres://… go run ./migrate/cmd --dsn "$DATABASE_URL" sync
+```
+
+`--dsn` and `DATABASE_URL` are the same connection flag/env the migration runner uses. The store is `BAKEOFF_DATA_DIR` (default `~/.local/share/bakeoff`); portable runs are `results/*.json` in the working directory. Each file is one transaction; a re-run is a no-op. Logs one line per file with row counts (`0 rows` included).
+
 Submit a model by URL: `uv run python -m bench.descriptor submit https://huggingface.co/<org>/<repo>/resolve/main/<file>.gguf [--gguf local.gguf]` pulls the Hugging Face metadata, validates it (license, size, format, optional GGUF header cross-check) and stores the descriptor. `BAKEOFF_NETWORK_TESTS=1 uv run pytest tests/test_upstream.py` adds the live API test.
 
 ## Distributed worker mode

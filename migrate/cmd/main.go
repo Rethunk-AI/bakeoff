@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 
 	"github.com/jackc/pgx/v5"
@@ -47,14 +48,15 @@ func run() error {
 		return errors.New("--batch-size -1 is invalid; use 0 for dynamic sizing or N>0 for a fixed batch size")
 	}
 
-	if !*rollback && fs.NArg() != 1 {
-		fmt.Fprintf(os.Stderr, "Usage: bakeoff-migrate [flags] <schema_version_id>\n\n")
+	syncing := fs.NArg() >= 1 && fs.Arg(0) == "sync"
+	if !*rollback && !syncing && fs.NArg() != 1 {
+		fmt.Fprintf(os.Stderr, "Usage: bakeoff-migrate [flags] <schema_version_id>\n       bakeoff-migrate [flags] sync\n\n")
 		fs.PrintDefaults()
 		return errors.New("schema_version_id argument is required")
 	}
 
 	var schemaVersionID int
-	if fs.NArg() >= 1 {
+	if !syncing && fs.NArg() >= 1 {
 		var err error
 		schemaVersionID, err = strconv.Atoi(fs.Arg(0))
 		if err != nil || schemaVersionID <= 0 {
@@ -78,6 +80,24 @@ func run() error {
 		return fmt.Errorf("connect to database: %w", err)
 	}
 	defer func() { _ = conn.Close(ctx) }()
+
+	if syncing {
+		dataDir := os.Getenv("BAKEOFF_DATA_DIR")
+		if dataDir == "" {
+			home, err := os.UserHomeDir()
+			if err != nil {
+				return fmt.Errorf("BAKEOFF_DATA_DIR not set and home: %w", err)
+			}
+			dataDir = filepath.Join(home, ".local", "share", "bakeoff")
+		}
+		resultsDir := "results"
+		log.Printf("[bakeoff-migrate] syncing store and results")
+		if err := migrate.Sync(ctx, conn, dataDir, resultsDir); err != nil {
+			return fmt.Errorf("[bakeoff-migrate] FAILED: %w", err)
+		}
+		log.Printf("[bakeoff-migrate] DONE")
+		return nil
+	}
 
 	cfg := migrate.Config{
 		BatchSize:            *batchSize,

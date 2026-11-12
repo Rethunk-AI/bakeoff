@@ -849,7 +849,7 @@ func TestRollback_DropsOrphanShadowTablesOnly(t *testing.T) {
 	r := NewRunner(nil, Config{Rollback: true})
 	r.shadows = cat
 
-	if err := r.Run(context.Background(), 1); err != nil {
+	if err := r.Run(t.Context(), 1); err != nil {
 		t.Fatalf("rollback: %v", err)
 	}
 

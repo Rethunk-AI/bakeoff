@@ -623,16 +623,13 @@ func (p pgShadowCatalog) drop(ctx context.Context, name string) error {
 	return err
 }
 
-func (r *MigrationRunner) catalog() shadowCatalog {
-	if r.shadows != nil {
-		return r.shadows
-	}
-	return pgShadowCatalog{conn: r.conn}
-}
-
 // resumeGate detects orphan shadow tables and prompts the operator.
 func (r *MigrationRunner) resumeGate(ctx context.Context) error {
-	orphans, err := r.catalog().listOrphans(ctx)
+	cat := r.shadows
+	if cat == nil {
+		cat = pgShadowCatalog{conn: r.conn}
+	}
+	orphans, err := cat.listOrphans(ctx)
 	if err != nil {
 		return err
 	}
@@ -645,7 +642,7 @@ func (r *MigrationRunner) resumeGate(ctx context.Context) error {
 
 	if r.cfg.Rollback {
 		for _, name := range orphans {
-			if err := r.catalog().drop(ctx, name); err != nil {
+			if err := cat.drop(ctx, name); err != nil {
 				return fmt.Errorf("drop orphan %s: %w", name, err)
 			}
 			log.Printf("[migrate] dropped orphan shadow table %s", name)

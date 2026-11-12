@@ -86,7 +86,7 @@ from bench.resume import (
     tag_fresh,
     tag_reused,
 )
-from bench.scoring import model_rollup, run_status_from_scores
+from bench.scoring import apply_scored_judgements, model_rollup, run_status_from_scores
 
 HERE = Path(__file__).resolve().parent.parent
 
@@ -949,6 +949,7 @@ def main() -> int:
             engine=engine,
         )
         judgements = reused_judgements + fresh_judgements
+        apply_scored_judgements(all_records, judgements)
         _queue_terminal_status = "complete"
     finally:
         engined.down()

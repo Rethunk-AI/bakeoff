@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import unittest
 
-from bench.scoring import cell_score, model_rollup, run_status_from_scores
+from bench.scoring import apply_scored_judgements, cell_score, model_rollup, run_status_from_scores
 
 # ---------------------------------------------------------------------------
 # Helpers to build synthetic records
@@ -76,6 +76,22 @@ class TestCellScore(unittest.TestCase):
     def test_failure_code_beats_quality_heuristic(self):
         rec = {"quality_heuristic": 0.9, "failure_code": "refusal", "error": None}
         self.assertEqual(cell_score(rec), 0.0)
+
+    def test_scored_judgement_of_five_with_null_heuristic_is_one(self):
+        rec = {
+            "task_id": "t",
+            "prompt_id": "p",
+            "model_id": "m",
+            "quality_heuristic": None,
+            "failure_code": None,
+            "error": None,
+        }
+        apply_scored_judgements(
+            [rec],
+            [{"mode": "scored", "task_id": "t", "prompt_id": "p", "model_id": "m", "score": 5}],
+        )
+        self.assertEqual(cell_score(rec), 1.0)
+        self.assertEqual(model_rollup("m", [rec], [], 1)["partial_score"], 1.0)
 
 
 # ---------------------------------------------------------------------------

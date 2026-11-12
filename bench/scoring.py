@@ -12,6 +12,7 @@ and the harness cannot know how the missing cells would have scored.
 
 Public API (consumed by runner.py):
     cell_score(record)              -> float in [0, 1]
+    apply_scored_judgements(...)    -> None (copies scored marks onto records)
     model_rollup(...)               -> dict (model_scores entry)
     run_status_from_scores(...)     -> str  ('complete'|'incomplete'|'failed')
 """
@@ -67,6 +68,23 @@ def cell_score(record: dict) -> float:
 
     # Rule 4: default
     return 0.0
+
+
+def apply_scored_judgements(records: list[dict], judgements: list[dict]) -> None:
+    """Copy scored-mode rubric marks onto matching records as ``judge_score``.
+
+    Pairwise judgements have no 1-5 mark; they are left alone so a null
+    heuristic is not overwritten with a fake 0.
+    """
+    by_key = {(r.get("task_id"), r.get("prompt_id"), r.get("model_id")): r for r in records}
+    for judgement in judgements:
+        if judgement.get("mode") != "scored" or judgement.get("score") is None:
+            continue
+        rec = by_key.get(
+            (judgement.get("task_id"), judgement.get("prompt_id"), judgement.get("model_id"))
+        )
+        if rec is not None:
+            rec["judge_score"] = judgement["score"]
 
 
 # ---------------------------------------------------------------------------

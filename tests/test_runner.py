@@ -408,3 +408,53 @@ def test_resume_seed_mismatch_exits_without_reuse(tmp_path, monkeypatch):
     up.assert_not_called()
     phases.assert_not_called()
     assert list((tmp_path / "results").glob("run-*.json")) == []
+
+
+def test_crash_after_first_model_keeps_its_records(tmp_path, monkeypatch):
+    from bench.runner import main
+
+    cfg = {
+        **_BASE_CFG,
+        "run": {"seed": 42, "name": "partial-run", "warmup": False},
+        "output": {
+            "dir": str(tmp_path / "results"),
+            "emit_markdown": False,
+            "emit_html": False,
+        },
+        "judge": {"enabled": False},
+        "dumb_model_tier": {"enabled": False},
+    }
+    config_path = _write_config(tmp_path, cfg)
+    monkeypatch.setenv("BAKEOFF_DATA_DIR", str(tmp_path / "data"))
+
+    def fake_phase(model_cfg, *args, **kwargs):
+        if str(model_cfg["id"]) == "m_b":
+            raise RuntimeError("model b exploded")
+        return [
+            {
+                "model_id": "m_a",
+                "task_id": "t0000",
+                "prompt_id": "plain",
+                "text": "from-a",
+                "tier": "main",
+                "failure_code": None,
+                "error": None,
+            }
+        ]
+
+    with (
+        patch("sys.argv", ["runner", "--config", str(config_path)]),
+        patch("bench.runner.write_jsonl"),
+        patch("bench.runner.engined.up"),
+        patch("bench.runner.engined.down"),
+        patch("bench.runner.run_model_phase", side_effect=fake_phase),
+        patch("bench.runner.collect_hardware_context", return_value={}),
+        pytest.raises(RuntimeError, match="model b exploded"),
+    ):
+        main()
+
+    files = list((tmp_path / "results").glob("run-*.json"))
+    assert len(files) == 1
+    payload = json.loads(files[0].read_text())
+    assert [r["model_id"] for r in payload["records"]] == ["m_a"]
+    assert payload["judgements"] == []

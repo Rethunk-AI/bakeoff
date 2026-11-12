@@ -138,20 +138,29 @@ def write_record(table: str, record_id: str, data: dict[str, Any]) -> Path:
             existing = None
 
     stamped = _stamp_audit(existing, data)
+    atomic_write_json(target, stamped)
+    return target
 
-    # Write to a temp file in the same directory, then atomically replace.
-    fd, tmp_path = tempfile.mkstemp(dir=table_path, suffix=".tmp")
+
+def atomic_write_json(
+    path: Path,
+    data: Any,
+    *,
+    indent: int = 2,
+    sort_keys: bool = True,
+) -> None:
+    """Write *data* as JSON via a temp file in the same directory, then ``os.replace``."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=path.parent, suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
-            json.dump(stamped, f, indent=2, sort_keys=True)
+            json.dump(data, f, indent=indent, sort_keys=sort_keys)
             f.write("\n")
-        os.replace(tmp_path, target)
+        os.replace(tmp_path, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(tmp_path)
         raise
-
-    return target
 
 
 def read_record(table: str, record_id: str) -> dict[str, Any]:

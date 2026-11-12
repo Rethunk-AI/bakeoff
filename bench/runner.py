@@ -40,6 +40,7 @@ import random
 import resource
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any
@@ -377,10 +378,12 @@ def _run_model_phases(
     floor_tasks: list[Task] | None = None,
     engined_url: str = DEFAULT_ENGINED_URL,
     engine: str = DEFAULT_ENGINED_ENGINE,
+    checkpoint: Callable[[list[dict[str, Any]]], None] | None = None,
 ) -> list[dict[str, Any]]:
     """Iterate per-model-sequentially, honouring resume pending sets.
 
     Returns only the fresh records; caller merges with reused records.
+    After each model, *checkpoint* is called with all fresh records so far.
     """
     fresh: list[dict[str, Any]] = []
     for m in models:
@@ -407,6 +410,8 @@ def _run_model_phases(
         if prior_run_id is not None:
             recs = tag_fresh(recs, prior_run_id)
         fresh.extend(recs)
+        if checkpoint is not None:
+            checkpoint(fresh)
     return fresh
 
 
@@ -895,6 +900,7 @@ def main() -> int:
     # runs without scanning the flat results/ directory.
     import uuid as _uuid
 
+    from bench.store import atomic_write_json as _atomic_write_json
     from bench.store import delete_record as _store_delete
     from bench.store import write_record as _store_write
 
@@ -911,6 +917,26 @@ def main() -> int:
     # to boot, so cleanup must run even on a hard interpreter exit.
     atexit.register(engined.down)
     engined.up(cfg, engined_url)
+
+    out_json = out_dir / f"run-{ts}.json"
+    provenance = collect_provenance(cfg, seed=seed, repo_root=HERE)
+
+    def _checkpoint(fresh: list[dict[str, Any]]) -> None:
+        _atomic_write_json(
+            out_json,
+            {
+                "run_id": run_cfg.get("name", ts),
+                "timestamp": ts,
+                "run_status": "incomplete",
+                "config": cfg,
+                "provenance": provenance,
+                "tasks": [asdict(t) for t in tasks],
+                "records": reused_records + fresh,
+                "judgements": [],
+                "resumed_from": prior_run_id,
+            },
+            sort_keys=False,
+        )
 
     try:
         # 3. Per-model phases (sequential — see invariant above).
@@ -929,6 +955,7 @@ def main() -> int:
             floor_tasks=floor_tasks,
             engined_url=engined_url,
             engine=engine,
+            checkpoint=_checkpoint,
         )
         all_records = reused_records + fresh_records
 
@@ -969,8 +996,6 @@ def main() -> int:
             _store_delete("run_queue/pending", _queue_id)
 
     # 5. Emit
-    out_json = out_dir / f"run-{ts}.json"
-    provenance = collect_provenance(cfg, seed=seed, repo_root=HERE)
     hf_mode = args.hf_enrichment or run_cfg.get("hf_enrichment", "off")
     model_metadata = build_model_metadata(cfg)
     model_metadata = enrich_model_metadata(model_metadata, hf_mode, provenance["warnings"])

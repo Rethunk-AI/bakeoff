@@ -168,6 +168,16 @@ class TestCheckCompat:
         errors = check_compat(_cfg(), seed=99, task_ids=["t1"], prior=prior)
         assert len(errors) >= 3  # seed, tasks, prompts
 
+    def test_config_hash_mismatch_when_both_present(self):
+        prior = _prior()
+        prior["provenance"]["config_hash"] = "aaaaaaaaaaaaaaaa"
+        errors = check_compat(_cfg(), seed=42, task_ids=["t1"], prior=prior)
+        assert any("config_hash" in e for e in errors)
+
+    def test_config_hash_absent_in_prior_skips_check(self):
+        errors = check_compat(_cfg(), seed=42, task_ids=["t1"], prior=_prior())
+        assert not any("config_hash" in e for e in errors)
+
 
 # --- TestBuildPending --------------------------------------------------------
 

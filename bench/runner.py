@@ -815,8 +815,10 @@ def main() -> int:
         task_ids = [t.id for t in tasks]
         prompt_ids = [str(p["id"]) for p in prompts]
         compat_errors = check_compat(cfg, seed=seed, task_ids=task_ids, prior=prior)
-        for err in compat_errors:
-            print(f"[resume-warn] {err}", file=sys.stderr)
+        if compat_errors:
+            for err in compat_errors:
+                print(f"[error] resume: {err}", file=sys.stderr)
+            return 1
         pending_by_model = build_pending(
             models,
             task_ids,

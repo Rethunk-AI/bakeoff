@@ -8,6 +8,7 @@ in non-default config branches (alternate judge modes, judge disabled, etc.).
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -345,3 +346,65 @@ class TestStoreWiring:
         monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
         run_ids = store.list_runs()
         assert "listed-run" in run_ids
+
+
+def test_resume_seed_mismatch_exits_without_reuse(tmp_path, monkeypatch):
+    from bench.runner import main
+
+    cfg = {
+        **_BASE_CFG,
+        "run": {"seed": 2, "name": "new-run"},
+        "output": {
+            "dir": str(tmp_path / "results"),
+            "emit_markdown": False,
+            "emit_html": False,
+        },
+        "judge": {"enabled": False},
+        "dumb_model_tier": {"enabled": False},
+    }
+    config_path = _write_config(tmp_path, cfg)
+    prior_path = tmp_path / "prior.json"
+    prior_path.write_text(
+        json.dumps(
+            {
+                "tasks": [{"id": "t0000"}],
+                "records": [
+                    {
+                        "task_id": "t0000",
+                        "prompt_id": "plain",
+                        "model_id": "m_a",
+                        "text": "old-answer",
+                    }
+                ],
+                "config": {
+                    "models": cfg["models"],
+                    "prompts": cfg["prompts"],
+                },
+                "provenance": {"seed": 1},
+                "run_id": "old-run",
+            }
+        )
+    )
+    monkeypatch.setenv("BAKEOFF_DATA_DIR", str(tmp_path / "data"))
+    with (
+        patch(
+            "sys.argv",
+            ["runner", "--config", str(config_path), "--resume-from", str(prior_path)],
+        ),
+        patch("bench.runner.write_jsonl"),
+        patch("bench.runner.engined.up") as up,
+        patch("bench.runner.engined.down"),
+        patch("bench.runner._run_model_phases", return_value=[]) as phases,
+        patch("bench.runner.run_judge_phase", return_value=[]),
+        patch(
+            "bench.runner.collect_provenance", return_value={"warnings": [], "git": {}, "seed": 2}
+        ),
+        patch("bench.runner.build_model_metadata", return_value={}),
+        patch("bench.runner.enrich_model_metadata", return_value={}),
+        patch("bench.runner.collect_hardware_context", return_value={}),
+    ):
+        rc = main()
+    assert rc != 0
+    up.assert_not_called()
+    phases.assert_not_called()
+    assert list((tmp_path / "results").glob("run-*.json")) == []

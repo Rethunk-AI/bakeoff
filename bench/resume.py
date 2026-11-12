@@ -20,6 +20,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+from bench.config import config_hash
+
 
 class ResumeError(ValueError):
     """Raised when a prior result cannot be used for resume."""
@@ -91,6 +93,12 @@ def check_compat(
     prov = prior.get("provenance") or {}
     if prov.get("seed") is not None and int(prov["seed"]) != seed:
         errors.append(f"seed mismatch: prior={prov['seed']} current={seed}")
+
+    prior_hash = prov.get("config_hash")
+    if prior_hash:
+        current_hash = config_hash(cfg)
+        if prior_hash != current_hash:
+            errors.append(f"config_hash mismatch: prior={prior_hash} current={current_hash}")
 
     # Dataset n + domains (via task ID set identity)
     prior_task_ids = _sorted_ids(prior.get("tasks") or [])

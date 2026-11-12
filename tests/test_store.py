@@ -213,3 +213,12 @@ def test_parse_utc_accepts_every_iso_shape(text):
         12,
         30,
     )
+
+
+def test_write_record_rejects_path_escape(tmp_path):
+    with pytest.raises(store.StoreError):
+        store.write_record("runners", "../x", {})
+    assert not (tmp_path / "x.json").exists()
+    assert not (tmp_path.parent / "x.json").exists()
+    with pytest.raises(store.StoreError):
+        store.read_record("runners", "../x")

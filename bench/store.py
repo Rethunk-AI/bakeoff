@@ -25,6 +25,7 @@ import contextlib
 import json
 import math
 import os
+import re
 import tempfile
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -36,6 +37,7 @@ from bench.constants import BAKEOFF_CREATOR_NAMESPACE, BAKEOFF_MODEL_NAMESPACE
 
 SCHEMA_VERSION = 1
 _DEFAULT_DATA_DIR = "~/.local/share/bakeoff"
+_RECORD_ID_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]*$")
 
 
 class StoreError(ValueError):
@@ -106,6 +108,11 @@ def _table_dir(table: str) -> Path:
     return data_dir() / table
 
 
+def _check_record_id(record_id: str) -> None:
+    if ".." in record_id or not _RECORD_ID_RE.fullmatch(record_id):
+        raise StoreError(f"invalid record id: {record_id!r}")
+
+
 def write_record(table: str, record_id: str, data: dict[str, Any]) -> Path:
     """Write *data* as JSON to ``<data_dir>/<table>/<record_id>.json`` atomically.
 
@@ -116,6 +123,7 @@ def write_record(table: str, record_id: str, data: dict[str, Any]) -> Path:
 
     Returns the path to the written file.
     """
+    _check_record_id(record_id)
     table_path = _table_dir(table)
     table_path.mkdir(parents=True, exist_ok=True)
     target = table_path / f"{record_id}.json"
@@ -151,6 +159,7 @@ def read_record(table: str, record_id: str) -> dict[str, Any]:
 
     Raises StoreError if the file is missing or not valid JSON.
     """
+    _check_record_id(record_id)
     target = _table_dir(table) / f"{record_id}.json"
     try:
         with target.open() as f:

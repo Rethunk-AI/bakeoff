@@ -35,7 +35,6 @@ from __future__ import annotations
 import argparse
 import atexit
 import itertools
-import json
 import random
 import resource
 import sys
@@ -1045,8 +1044,7 @@ def main() -> int:
     else:
         output = payload
 
-    with out_json.open("w") as f:
-        json.dump(output, f, indent=2)
+    _atomic_write_json(out_json, output, sort_keys=False)
     print(f"[out] {out_json}", file=sys.stderr)
 
     if out_cfg.get("emit_markdown") or out_cfg.get("emit_html"):

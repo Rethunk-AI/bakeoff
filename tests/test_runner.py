@@ -458,3 +458,22 @@ def test_crash_after_first_model_keeps_its_records(tmp_path, monkeypatch):
     payload = json.loads(files[0].read_text())
     assert [r["model_id"] for r in payload["records"]] == ["m_a"]
     assert payload["judgements"] == []
+
+
+def test_portable_result_write_is_atomic(tmp_path, monkeypatch):
+    from bench.store import atomic_write_json
+
+    out = tmp_path / "run-x.json"
+    out.write_text('{"keep": true}')
+    original = out.read_text()
+
+    def boom(obj, f, **kwargs):
+        f.write("{truncated")
+        raise RuntimeError("midway")
+
+    monkeypatch.setattr("bench.store.json.dump", boom)
+    with pytest.raises(RuntimeError, match="midway"):
+        atomic_write_json(out, {"new": True})
+    assert out.read_text() == original
+    leftover = [p for p in tmp_path.glob("*.tmp") if p.exists()]
+    assert leftover == []

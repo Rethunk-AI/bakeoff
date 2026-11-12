@@ -103,6 +103,14 @@ class TestLoadPrior:
         result = load_prior(p)
         assert result["run_id"] == "r1"
 
+    def test_signed_envelope_returns_inner_payload(self, tmp_path):
+        from bench.signing import generate_keypair, sign_result
+
+        inner = {"tasks": [{"id": "t1"}], "records": [], "run_id": "r1"}
+        private_key, _ = generate_keypair()
+        p = self._write(tmp_path, sign_result(inner, private_key, "runner"))
+        assert load_prior(p) == inner
+
 
 # --- TestCheckCompat ---------------------------------------------------------
 

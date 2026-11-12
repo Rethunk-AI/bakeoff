@@ -71,6 +71,9 @@ def load_prior(path: Path) -> dict[str, Any]:
         raise ResumeError(f"malformed JSON in {path}: {e}") from e
     if not isinstance(data, dict):
         raise ResumeError(f"{path} is not a JSON object")
+    inner = data.get("result")
+    if "sig" in data and isinstance(inner, dict):
+        data = inner
     for field in ("tasks", "records"):
         if field not in data:
             raise ResumeError(f"prior result missing required field: {field!r}")

@@ -159,3 +159,12 @@ def test_emit_html_does_not_close_script_from_record_text(tmp_path):
     emit_html(base, safe_path)
     emit_html(payload, html_path)
     assert html_path.read_text().count("</script>") == safe_path.read_text().count("</script>")
+
+
+def test_emit_html_escapes_model_names_before_innerhtml(tmp_path):
+    html_path = tmp_path / "dash.html"
+    emit_html({"timestamp": "t", "run_id": "r", "records": []}, html_path)
+    html = html_path.read_text()
+    assert "const esc =" in html
+    assert "<td>${m}</td>" not in html
+    assert "<td>${esc(m)}</td>" in html

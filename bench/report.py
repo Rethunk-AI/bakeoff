@@ -589,6 +589,7 @@ const roll = rollup(data.records);
 const models = Object.keys(roll);
 const fmt = (v, nd=3) => v==null ? "—" : Number(v).toFixed(nd);
 const fmtPct = v => v==null ? "—" : (v*100).toFixed(0) + "%";
+const esc = v => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
 // Rollup table
 (() => {{
@@ -611,7 +612,7 @@ const fmtPct = v => v==null ? "—" : (v*100).toFixed(0) + "%";
     }} else if (mode === "pairwise") {{
       extra = "<td>" + (pair.rates[m] != null ? fmtPct(pair.rates[m]) : "—") + "</td>";
     }}
-    return `<tr><td>${{m}}</td><td>${{r.n}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.tokens_per_sec_mean,2)}}</td><td>${{fmt(r.energy_wh_total)}}</td><td>${{fmt(r.cost_usd_total,4)}}</td><td>${{fmt(r.quality_heuristic_mean)}}</td>${{extra}}</tr>`;
+    return `<tr><td>${{esc(m)}}</td><td>${{r.n}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.tokens_per_sec_mean,2)}}</td><td>${{fmt(r.energy_wh_total)}}</td><td>${{fmt(r.cost_usd_total,4)}}</td><td>${{fmt(r.quality_heuristic_mean)}}</td>${{extra}}</tr>`;
   }}).join("");
 }})();
 
@@ -633,7 +634,7 @@ bar("c_usd", "USD",   models.map(m => roll[m].cost_usd_total ?? 0));
   const header = "<tr><th>Model</th><th>mean</th><th>p50</th><th>p95</th><th>p99</th></tr>";
   t.innerHTML = header + models.map(m => {{
     const r = roll[m];
-    return `<tr><td>${{m}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.latency_p50_s)}}</td><td>${{fmt(r.latency_p95_s)}}</td><td>${{fmt(r.latency_p99_s)}}</td></tr>`;
+    return `<tr><td>${{esc(m)}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.latency_p50_s)}}</td><td>${{fmt(r.latency_p95_s)}}</td><td>${{fmt(r.latency_p99_s)}}</td></tr>`;
   }}).join("");
 }})();
 
@@ -647,7 +648,7 @@ bar("c_usd", "USD",   models.map(m => roll[m].cost_usd_total ?? 0));
   const header = "<tr><th>Model</th><th>mean</th><th>p50</th><th>p95</th><th>p99</th></tr>";
   t.innerHTML = header + models.map(m => {{
     const r = roll[m];
-    return `<tr><td>${{m}}</td><td>${{fmt(r.ttft_mean_s)}}</td><td>${{fmt(r.ttft_p50_s)}}</td><td>${{fmt(r.ttft_p95_s)}}</td><td>${{fmt(r.ttft_p99_s)}}</td></tr>`;
+    return `<tr><td>${{esc(m)}}</td><td>${{fmt(r.ttft_mean_s)}}</td><td>${{fmt(r.ttft_p50_s)}}</td><td>${{fmt(r.ttft_p95_s)}}</td><td>${{fmt(r.ttft_p99_s)}}</td></tr>`;
   }}).join("");
 }})();
 
@@ -692,10 +693,10 @@ bar("c_usd", "USD",   models.map(m => roll[m].cost_usd_total ?? 0));
   // Matrix
   if (pr.models.length >= 2) {{
     let html = '<h3>Win-rate matrix (row vs column)</h3><table class="matrix"><tr><th>vs</th>';
-    for (const c of pr.models) html += `<th>${{c}}</th>`;
+    for (const c of pr.models) html += `<th>${{esc(c)}}</th>`;
     html += "</tr>";
     for (const row of pr.models) {{
-      html += `<tr><th>${{row}}</th>`;
+      html += `<tr><th>${{esc(row)}}</th>`;
       for (const col of pr.models) {{
         const v = pr.matrix[row][col];
         if (v == null) {{ html += '<td>—</td>'; continue; }}

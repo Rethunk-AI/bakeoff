@@ -619,7 +619,7 @@ func (p pgShadowCatalog) listOrphans(ctx context.Context) ([]string, error) {
 }
 
 func (p pgShadowCatalog) drop(ctx context.Context, name string) error {
-	_, err := p.conn.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", name))
+	_, err := p.conn.Exec(ctx, "DROP TABLE IF EXISTS "+pgx.Identifier{name}.Sanitize())
 	return err
 }
 

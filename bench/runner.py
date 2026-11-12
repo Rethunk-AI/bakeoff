@@ -59,6 +59,7 @@ from bench.config import (
 )
 from bench.dataset import Task, generate, load_floor_tasks, write_jsonl
 from bench.failure import classify as classify_failure
+from bench.failure import is_refusal
 from bench.hardware import collect_hardware_context
 from bench.metrics import (
     PowerSampler,
@@ -333,7 +334,7 @@ def run_model_phase(
                     "quality_heuristic": score_heuristic(task.scorer, task.expected, res.text),
                     **engined_fields(res),
                     "tier": "main",
-                    "failure_code": None,
+                    "failure_code": "refusal" if is_refusal(res.text) else None,
                     "failure_detail": None,
                     "error": None,
                 }

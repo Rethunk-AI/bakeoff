@@ -460,6 +460,36 @@ def test_crash_after_first_model_keeps_its_records(tmp_path, monkeypatch):
     assert payload["judgements"] == []
 
 
+def test_refusal_body_sets_failure_code(monkeypatch):
+    from bench.clients import ChatResult
+    from bench.dataset import Task
+    from bench.runner import run_model_phase
+
+    res = ChatResult(
+        text="I cannot help with that request.",
+        prompt_tokens=1,
+        completion_tokens=1,
+        latency_s=0.1,
+        ttft_s=0.01,
+        tokens_per_sec=10.0,
+        raw={},
+    )
+    monkeypatch.setattr(
+        "bench.runner.call_one",
+        lambda *a, **k: (res, None, None, None, None, None),
+    )
+    recs = run_model_phase(
+        {"id": "m_a"},
+        [Task(id="t0", domain="qa", user_prompt="hi")],
+        [{"id": "plain", "system": ""}],
+        "http://localhost",
+        {"enabled": False},
+        5.0,
+        warmup=False,
+    )
+    assert recs[0]["failure_code"] == "refusal"
+
+
 def test_portable_result_write_is_atomic(tmp_path, monkeypatch):
     from bench.store import atomic_write_json
 

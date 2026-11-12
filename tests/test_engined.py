@@ -8,7 +8,9 @@ future schema drift surfaces here instead of at a live `systemctl reload`.
 from __future__ import annotations
 
 import json
+import os
 import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -300,6 +302,44 @@ class TestHoldLifecycle:
         before = len(posts)
         down()
         assert len(posts) == before
+
+    def test_up_preserves_previous_fragment_when_write_fails(self, tmp_path, monkeypatch):
+        path = tmp_path / "bakeoff.toml"
+        path.write_text("keep-me")
+        monkeypatch.setattr(engined, "FRAGMENT_PATH", path)
+        monkeypatch.setattr(engined, "subprocess", _NoSubprocess())
+        monkeypatch.setattr(engined, "_check_no_config_error", lambda url: None)
+        monkeypatch.setattr(engined, "_wait_for_models", lambda url, ids: None)
+
+        orig_write_text = Path.write_text
+
+        def partial_write_text(self, data, *args, **kwargs):
+            orig_write_text(self, str(data)[:2], *args, **kwargs)
+            raise RuntimeError("midway")
+
+        monkeypatch.setattr(Path, "write_text", partial_write_text)
+
+        orig_fdopen = os.fdopen
+
+        def partial_fdopen(fd, mode="r", *args, **kwargs):
+            handle = orig_fdopen(fd, mode, *args, **kwargs)
+            if "w" in str(mode):
+                inner = handle.write
+
+                def boom(data):
+                    inner(data[:2] if isinstance(data, str) else data)
+                    raise RuntimeError("midway")
+
+                handle.write = boom  # type: ignore[method-assign]
+            return handle
+
+        monkeypatch.setattr(os, "fdopen", partial_fdopen)
+        if hasattr(engined, "os"):
+            monkeypatch.setattr(engined.os, "fdopen", partial_fdopen)
+
+        with pytest.raises(RuntimeError, match="midway"):
+            up(_cfg(), "http://engined")
+        assert path.read_text() == "keep-me"
 
 
 class _NoSubprocess:

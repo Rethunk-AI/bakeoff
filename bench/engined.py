@@ -12,10 +12,13 @@ this module also owns the optional hold/unhold lifecycle against
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from pathlib import Path
@@ -227,7 +230,15 @@ def up(cfg: dict[str, Any], engined_url: str) -> None:
     """
     fragment = render_fragment(cfg)
     FRAGMENT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    FRAGMENT_PATH.write_text(fragment)
+    fd, tmp_path = tempfile.mkstemp(dir=FRAGMENT_PATH.parent, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(fragment)
+        os.replace(tmp_path, FRAGMENT_PATH)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            os.unlink(tmp_path)
+        raise
 
     subprocess.run(["systemctl", "--user", "reload", "engined"], check=True)
     _check_no_config_error(engined_url)

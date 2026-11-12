@@ -273,6 +273,11 @@ def test_load_latest_result_skips_other_models(tmp_path):
     assert load_latest_result(tmp_path, model_id="missing") is None
 
 
+def test_load_latest_result_skips_file_without_model_ids(tmp_path):
+    (tmp_path / "run-empty.json").write_text(json.dumps({"run_id": "empty"}))
+    assert load_latest_result(tmp_path, model_id="qwen3.5-9b") is None
+
+
 def test_heartbeat_loop_retries_after_one_failure():
     class Flaky:
         def __init__(self) -> None:

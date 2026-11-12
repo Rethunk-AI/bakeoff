@@ -236,7 +236,7 @@ def load_latest_result(
             continue
         if model_id is not None:
             ids = _result_model_ids(data)
-            if ids and model_id not in ids:
+            if not ids or model_id not in ids:
                 continue
         return data
     return None

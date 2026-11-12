@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from bench.report import _pareto_frontier, _percentile, _rollup
+from bench.report import _pareto_frontier, _percentile, _rollup, emit_html
 
 # --- _percentile ----------------------------------------------------------
 
@@ -144,3 +144,18 @@ def test_pareto_ties_in_energy_best_quality_wins():
     # Two points at identical energy: the higher-quality one dominates.
     pts = [("low", 0.5, 1.0), ("high", 0.9, 1.0)]
     assert _pareto_frontier(pts) == ["high"]
+
+
+def test_emit_html_does_not_close_script_from_record_text(tmp_path):
+    """Model text must not inject extra </script> tags into the dashboard."""
+    safe_path = tmp_path / "safe.html"
+    html_path = tmp_path / "dash.html"
+    base = {"timestamp": "t", "run_id": "r", "records": [{"text": "ok"}]}
+    payload = {
+        "timestamp": "t",
+        "run_id": "r",
+        "records": [{"text": "</script><script>alert(1)</script>"}],
+    }
+    emit_html(base, safe_path)
+    emit_html(payload, html_path)
+    assert html_path.read_text().count("</script>") == safe_path.read_text().count("</script>")

@@ -849,7 +849,7 @@ def emit_html(payload: dict[str, Any], path: Path) -> None:
         run_id=payload.get("run_id", payload["timestamp"]),
         ts=payload["timestamp"],
         prov_line=_html_prov_line(prov),
-        payload_json=json.dumps(payload),
+        payload_json=json.dumps(payload).replace("<", "\\u003c"),
     )
     path.write_text(html)
 

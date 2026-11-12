@@ -25,6 +25,7 @@ jobs:
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       with:
         repository: Rethunk-AI/bakeoff
+        persist-credentials: false
 
     - uses: Rethunk-Tech/gh-actions/setup-python@00f86ab1d379ecfb8d7d5b5cfa6e21a2722ac159 # v1.25
       with:
@@ -46,9 +47,10 @@ jobs:
       env:
         GH_TOKEN: ${{ secrets.BAKEOFF_RESULTS_TOKEN }}
         GITHUB_TOKEN: ${{ secrets.BAKEOFF_RESULTS_TOKEN }}
+        STEPS_PACKAGE_OUTPUTS_BUNDLE_DIR: ${{ steps.package.outputs.bundle_dir }}
       run: |
         git config --global user.name "Bastion Agent"
         git config --global user.email "bastion-agent@rethunk.tech"
-        uv run bench publish submit "${{ steps.package.outputs.bundle_dir }}" \
+        uv run bench publish submit "${STEPS_PACKAGE_OUTPUTS_BUNDLE_DIR}" \
           --repo Rethunk-AI/bakeoff-results \
           --checkout ../bakeoff-results

@@ -13,8 +13,6 @@ Add a disk-based persistence layer (directory-per-table, UUID-filename records) 
 ## Non-Goals
 
 - No database (psycopg/sqlite) in `bench/`.
-- URL-submit → upstream-metadata-pull pipeline deferred to P2.
-- Embedded GGUF metadata cross-check deferred to P2.
 - `bench/runner.py` default path is not changed; the queue is opt-in only.
 
 ## Design

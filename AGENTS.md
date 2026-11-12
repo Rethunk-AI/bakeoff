@@ -14,6 +14,7 @@ bench/
   clients.py         httpx OpenAI-compat client; prefers content, falls back to reasoning_content
   compare.py         diff two result JSON files → Markdown report
   config.py          config loading + validation gate
+  constants.py       project-wide UUID namespaces for descriptor identity
   dataset.py         seeded synthetic tasks (qa / code / summarize / classify)
   descriptor.py      model descriptor reader/validator/persister
   gguf_meta.py       read-only bounded GGUF header reader + descriptor cross-check
@@ -26,6 +27,7 @@ bench/
   publish.py         validate/package/sign/submit result bundles for bakeoff-results
   queue.py           opt-in disk-backed run queue (pending/ + completed/) + runner register/heartbeat (claim needs a live runner)
   report.py          JSON + Markdown + single-file HTML dashboard
+  report_cli.py      bakeoff-report CLI: generate md/html reports for stored runs
   resume.py          resume support from a prior partial result
   runner.py          declare fragment → warmup + matrix per model → judge → release fragment
   upstream.py        Hugging Face URL → descriptor: URL parse, one timeout-bound fetch, upstream validation

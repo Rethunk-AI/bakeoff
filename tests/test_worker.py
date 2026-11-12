@@ -4,13 +4,21 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any
 
 import pytest
 
 from bench.signing import generate_keypair, verify_result
-from bench.worker import QueueClient, WorkerError, load_latest_result, run_loop, stub_result
+from bench.worker import (
+    QueueClient,
+    WorkerError,
+    _heartbeat_loop,
+    load_latest_result,
+    run_loop,
+    stub_result,
+)
 
 
 class QueueFake:
@@ -263,3 +271,26 @@ def test_load_latest_result_skips_other_models(tmp_path):
     assert result is not None
     assert result["run_id"] == "new"
     assert load_latest_result(tmp_path, model_id="missing") is None
+
+
+def test_heartbeat_loop_retries_after_one_failure():
+    class Flaky:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def heartbeat(self, job_id: str) -> dict[str, Any]:
+            self.calls += 1
+            if self.calls == 1:
+                raise WorkerError("blip")
+            return {}
+
+    client = Flaky()
+    stop = threading.Event()
+    thread = threading.Thread(target=_heartbeat_loop, args=(client, "job-1", stop, 0.01))
+    thread.start()
+    deadline = time.monotonic() + 2
+    while client.calls < 2 and time.monotonic() < deadline:
+        time.sleep(0.01)
+    stop.set()
+    thread.join(timeout=2)
+    assert client.calls >= 2

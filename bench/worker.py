@@ -268,7 +268,6 @@ def _heartbeat_loop(
             client.heartbeat(job_id)
         except WorkerError as exc:
             print(f"[worker] heartbeat failed: {exc}", file=sys.stderr)
-            return
 
 
 def run_once(

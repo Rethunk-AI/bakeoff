@@ -6,6 +6,7 @@ import json
 import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from typing import Any
 
 import pytest
@@ -15,6 +16,7 @@ from bench.worker import (
     QueueClient,
     WorkerError,
     _heartbeat_loop,
+    execute_job,
     load_latest_result,
     run_loop,
     stub_result,
@@ -276,6 +278,15 @@ def test_load_latest_result_skips_other_models(tmp_path):
 def test_load_latest_result_skips_file_without_model_ids(tmp_path):
     (tmp_path / "run-empty.json").write_text(json.dumps({"run_id": "empty"}))
     assert load_latest_result(tmp_path, model_id="qwen3.5-9b") is None
+
+
+def test_execute_job_rejects_flag_like_model_id(monkeypatch):
+    def boom(*args, **kwargs):
+        raise AssertionError("spawned")
+
+    monkeypatch.setattr("bench.worker.subprocess.run", boom)
+    with pytest.raises(WorkerError):
+        execute_job(Path("config.yaml"), "--help")
 
 
 def test_heartbeat_loop_retries_after_one_failure():

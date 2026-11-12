@@ -11,6 +11,7 @@ import argparse
 import getpass
 import json
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -243,6 +244,8 @@ def load_latest_result(
 
 
 def execute_job(config: Path, model_id: str) -> None:
+    if model_id.startswith("-") or not re.fullmatch(r"[a-z0-9_-]+", model_id):
+        raise WorkerError(f"invalid model id: {model_id!r}")
     cmd = [
         sys.executable,
         "-m",

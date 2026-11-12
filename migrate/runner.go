@@ -28,6 +28,8 @@ type Config struct {
 	IgnoreIsFatal bool
 	// DryRun: execute scripts, accumulate counts, report without committing.
 	DryRun bool
+	// Rollback: drop orphan shadow tables from an interrupted run, then exit.
+	Rollback bool
 	// ProcessingTimeTarget: target processing time per batch (default 20s).
 	ProcessingTimeTarget float64
 	// CommitTimeTarget: target commit time per batch (default 1s).
@@ -46,10 +48,18 @@ func DefaultConfig() Config {
 	}
 }
 
+// shadowCatalog is the orphan-shadow listing/drop surface used by resumeGate.
+type shadowCatalog interface {
+	listOrphans(ctx context.Context) ([]string, error)
+	drop(ctx context.Context, name string) error
+}
+
 // MigrationRunner executes schema and record migration scripts against a PostgreSQL DB.
 type MigrationRunner struct {
 	conn *pgx.Conn
 	cfg  Config
+	// shadows, if set, replaces the live pg_tables catalog (tests).
+	shadows shadowCatalog
 }
 
 // NewRunner constructs a MigrationRunner with the provided pgx connection and config.
@@ -85,6 +95,9 @@ func (r *MigrationRunner) Run(ctx context.Context, schemaVersionID int) error {
 	// 1. Resume gate — detect orphan shadow tables.
 	if err := r.resumeGate(ctx); err != nil {
 		return fmt.Errorf("resume gate: %w", err)
+	}
+	if r.cfg.Rollback {
+		return nil
 	}
 
 	// 2. Load schema version.
@@ -577,16 +590,20 @@ func (r *MigrationRunner) maybeDropStateTable(ctx context.Context, stateTable st
 	return nil
 }
 
-// resumeGate detects orphan shadow tables and prompts the operator.
-func (r *MigrationRunner) resumeGate(ctx context.Context) error {
-	rows, err := r.conn.Query(ctx, `
+// pgShadowCatalog lists and drops orphan shadow tables via pg_tables.
+type pgShadowCatalog struct {
+	conn *pgx.Conn
+}
+
+func (p pgShadowCatalog) listOrphans(ctx context.Context) ([]string, error) {
+	rows, err := p.conn.Query(ctx, `
 		SELECT tablename FROM pg_tables
 		WHERE schemaname = 'public'
 		AND tablename LIKE '_bakeoff_migration_%'
 		AND tablename NOT LIKE '_bakeoff_migration_state'
 	`)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -594,11 +611,45 @@ func (r *MigrationRunner) resumeGate(ctx context.Context) error {
 	for rows.Next() {
 		var name string
 		if err := rows.Scan(&name); err != nil {
-			return err
+			return nil, err
 		}
 		orphans = append(orphans, name)
 	}
+	return orphans, rows.Err()
+}
+
+func (p pgShadowCatalog) drop(ctx context.Context, name string) error {
+	_, err := p.conn.Exec(ctx, fmt.Sprintf("DROP TABLE IF EXISTS %s", name))
+	return err
+}
+
+func (r *MigrationRunner) catalog() shadowCatalog {
+	if r.shadows != nil {
+		return r.shadows
+	}
+	return pgShadowCatalog{conn: r.conn}
+}
+
+// resumeGate detects orphan shadow tables and prompts the operator.
+func (r *MigrationRunner) resumeGate(ctx context.Context) error {
+	orphans, err := r.catalog().listOrphans(ctx)
+	if err != nil {
+		return err
+	}
 	if len(orphans) == 0 {
+		if r.cfg.Rollback {
+			log.Printf("[migrate] no orphan shadow tables to roll back")
+		}
+		return nil
+	}
+
+	if r.cfg.Rollback {
+		for _, name := range orphans {
+			if err := r.catalog().drop(ctx, name); err != nil {
+				return fmt.Errorf("drop orphan %s: %w", name, err)
+			}
+			log.Printf("[migrate] dropped orphan shadow table %s", name)
+		}
 		return nil
 	}
 
@@ -607,7 +658,7 @@ func (r *MigrationRunner) resumeGate(ctx context.Context) error {
 	for _, name := range orphans {
 		log.Printf("  %s", name)
 	}
-	log.Printf("[migrate] Continuing automatically (resume semantics); drop them manually if unwanted.")
+	log.Printf("[migrate] Continuing automatically (resume semantics); use --rollback to drop them.")
 	return nil
 }
 

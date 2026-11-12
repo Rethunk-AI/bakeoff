@@ -33,6 +33,7 @@ func run() error {
 		maxRejects   = fs.Int("max-rejects", 10, "abort after N rejects (0=first, -1=collect all)")
 		ignoreFatal  = fs.Bool("ignore-is-fatal", false, "treat any ignoreRecord as a fatal error")
 		dryRun       = fs.Bool("dry-run", false, "execute scripts without committing; report counts only")
+		rollback     = fs.Bool("rollback", false, "drop orphan shadow tables from an interrupted run and exit")
 		procTarget   = fs.Float64("batch-target-processing-time", 20.0, "target seconds per batch processing phase")
 		commitTarget = fs.Float64("batch-target-commit-time", 1.0, "target seconds per batch commit phase")
 		dsn          = fs.String("dsn", "", "PostgreSQL DSN (default: DATABASE_URL env var)")
@@ -46,15 +47,19 @@ func run() error {
 		return errors.New("--batch-size -1 is invalid; use 0 for dynamic sizing or N>0 for a fixed batch size")
 	}
 
-	if fs.NArg() != 1 {
+	if !*rollback && fs.NArg() != 1 {
 		fmt.Fprintf(os.Stderr, "Usage: bakeoff-migrate [flags] <schema_version_id>\n\n")
 		fs.PrintDefaults()
 		return errors.New("schema_version_id argument is required")
 	}
 
-	schemaVersionID, err := strconv.Atoi(fs.Arg(0))
-	if err != nil || schemaVersionID <= 0 {
-		return fmt.Errorf("schema_version_id must be a positive integer, got %q", fs.Arg(0))
+	var schemaVersionID int
+	if fs.NArg() >= 1 {
+		var err error
+		schemaVersionID, err = strconv.Atoi(fs.Arg(0))
+		if err != nil || schemaVersionID <= 0 {
+			return fmt.Errorf("schema_version_id must be a positive integer, got %q", fs.Arg(0))
+		}
 	}
 
 	// Resolve DSN.
@@ -79,13 +84,18 @@ func run() error {
 		MaxRejects:           *maxRejects,
 		IgnoreIsFatal:        *ignoreFatal,
 		DryRun:               *dryRun,
+		Rollback:             *rollback,
 		ProcessingTimeTarget: *procTarget,
 		CommitTimeTarget:     *commitTarget,
 	}
 
 	runner := migrate.NewRunner(conn, cfg)
 
-	log.Printf("[bakeoff-migrate] starting migration for schema version %d (dry-run=%v)", schemaVersionID, *dryRun)
+	if *rollback {
+		log.Printf("[bakeoff-migrate] rolling back orphan shadow tables")
+	} else {
+		log.Printf("[bakeoff-migrate] starting migration for schema version %d (dry-run=%v)", schemaVersionID, *dryRun)
+	}
 
 	if err := runner.Run(ctx, schemaVersionID); err != nil {
 		return fmt.Errorf("[bakeoff-migrate] FAILED: %w", err)

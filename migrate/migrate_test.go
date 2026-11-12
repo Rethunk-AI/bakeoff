@@ -282,6 +282,9 @@ func TestDefaultConfig(t *testing.T) {
 	if cfg.DryRun {
 		t.Error("DryRun should default false")
 	}
+	if cfg.Rollback {
+		t.Error("Rollback should default false")
+	}
 	if cfg.ProcessingTimeTarget != 20.0 {
 		t.Errorf("ProcessingTimeTarget: want 20.0, got %v", cfg.ProcessingTimeTarget)
 	}
@@ -804,6 +807,66 @@ func TestRunner_InvalidBatchSize(t *testing.T) {
 	err := r.Run(nil, 1) //nolint:staticcheck // nil ctx intentional (error before DB use)
 	if err == nil || !strings.Contains(err.Error(), "batch-size -1") {
 		t.Fatalf("BatchSize=-1 should produce descriptive error, got %v", err)
+	}
+}
+
+// memShadowCatalog is an in-memory public-table catalog for --rollback tests.
+type memShadowCatalog struct {
+	tables map[string]bool
+}
+
+func newMemShadowCatalog(names ...string) *memShadowCatalog {
+	tables := make(map[string]bool, len(names))
+	for _, name := range names {
+		tables[name] = true
+	}
+	return &memShadowCatalog{tables: tables}
+}
+
+func (m *memShadowCatalog) listOrphans(context.Context) ([]string, error) {
+	var orphans []string
+	for name := range m.tables {
+		if strings.HasPrefix(name, "_bakeoff_migration_") && name != "_bakeoff_migration_state" {
+			orphans = append(orphans, name)
+		}
+	}
+	return orphans, nil
+}
+
+func (m *memShadowCatalog) drop(_ context.Context, name string) error {
+	delete(m.tables, name)
+	return nil
+}
+
+func TestRollback_DropsOrphanShadowTablesOnly(t *testing.T) {
+	cat := newMemShadowCatalog(
+		"users",
+		"schema_versions",
+		"_bakeoff_migration_users_1",
+		"_bakeoff_migration_state",
+		"_bakeoff_old_users",
+	)
+	r := NewRunner(nil, Config{Rollback: true})
+	r.shadows = cat
+
+	if err := r.Run(context.Background(), 1); err != nil {
+		t.Fatalf("rollback: %v", err)
+	}
+
+	if cat.tables["_bakeoff_migration_users_1"] {
+		t.Fatal("orphan shadow table _bakeoff_migration_users_1 should have been dropped")
+	}
+	if !cat.tables["users"] {
+		t.Fatal("real table users was dropped")
+	}
+	if !cat.tables["schema_versions"] {
+		t.Fatal("real table schema_versions was dropped")
+	}
+	if !cat.tables["_bakeoff_old_users"] {
+		t.Fatal("real table _bakeoff_old_users was dropped")
+	}
+	if !cat.tables["_bakeoff_migration_state"] {
+		t.Fatal("state table _bakeoff_migration_state was dropped")
 	}
 }
 

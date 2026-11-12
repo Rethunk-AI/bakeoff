@@ -150,8 +150,8 @@ func (r *MigrationRunner) runSchemaScript(ctx context.Context, script string) er
 	return nil
 }
 
-// runRecordMigration runs the record_migration_script for a single table.
-// Uses shadow table strategy unless inline path is taken.
+// runRecordMigration runs the record_migration_script for a single table
+// using the shadow table strategy.
 func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersion, table SchemaTable) error {
 	script := *sv.RecordMigrationScript
 
@@ -162,18 +162,7 @@ func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersi
 		return fmt.Errorf("record script compile error (fatal): %w", err)
 	}
 
-	// Determine shadow table name.
 	shadowTable := fmt.Sprintf("_bakeoff_migration_%s_%d", sanitizeName(table.TableName), sv.ID)
-
-	// Inline path: if no structural DDL change and UUID namespace unchanged,
-	// migrate against the live table. Detection is not implemented, so this
-	// always takes the shadow table path.
-	inlinePath := false
-
-	if inlinePath {
-		return r.runRecordMigrationInline(table)
-	}
-
 	return r.runRecordMigrationShadow(ctx, sv, table, script, shadowTable)
 }
 
@@ -246,11 +235,6 @@ func (r *MigrationRunner) runRecordMigrationShadow(
 	}
 
 	return nil
-}
-
-// runRecordMigrationInline migrates records against the live table (no shadow).
-func (r *MigrationRunner) runRecordMigrationInline(table SchemaTable) error {
-	return fmt.Errorf("inline migration path not yet implemented for table %q", table.TableName)
 }
 
 // migrationStats tracks per-run counters.

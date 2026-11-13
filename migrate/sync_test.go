@@ -404,3 +404,22 @@ func TestSync_SkipsCellsWhoseModelNameIsAmbiguous(t *testing.T) {
 		t.Fatalf("run_model_metrics = %d, want 0: two models share the name", got)
 	}
 }
+
+func TestSync_RejectsUnknownRecordSchemaVersion(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := t.TempDir()
+	modelDir := filepath.Join(dir, "models")
+	if err := os.MkdirAll(modelDir, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(modelDir, uuid.NewString()+".json"), map[string]any{
+		"schema_version": 2, "name": "FutureShape",
+	})
+	err := Sync(ctx, conn, dir, "")
+	if err == nil || !strings.Contains(err.Error(), "schema_version") {
+		t.Fatalf("sync err = %v, want schema_version error", err)
+	}
+	if got := countTable(t, ctx, conn, "models"); got != 0 {
+		t.Fatalf("models = %d, want 0", got)
+	}
+}

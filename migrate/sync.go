@@ -25,6 +25,9 @@ const (
 	creatorNamespace = "efaf4f4e-cbd1-43f7-a535-f72079513d00"
 )
 
+// recordSchemaVersion matches SCHEMA_VERSION in bench/store.py.
+const recordSchemaVersion = 1
+
 type rowCounts map[string]int64
 
 type ingestFunc func(ctx context.Context, tx pgx.Tx, path string, rec map[string]any) (rowCounts, error)
@@ -102,6 +105,11 @@ func loadRecord(path string) (map[string]any, error) {
 	rec, ok := v.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("must contain a JSON object")
+	}
+	// Flat results files carry no schema_version; store records always do, and
+	// a newer shape read with this version's field mapping would ingest wrong.
+	if sv, ok := rec["schema_version"]; ok && sv != float64(recordSchemaVersion) {
+		return nil, fmt.Errorf("unsupported schema_version %v (want %d)", sv, recordSchemaVersion)
 	}
 	return rec, nil
 }

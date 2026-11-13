@@ -293,3 +293,41 @@ func TestSync_IngestsPerCellResults(t *testing.T) {
 		t.Fatalf("missing skip log: %q", buf.String())
 	}
 }
+
+func TestSync_IngestsRealShapedRunWithoutPromptStore(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := writeFixtureStore(t)
+	results := filepath.Join(dir, "results")
+	cell := func(model, prompt string, q float64) map[string]any {
+		return map[string]any{"model_id": model, "prompt_id": prompt, "task_id": "t1", "quality_heuristic": q}
+	}
+	writeJSON(t, filepath.Join(results, "run-real.json"), map[string]any{
+		"run_id": "11111111-1111-1111-1111-111111111111", "submitted_at": "2026-01-01T00:00:00Z",
+		"publisher_id": "test", "run_status": "complete",
+		"config": map[string]any{
+			"models":  []any{map[string]any{"id": "test_model_q4", "filename": "TestModel-Q4_K_M.gguf"}},
+			"prompts": []any{map[string]any{"id": "plain", "system": "Answer concisely."}},
+		},
+		"records": []any{
+			cell("test_model_q4", "plain", 1.0), cell("test_model_q4", "plain", 0.5),
+			cell("test_model_q4", "floor", 1.0), cell("ghost", "plain", 1.0),
+		},
+	})
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	var n int
+	if err := conn.QueryRow(ctx, "SELECT COUNT(*) FROM run_model_metrics").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 2 {
+		t.Fatalf("run_model_metrics rows=%d, want 2 (plain, floor)", n)
+	}
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("re-sync: %v", err)
+	}
+	var p int
+	if err := conn.QueryRow(ctx, "SELECT COUNT(*) FROM prompts").Scan(&p); err != nil || p != 2 {
+		t.Fatalf("prompts=%d err=%v, want 2 after re-sync", p, err)
+	}
+}

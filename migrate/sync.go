@@ -2,6 +2,8 @@ package migrate
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -387,6 +389,13 @@ func ingestRunMetrics(ctx context.Context, tx pgx.Tx, runID uuid.UUID, rec map[s
 	if len(cells) == 0 {
 		return 0, nil
 	}
+	harness, _ := rec["config"].(map[string]any)
+	gitRef := asString(rec, "prompt_git_hash")
+	if prov, ok := rec["provenance"].(map[string]any); ok && gitRef == "" {
+		if g, ok := prov["git"].(map[string]any); ok {
+			gitRef = asString(g, "sha")
+		}
+	}
 	aggs := map[[2]string]*cellAgg{}
 	var order [][2]string
 	var skipped int
@@ -399,8 +408,8 @@ func ingestRunMetrics(ctx context.Context, tx pgx.Tx, runID uuid.UUID, rec map[s
 		key := [2]string{asString(cell, "prompt_id"), asString(cell, "model_id")}
 		agg, seen := aggs[key]
 		if !seen {
-			modelID, okM := resolveModelKey(ctx, tx, key[1])
-			promptID, okP := resolvePromptKey(ctx, tx, key[0])
+			modelID, okM := resolveModelKey(ctx, tx, key[1], harness)
+			promptID, okP := resolvePromptKey(ctx, tx, key[0], harness, gitRef)
 			if okM && okP {
 				agg = &cellAgg{promptID: promptID, modelID: modelID}
 				order = append(order, key)
@@ -447,15 +456,64 @@ func ingestRunMetrics(ctx context.Context, tx pgx.Tx, runID uuid.UUID, rec map[s
 	return total, nil
 }
 
-func resolveModelKey(ctx context.Context, tx pgx.Tx, key string) (uuid.UUID, bool) {
+// resolveModelKey maps a harness model id (config.yaml `id`, e.g.
+// "llama3_1_8b_q4") to the models row named after its GGUF file, falling
+// back to a direct name or UUID match.
+func resolveModelKey(ctx context.Context, tx pgx.Tx, key string, cfg map[string]any) (uuid.UUID, bool) {
+	name := key
+	entries, _ := cfg["models"].([]any)
+	for _, e := range entries {
+		if m, ok := e.(map[string]any); ok && asString(m, "id") == key {
+			file := asString(m, "filename")
+			if file == "" {
+				file = filepath.Base(asString(m, "gguf"))
+			}
+			name = strings.TrimSuffix(file, ".gguf")
+			break
+		}
+	}
 	var id uuid.UUID
-	err := tx.QueryRow(ctx, "SELECT model_id FROM models WHERE name = $1 OR model_id::text = $1 LIMIT 1", key).Scan(&id)
+	err := tx.QueryRow(ctx, "SELECT model_id FROM models WHERE name = $1 OR model_id::text = $1 LIMIT 1", name).Scan(&id)
 	return id, err == nil
 }
 
-func resolvePromptKey(ctx context.Context, tx pgx.Tx, key string) (int, bool) {
+// harnessTaskHash anchors prompt variants the harness defines per run: the
+// prompts table requires a task, and a variant applies to every task.
+const harnessTaskHash = "bakeoff:harness-prompt-variants"
+
+// resolvePromptKey finds a stored prompt by content hash or path, else
+// registers the run's prompt variant (config.prompts `id`, or the
+// system-less "floor" cell) as a prompts row keyed by id plus system text.
+func resolvePromptKey(ctx context.Context, tx pgx.Tx, key string, cfg map[string]any, gitRef string) (int, bool) {
 	var id int
-	err := tx.QueryRow(ctx, "SELECT prompt_id FROM prompts WHERE content_sha256 = $1 OR file_path = $1 LIMIT 1", key).Scan(&id)
+	if err := tx.QueryRow(ctx, "SELECT prompt_id FROM prompts WHERE content_sha256 = $1 OR file_path = $1 LIMIT 1", key).Scan(&id); err == nil {
+		return id, true
+	}
+	system, found := "", key == "floor"
+	entries, _ := cfg["prompts"].([]any)
+	for _, e := range entries {
+		if p, ok := e.(map[string]any); ok && asString(p, "id") == key {
+			system, found = asString(p, "system"), true
+			break
+		}
+	}
+	if !found {
+		return 0, false
+	}
+	if gitRef == "" {
+		gitRef = "unknown"
+	}
+	sum := sha256.Sum256([]byte(key + "\x00" + system))
+	sha := hex.EncodeToString(sum[:])
+	err := tx.QueryRow(ctx, `
+		WITH t AS (
+			INSERT INTO tasks (name, natural_key_hash) VALUES ('harness prompt variants', $1)
+			ON CONFLICT (natural_key_hash) DO UPDATE SET natural_key_hash = EXCLUDED.natural_key_hash
+			RETURNING task_id)
+		INSERT INTO prompts (task_id, file_path, git_commit_hash, content_sha256, content_length_bytes)
+		SELECT task_id, $2, $3, $4, $5 FROM t
+		ON CONFLICT (content_sha256) DO UPDATE SET content_sha256 = EXCLUDED.content_sha256
+		RETURNING prompt_id`, harnessTaskHash, key, gitRef, sha, len(system)).Scan(&id)
 	return id, err == nil
 }
 

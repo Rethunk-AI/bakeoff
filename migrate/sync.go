@@ -519,6 +519,12 @@ func resolvePromptKey(ctx context.Context, tx pgx.Tx, key string, cfg map[string
 
 func ingestQueueFile(ctx context.Context, tx pgx.Tx, path string, rec map[string]any) (rowCounts, error) {
 	counts := rowCounts{"run_queue": 0}
+	// The runner's per-run lifecycle record shares this directory but names no
+	// prompt; run_queue rows are per-prompt work items, so it has no row here.
+	if first(rec, "prompt_id", "content_sha256") == nil {
+		log.Printf("%s: skipped run lifecycle record without prompt_id", path)
+		return counts, nil
+	}
 	qid, err := parseUUID(first(rec, "queue_id"), strings.TrimSuffix(filepath.Base(path), ".json"))
 	if err != nil {
 		return counts, fmt.Errorf("queue_id: %w", err)

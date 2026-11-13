@@ -331,3 +331,24 @@ func TestSync_IngestsRealShapedRunWithoutPromptStore(t *testing.T) {
 		t.Fatalf("prompts=%d err=%v, want 2 after re-sync", p, err)
 	}
 }
+
+func TestSync_SkipsRunnerLifecycleQueueRecords(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := writeFixtureStore(t)
+	completed := filepath.Join(dir, "run_queue", "completed")
+	if err := os.MkdirAll(completed, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	qid := uuid.New()
+	writeJSON(t, filepath.Join(completed, qid.String()+".json"), map[string]any{
+		"queue_id": qid.String(),
+		"run_id":   "ab-run-001",
+		"status":   "error",
+	})
+	if err := Sync(ctx, conn, dir, filepath.Join(dir, "results")); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if got := countTable(t, ctx, conn, "run_queue"); got != 0 {
+		t.Fatalf("run_queue rows = %d, want 0", got)
+	}
+}

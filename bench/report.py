@@ -66,6 +66,10 @@ def _fmt(v: float | None, nd: int = 3) -> str:
     return "—" if v is None else f"{v:.{nd}f}"
 
 
+def _n_cell(r: dict[str, Any]) -> str:
+    return f"{r['n']} (+{r['n_failed']} failed)" if r["n_failed"] else str(r["n"])
+
+
 def _extract_field(rows: list[dict[str, Any]], key: str) -> list[float]:
     """Extract non-None values for a key from a list of dicts."""
     return [r[key] for r in rows if r.get(key) is not None]
@@ -83,8 +87,11 @@ def _rollup(
     derived from the aggregated energy.
     """
     by_model: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    failed: dict[str, int] = defaultdict(int)
     for r in records:
         if r.get("error"):
+            failed[r["model_id"]] += 1
+            by_model.setdefault(r["model_id"], [])
             continue
         by_model[r["model_id"]].append(r)
 
@@ -109,6 +116,7 @@ def _rollup(
 
         out[mid] = {
             "n": len(rows),
+            "n_failed": failed[mid],
             "latency_mean_s": mean(lat) if lat else None,
             "latency_p50_s": _percentile(lat, 50),
             "latency_p95_s": _percentile(lat, 95),
@@ -272,7 +280,7 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
             s = sr["per_model"].get(mid)
             score_cell = f"{_fmt(s['mean'], 2)} ± {_fmt(s['stdev'], 2)} (n={s['n']})" if s else "—"
             lines.append(
-                f"| {mid} | {r['n']} | {_fmt(r['latency_mean_s'])} | "
+                f"| {mid} | {_n_cell(r)} | {_fmt(r['latency_mean_s'])} | "
                 f"{_fmt(r['tokens_per_sec_mean'], 2)} | {_fmt(r['energy_wh_total'])} | "
                 f"{_fmt(r['cost_usd_total'], 4)} | {_fmt(r['quality_heuristic_mean'], 3)} | "
                 f"{score_cell} |"
@@ -285,7 +293,7 @@ def emit_markdown(payload: dict[str, Any], path: Path) -> None:
         lines.append("|---|---:|---:|---:|---:|---:|---:|")
         for mid, r in roll.items():
             lines.append(
-                f"| {mid} | {r['n']} | {_fmt(r['latency_mean_s'])} | "
+                f"| {mid} | {_n_cell(r)} | {_fmt(r['latency_mean_s'])} | "
                 f"{_fmt(r['tokens_per_sec_mean'], 2)} | {_fmt(r['energy_wh_total'])} | "
                 f"{_fmt(r['cost_usd_total'], 4)} | {_fmt(r['quality_heuristic_mean'], 3)} |"
             )
@@ -612,7 +620,7 @@ const esc = v => String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(
     }} else if (mode === "pairwise") {{
       extra = "<td>" + (pair.rates[m] != null ? fmtPct(pair.rates[m]) : "—") + "</td>";
     }}
-    return `<tr><td>${{esc(m)}}</td><td>${{r.n}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.tokens_per_sec_mean,2)}}</td><td>${{fmt(r.energy_wh_total)}}</td><td>${{fmt(r.cost_usd_total,4)}}</td><td>${{fmt(r.quality_heuristic_mean)}}</td>${{extra}}</tr>`;
+    return `<tr><td>${{esc(m)}}</td><td>${{r.n}}${{r.n_failed ? " (+" + r.n_failed + " failed)" : ""}}</td><td>${{fmt(r.latency_mean_s)}}</td><td>${{fmt(r.tokens_per_sec_mean,2)}}</td><td>${{fmt(r.energy_wh_total)}}</td><td>${{fmt(r.cost_usd_total,4)}}</td><td>${{fmt(r.quality_heuristic_mean)}}</td>${{extra}}</tr>`;
   }}).join("");
 }})();
 

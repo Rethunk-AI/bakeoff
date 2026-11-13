@@ -168,3 +168,12 @@ def test_emit_html_escapes_model_names_before_innerhtml(tmp_path):
     assert "const esc =" in html
     assert "<td>${m}</td>" not in html
     assert "<td>${esc(m)}</td>" in html
+
+
+def test_rollup_keeps_all_failed_model_and_counts_failures():
+    recs = [_rec("m1", 1.0), {"model_id": "m1", "error": "x"}, {"model_id": "m2", "error": "y"}]
+    out = _rollup(recs)
+    assert out["m1"]["n_failed"] == 1
+    assert out["m2"]["n"] == 0
+    assert out["m2"]["n_failed"] == 1
+    assert out["m2"]["latency_mean_s"] is None

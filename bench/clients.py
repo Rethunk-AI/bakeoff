@@ -155,6 +155,8 @@ class ChatClient:
                 chunk = _parse_sse_chunk(line)
                 if chunk is None:
                     continue
+                if "error" in chunk:
+                    raise RuntimeError(f"server error mid-stream: {chunk['error']}")
                 last_chunk = chunk
                 u = chunk.get("usage")
                 if u:

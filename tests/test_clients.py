@@ -97,3 +97,16 @@ def test_extract_delta_usage_chunk_has_no_delta():
     )
     assert c == ""
     assert r == ""
+
+
+def test_stream_error_chunk_fails_the_call(monkeypatch):
+    import pytest
+
+    from bench.clients import ChatClient
+
+    body = 'data: {"error": {"message": "out of memory"}}\n\ndata: [DONE]\n\n'
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, text=body))
+    real = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=transport, **kw))
+    with pytest.raises(RuntimeError, match="out of memory"):
+        ChatClient("http://x/v1", "m").chat([{"role": "user", "content": "hi"}])

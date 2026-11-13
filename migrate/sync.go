@@ -374,6 +374,11 @@ func ingestRunFile(ctx context.Context, tx pgx.Tx, path string, rec map[string]a
 	}
 	m, err := ingestRunMetrics(ctx, tx, id, rec)
 	counts["run_model_metrics"] = m
+	if err != nil {
+		return counts, err
+	}
+	h, err := ingestRunHardwareMetrics(ctx, tx, id, rec)
+	counts["run_hardware_metrics"] = h
 	return counts, err
 }
 
@@ -384,6 +389,53 @@ type cellAgg struct {
 	scored   int
 	failure  string
 	detail   string
+}
+
+func runHardwareMetricsSQL() string {
+	return `
+		INSERT INTO run_hardware_metrics (
+			run_id, system_hardware_id, slot_index, system_software_id,
+			peak_vram_mb, power_limit_w, measured_tflops
+		) VALUES ($1, $2, $3, $4, $5, $6, $7)
+		ON CONFLICT (run_id) DO UPDATE SET
+			system_hardware_id = EXCLUDED.system_hardware_id,
+			slot_index = EXCLUDED.slot_index,
+			system_software_id = EXCLUDED.system_software_id,
+			peak_vram_mb = EXCLUDED.peak_vram_mb,
+			power_limit_w = EXCLUDED.power_limit_w,
+			measured_tflops = EXCLUDED.measured_tflops
+		WHERE (run_hardware_metrics.system_hardware_id, run_hardware_metrics.slot_index,
+			run_hardware_metrics.system_software_id, run_hardware_metrics.peak_vram_mb,
+			run_hardware_metrics.power_limit_w, run_hardware_metrics.measured_tflops)
+			IS DISTINCT FROM (EXCLUDED.system_hardware_id, EXCLUDED.slot_index,
+			EXCLUDED.system_software_id, EXCLUDED.peak_vram_mb,
+			EXCLUDED.power_limit_w, EXCLUDED.measured_tflops)`
+}
+
+func ingestRunHardwareMetrics(ctx context.Context, tx pgx.Tx, runID uuid.UUID, rec map[string]any) (int64, error) {
+	hw := hardwareMetricsRec(rec)
+	if hw == nil {
+		return 0, nil
+	}
+	return execCount(ctx, tx, runHardwareMetricsSQL(),
+		runID,
+		nullInt(hw, "system_hardware_id"),
+		nullInt(hw, "slot_index"),
+		nullInt(hw, "system_software_id"),
+		nullInt(hw, "peak_vram_mb"),
+		nullNumber(hw, "power_limit_w"),
+		nullNumber(hw, "measured_tflops"),
+	)
+}
+
+func hardwareMetricsRec(rec map[string]any) map[string]any {
+	if hw, ok := rec["hardware"].(map[string]any); ok && hw != nil {
+		return hw
+	}
+	if rec["peak_vram_mb"] != nil || rec["power_limit_w"] != nil || rec["measured_tflops"] != nil {
+		return rec
+	}
+	return nil
 }
 
 // ingestRunMetrics rolls the harness's per-task records up to one row per

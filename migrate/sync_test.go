@@ -16,6 +16,16 @@ import (
 	"github.com/jackc/pgx/v5"
 )
 
+func TestRunHardwareMetricsSQL_UpsertsOnRunID(t *testing.T) {
+	sql := strings.Join(strings.Fields(runHardwareMetricsSQL()), " ")
+	if !strings.Contains(sql, "ON CONFLICT (run_id) DO UPDATE") {
+		t.Fatalf("hardware metrics SQL must upsert on run_id, got %q", sql)
+	}
+	if strings.Contains(sql, "DO NOTHING") {
+		t.Fatalf("hardware metrics SQL skips on conflict instead of updating: %q", sql)
+	}
+}
+
 func TestSync_IngestIsIdempotent(t *testing.T) {
 	conn, ctx := testDB(t)
 	dir := writeFixtureStore(t)

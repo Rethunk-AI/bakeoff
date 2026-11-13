@@ -352,3 +352,32 @@ func TestSync_SkipsRunnerLifecycleQueueRecords(t *testing.T) {
 		t.Fatalf("run_queue rows = %d, want 0", got)
 	}
 }
+
+func TestSync_KeepsRunsThatShareAConfigName(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := writeFixtureStore(t)
+	results := filepath.Join(dir, "results")
+	for _, ts := range []string{"20261101-000000", "20261102-000000"} {
+		writeJSON(t, filepath.Join(results, "run-"+ts+".json"), map[string]any{
+			"run_id":     "ab-run-001",
+			"timestamp":  ts,
+			"run_status": "complete",
+		})
+	}
+	runs := filepath.Join(dir, "runs")
+	if err := os.MkdirAll(runs, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	writeJSON(t, filepath.Join(runs, "ab-run-001.json"), map[string]any{
+		"run_id":     "ab-run-001",
+		"timestamp":  "20261102-000000",
+		"run_status": "complete",
+	})
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	// The fixture's own UUID run plus one row per distinct timestamp.
+	if got := countTable(t, ctx, conn, "runs"); got != 3 {
+		t.Fatalf("runs = %d, want 3", got)
+	}
+}

@@ -632,6 +632,11 @@ func runIDFrom(path string, rec map[string]any) uuid.UUID {
 	if id, err := uuid.Parse(raw); err == nil {
 		return id
 	}
+	// run_id defaults to config.yaml run.name, which every run shares; the
+	// timestamp keeps separate runs apart while runs/ and results/ copies agree.
+	if ts := asString(rec, "timestamp"); ts != "" {
+		raw += "|" + ts
+	}
 	return uuid.NewSHA1(uuid.NameSpaceURL, []byte("bakeoff:run:"+raw))
 }
 

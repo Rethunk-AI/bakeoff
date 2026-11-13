@@ -27,7 +27,7 @@ jobs:
         repository: Rethunk-AI/bakeoff
         persist-credentials: false
 
-    - uses: Rethunk-Tech/gh-actions/setup-python@00f86ab1d379ecfb8d7d5b5cfa6e21a2722ac159 # v1.25
+    - uses: Rethunk-Tech/gh-actions/setup-python@48cc92115e037b2ee57da2264f318265c8a78ec7 # v1.26
       with:
         python-version: "3.12"
         install-args: --all-extras

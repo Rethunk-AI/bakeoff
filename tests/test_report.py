@@ -170,6 +170,24 @@ def test_emit_html_escapes_model_names_before_innerhtml(tmp_path):
     assert "<td>${esc(m)}</td>" in html
 
 
+def test_emit_html_escapes_run_id_and_provenance(tmp_path):
+    html_path = tmp_path / "dash.html"
+    evil = "<img src=x onerror=alert(1)>"
+    payload = {
+        "timestamp": evil,
+        "run_id": evil,
+        "records": [],
+        "provenance": {
+            "git": {"sha": evil},
+            "config_hash": evil,
+            "seed": evil,
+            "engined_image": evil,
+        },
+    }
+    emit_html(payload, html_path)
+    assert "<img" not in html_path.read_text()
+
+
 def test_rollup_keeps_all_failed_model_and_counts_failures():
     recs = [_rec("m1", 1.0), {"model_id": "m1", "error": "x"}, {"model_id": "m2", "error": "y"}]
     out = _rollup(recs)

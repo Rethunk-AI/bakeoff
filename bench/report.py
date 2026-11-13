@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 from collections import defaultdict
+from html import escape
 from pathlib import Path
 from statistics import mean, pstdev
 from typing import Any
@@ -838,15 +839,15 @@ def _html_prov_line(prov: dict[str, Any]) -> str:
     parts = []
     if git.get("sha"):
         dirty = " (dirty)" if git.get("dirty") else ""
-        parts.append(f"git <code>{git['sha']}{dirty}</code>")
+        parts.append(f"git <code>{escape(str(git['sha']))}{dirty}</code>")
     if prov.get("config_hash"):
-        parts.append(f"config <code>{prov['config_hash']}</code>")
+        parts.append(f"config <code>{escape(str(prov['config_hash']))}</code>")
     if prov.get("seed") is not None:
-        parts.append(f"seed <code>{prov['seed']}</code>")
+        parts.append(f"seed <code>{escape(str(prov['seed']))}</code>")
     if prov.get("engined_image_commit"):
-        parts.append(f"engined image <code>{prov['engined_image_commit']}</code>")
+        parts.append(f"engined image <code>{escape(str(prov['engined_image_commit']))}</code>")
     elif prov.get("engined_image"):
-        parts.append(f"engined image <code>{prov['engined_image']}</code>")
+        parts.append(f"engined image <code>{escape(str(prov['engined_image']))}</code>")
     if not parts:
         return ""
     return " · " + " · ".join(parts)
@@ -855,8 +856,8 @@ def _html_prov_line(prov: dict[str, Any]) -> str:
 def emit_html(payload: dict[str, Any], path: Path) -> None:
     prov = payload.get("provenance") or {}
     html = _HTML_TEMPLATE.format(
-        run_id=payload.get("run_id", payload["timestamp"]),
-        ts=payload["timestamp"],
+        run_id=escape(str(payload.get("run_id", payload["timestamp"]))),
+        ts=escape(str(payload["timestamp"])),
         prov_line=_html_prov_line(prov),
         payload_json=json.dumps(payload).replace("<", "\\u003c"),
     )

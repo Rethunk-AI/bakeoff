@@ -317,8 +317,11 @@ class TestStoreWiring:
 
         assert rc == 0
         monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
-        record = store.read_record("runs", "test-run-42")
-        assert record["run_id"] == "test-run-42"
+        run_ids = store.list_runs()
+        assert len(run_ids) == 1
+        record = store.read_record("runs", run_ids[0])
+        assert record["run_id"] == run_ids[0]
+        assert record["run_id"] != "test-run-42"
         assert "records" in record
 
     def test_queue_completed_record_written(self, tmp_path, monkeypatch):
@@ -345,7 +348,21 @@ class TestStoreWiring:
 
         monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
         run_ids = store.list_runs()
-        assert "listed-run" in run_ids
+        assert len(run_ids) == 1
+        assert run_ids[0] != "listed-run"
+
+    def test_run_ids_are_unique_across_runs(self, tmp_path, monkeypatch):
+        """Two runs with the same config name must not share a run_id."""
+        from bench import store
+
+        data_dir = tmp_path / "data"
+        config_path = self._make_config(tmp_path, run_name="same-name")
+        assert self._run_mocked(config_path, monkeypatch, data_dir) == 0
+        assert self._run_mocked(config_path, monkeypatch, data_dir) == 0
+
+        monkeypatch.setenv("BAKEOFF_DATA_DIR", str(data_dir))
+        run_ids = store.list_runs()
+        assert len(set(run_ids)) == 2
 
 
 def test_resume_seed_mismatch_exits_without_reuse(tmp_path, monkeypatch):

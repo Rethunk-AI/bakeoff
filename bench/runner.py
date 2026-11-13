@@ -905,7 +905,7 @@ def main() -> int:
     from bench.store import write_record as _store_write
 
     _queue_id = str(_uuid.uuid4())
-    _run_id_for_queue = run_cfg.get("name", ts)
+    _run_id_for_queue = str(_uuid.uuid4())
     _store_write(
         "run_queue/pending",
         _queue_id,
@@ -925,7 +925,7 @@ def main() -> int:
         _atomic_write_json(
             out_json,
             {
-                "run_id": run_cfg.get("name", ts),
+                "run_id": _run_id_for_queue,
                 "timestamp": ts,
                 "run_status": "incomplete",
                 "config": cfg,
@@ -1003,7 +1003,7 @@ def main() -> int:
     cells_total = len(tasks) * len(prompts)
     model_scores, run_status = assemble_model_scores(models, all_records, cells_total)
     payload = {
-        "run_id": run_cfg.get("name", ts),
+        "run_id": _run_id_for_queue,
         "timestamp": ts,
         "run_status": run_status,
         "config": cfg,

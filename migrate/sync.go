@@ -309,7 +309,14 @@ func ingestRunnerFile(ctx context.Context, tx pgx.Tx, path string, rec map[strin
 			runner_id, public_key, hostname, process_id, effective_user,
 			last_heartbeat, status, registered_at, started_at, description
 		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-		ON CONFLICT (runner_id) DO NOTHING`,
+		ON CONFLICT (runner_id) DO UPDATE SET
+			hostname = EXCLUDED.hostname, process_id = EXCLUDED.process_id,
+			effective_user = EXCLUDED.effective_user, last_heartbeat = EXCLUDED.last_heartbeat,
+			status = EXCLUDED.status, started_at = EXCLUDED.started_at, description = EXCLUDED.description
+		WHERE (runners.hostname, runners.process_id, runners.effective_user, runners.last_heartbeat,
+			runners.status, runners.started_at, runners.description)
+			IS DISTINCT FROM (EXCLUDED.hostname, EXCLUDED.process_id, EXCLUDED.effective_user,
+			EXCLUDED.last_heartbeat, EXCLUDED.status, EXCLUDED.started_at, EXCLUDED.description)`,
 		id,
 		asString(rec, "public_key"),
 		nullString(rec, "hostname"),
@@ -345,7 +352,8 @@ func ingestRunFile(ctx context.Context, tx pgx.Tx, path string, rec map[string]a
 	n, err := execCount(ctx, tx, `
 		INSERT INTO runs (run_id, submitted_at, publisher_id, runner_version, prompt_git_hash, runner_id, run_status)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
-		ON CONFLICT (run_id) DO NOTHING`,
+		ON CONFLICT (run_id) DO UPDATE SET run_status = EXCLUDED.run_status
+		WHERE runs.run_status IS DISTINCT FROM EXCLUDED.run_status`,
 		id, submitted, publisher,
 		nullString(rec, "runner_version"),
 		nullString(rec, "prompt_git_hash"),
@@ -384,7 +392,18 @@ func ingestQueueFile(ctx context.Context, tx pgx.Tx, path string, rec map[string
 			$8, $9, $10, $11, $12, $13,
 			$14, COALESCE($15, NOW()), COALESCE($16, NOW())
 		)
-		ON CONFLICT (queue_id) DO NOTHING`,
+		ON CONFLICT (queue_id) DO UPDATE SET
+			status = EXCLUDED.status, attempt_count = EXCLUDED.attempt_count,
+			claimed_by = EXCLUDED.claimed_by, claimed_at = EXCLUDED.claimed_at,
+			started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at,
+			error_detail = EXCLUDED.error_detail, retry_after = EXCLUDED.retry_after,
+			source_file = EXCLUDED.source_file, updated_at = EXCLUDED.updated_at
+		WHERE (run_queue.status, run_queue.attempt_count, run_queue.claimed_by, run_queue.claimed_at,
+			run_queue.started_at, run_queue.completed_at, run_queue.error_detail,
+			run_queue.retry_after, run_queue.source_file)
+			IS DISTINCT FROM (EXCLUDED.status, EXCLUDED.attempt_count, EXCLUDED.claimed_by,
+			EXCLUDED.claimed_at, EXCLUDED.started_at, EXCLUDED.completed_at, EXCLUDED.error_detail,
+			EXCLUDED.retry_after, EXCLUDED.source_file)`,
 		qid, runID, promptID,
 		asIntDefault(rec, "priority", 100),
 		status,

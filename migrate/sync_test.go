@@ -220,3 +220,35 @@ func countTable(t *testing.T, ctx context.Context, conn *pgx.Conn, table string)
 	}
 	return n
 }
+
+func TestSync_RefreshesMutableState(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := writeFixtureStore(t)
+	results := filepath.Join(dir, "results")
+	runFile := filepath.Join(results, "run-fixture.json")
+	writeJSON(t, runFile, map[string]any{
+		"run_id":       "11111111-1111-1111-1111-111111111111",
+		"submitted_at": "2026-01-01T00:00:00Z",
+		"publisher_id": "test",
+		"run_status":   "incomplete",
+	})
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	writeJSON(t, runFile, map[string]any{
+		"run_id":       "11111111-1111-1111-1111-111111111111",
+		"submitted_at": "2026-01-01T00:00:00Z",
+		"publisher_id": "test",
+		"run_status":   "complete",
+	})
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("re-sync: %v", err)
+	}
+	var status string
+	if err := conn.QueryRow(ctx, "SELECT run_status::text FROM runs").Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if status != "complete" {
+		t.Fatalf("run_status after resume = %q, want complete", status)
+	}
+}

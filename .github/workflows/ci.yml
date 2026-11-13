@@ -19,6 +19,21 @@ jobs:
     name: go (lint + vuln + test)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The sync tests create a throwaway database per test and apply schema/schema.sql themselves.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -36,7 +51,12 @@ jobs:
 
       - name: Test
         working-directory: migrate
-        run: go test -race ./...
+        run: |
+          go test -race -v ./... | tee test.log
+          if grep -q -- '--- SKIP' test.log; then
+            echo "::error::a Go test was skipped; the Postgres service is not reaching the tests"
+            exit 1
+          fi
 
   python:
     name: python lint + type + dry-run (${{ matrix.python-version }})

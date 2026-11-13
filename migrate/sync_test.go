@@ -313,22 +313,12 @@ func TestSync_IngestsRealShapedRunWithoutPromptStore(t *testing.T) {
 			cell("test_model_q4", "floor", 1.0), cell("ghost", "plain", 1.0),
 		},
 	})
-	if err := Sync(ctx, conn, dir, results); err != nil {
-		t.Fatalf("sync: %v", err)
+	err := Sync(ctx, conn, dir, results)
+	if err == nil {
+		t.Fatal("expected error when prompt row is missing")
 	}
-	var n int
-	if err := conn.QueryRow(ctx, "SELECT COUNT(*) FROM run_model_metrics").Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	if n != 2 {
-		t.Fatalf("run_model_metrics rows=%d, want 2 (plain, floor)", n)
-	}
-	if err := Sync(ctx, conn, dir, results); err != nil {
-		t.Fatalf("re-sync: %v", err)
-	}
-	var p int
-	if err := conn.QueryRow(ctx, "SELECT COUNT(*) FROM prompts").Scan(&p); err != nil || p != 2 {
-		t.Fatalf("prompts=%d err=%v, want 2 after re-sync", p, err)
+	if !strings.Contains(err.Error(), `prompt "plain" not found`) {
+		t.Fatalf("error %q, want prompt \"plain\" not found", err)
 	}
 }
 
@@ -385,6 +375,15 @@ func TestSync_KeepsRunsThatShareAConfigName(t *testing.T) {
 func TestSync_SkipsCellsWhoseModelNameIsAmbiguous(t *testing.T) {
 	conn, ctx := testDB(t)
 	dir := writeFixtureStore(t)
+	for _, sub := range []string{"tasks", "prompts"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeJSON(t, filepath.Join(dir, "tasks", "t1.json"), map[string]any{"name": "t1", "natural_key_hash": "t1"})
+	writeJSON(t, filepath.Join(dir, "prompts", "floor.json"), map[string]any{
+		"content_sha256": "floor", "task_natural_key_hash": "t1", "file_path": "floor",
+	})
 	twin := uuid.NewSHA1(uuid.MustParse(modelNamespace), []byte("sha256:otherrepo"))
 	writeJSON(t, filepath.Join(dir, "models", twin.String()+".json"), map[string]any{
 		"name": "TestModel-Q4_K_M", "model_hash": "sha256:otherrepo",

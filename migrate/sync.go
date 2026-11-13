@@ -361,7 +361,102 @@ func ingestRunFile(ctx context.Context, tx pgx.Tx, path string, rec map[string]a
 		runStatus(asString(rec, "run_status")),
 	)
 	counts["runs"] = n
+	if err != nil {
+		return counts, err
+	}
+	m, err := ingestRunMetrics(ctx, tx, id, rec)
+	counts["run_model_metrics"] = m
 	return counts, err
+}
+
+type cellAgg struct {
+	promptID int
+	modelID  uuid.UUID
+	sum      float64
+	scored   int
+	failure  string
+	detail   string
+}
+
+// ingestRunMetrics rolls the harness's per-task records up to one row per
+// (prompt, model), the grain of run_model_metrics. Records whose harness
+// model or prompt id is not in the models/prompts tables are skipped and
+// counted in the log.
+func ingestRunMetrics(ctx context.Context, tx pgx.Tx, runID uuid.UUID, rec map[string]any) (int64, error) {
+	cells, _ := rec["records"].([]any)
+	if len(cells) == 0 {
+		return 0, nil
+	}
+	aggs := map[[2]string]*cellAgg{}
+	var order [][2]string
+	var skipped int
+	for _, item := range cells {
+		cell, ok := item.(map[string]any)
+		if !ok {
+			skipped++
+			continue
+		}
+		key := [2]string{asString(cell, "prompt_id"), asString(cell, "model_id")}
+		agg, seen := aggs[key]
+		if !seen {
+			modelID, okM := resolveModelKey(ctx, tx, key[1])
+			promptID, okP := resolvePromptKey(ctx, tx, key[0])
+			if okM && okP {
+				agg = &cellAgg{promptID: promptID, modelID: modelID}
+				order = append(order, key)
+			}
+			aggs[key] = agg
+		}
+		if agg == nil {
+			skipped++
+			continue
+		}
+		if score, ok := cell["quality_heuristic"].(float64); ok {
+			agg.sum += score
+			agg.scored++
+		}
+		if code := asString(cell, "failure_code"); code != "" && agg.failure == "" {
+			agg.failure, agg.detail = code, asString(cell, "failure_detail")
+		}
+	}
+	var total int64
+	for _, key := range order {
+		agg := aggs[key]
+		var score any
+		if agg.scored > 0 {
+			score = agg.sum / float64(agg.scored)
+		}
+		n, err := execCount(ctx, tx, `
+			INSERT INTO run_model_metrics (run_id, prompt_id, model_id, score, failure_reason, failure_detail)
+			VALUES ($1, $2, $3, $4, $5, $6)
+			ON CONFLICT (run_id, prompt_id, model_id) DO UPDATE SET
+				score = EXCLUDED.score, failure_reason = EXCLUDED.failure_reason,
+				failure_detail = EXCLUDED.failure_detail
+			WHERE (run_model_metrics.score, run_model_metrics.failure_reason, run_model_metrics.failure_detail)
+				IS DISTINCT FROM (EXCLUDED.score, EXCLUDED.failure_reason, EXCLUDED.failure_detail)`,
+			runID, agg.promptID, agg.modelID, score, nullString(map[string]any{"v": agg.failure}, "v"),
+			nullString(map[string]any{"v": agg.detail}, "v"))
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+	if skipped > 0 {
+		log.Printf("run %s: skipped %d result cells with unresolvable model or prompt ids", runID, skipped)
+	}
+	return total, nil
+}
+
+func resolveModelKey(ctx context.Context, tx pgx.Tx, key string) (uuid.UUID, bool) {
+	var id uuid.UUID
+	err := tx.QueryRow(ctx, "SELECT model_id FROM models WHERE name = $1 OR model_id::text = $1 LIMIT 1", key).Scan(&id)
+	return id, err == nil
+}
+
+func resolvePromptKey(ctx context.Context, tx pgx.Tx, key string) (int, bool) {
+	var id int
+	err := tx.QueryRow(ctx, "SELECT prompt_id FROM prompts WHERE content_sha256 = $1 OR file_path = $1 LIMIT 1", key).Scan(&id)
+	return id, err == nil
 }
 
 func ingestQueueFile(ctx context.Context, tx pgx.Tx, path string, rec map[string]any) (rowCounts, error) {

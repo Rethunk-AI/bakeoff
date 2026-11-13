@@ -252,3 +252,44 @@ func TestSync_RefreshesMutableState(t *testing.T) {
 		t.Fatalf("run_status after resume = %q, want complete", status)
 	}
 }
+
+func TestSync_IngestsPerCellResults(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := writeFixtureStore(t)
+	for _, sub := range []string{"tasks", "prompts"} {
+		if err := os.MkdirAll(filepath.Join(dir, sub), 0o750); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeJSON(t, filepath.Join(dir, "tasks", "t1.json"), map[string]any{"name": "t1", "natural_key_hash": "t1"})
+	writeJSON(t, filepath.Join(dir, "prompts", "plain.json"), map[string]any{
+		"content_sha256": "plain", "task_natural_key_hash": "t1", "file_path": "plain",
+	})
+	results := filepath.Join(dir, "results")
+	writeJSON(t, filepath.Join(results, "run-fixture.json"), map[string]any{
+		"run_id": "11111111-1111-1111-1111-111111111111", "submitted_at": "2026-01-01T00:00:00Z",
+		"publisher_id": "test", "run_status": "complete",
+		"records": []any{
+			map[string]any{"model_id": "TestModel-Q4_K_M", "prompt_id": "plain", "quality_heuristic": 1.0},
+			map[string]any{"model_id": "TestModel-Q4_K_M", "prompt_id": "plain", "quality_heuristic": 0.5},
+			map[string]any{"model_id": "ghost", "prompt_id": "plain", "quality_heuristic": 1.0},
+		},
+	})
+	var buf bytes.Buffer
+	log.SetOutput(&buf)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	var n int
+	var score float64
+	if err := conn.QueryRow(ctx, "SELECT COUNT(*), COALESCE(MAX(score),0) FROM run_model_metrics").Scan(&n, &score); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 || score != 0.75 {
+		t.Fatalf("run_model_metrics rows=%d score=%v, want 1 / 0.75", n, score)
+	}
+	if !strings.Contains(buf.String(), "skipped 1 result cells") {
+		t.Fatalf("missing skip log: %q", buf.String())
+	}
+}

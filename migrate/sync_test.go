@@ -381,3 +381,26 @@ func TestSync_KeepsRunsThatShareAConfigName(t *testing.T) {
 		t.Fatalf("runs = %d, want 3", got)
 	}
 }
+
+func TestSync_SkipsCellsWhoseModelNameIsAmbiguous(t *testing.T) {
+	conn, ctx := testDB(t)
+	dir := writeFixtureStore(t)
+	twin := uuid.NewSHA1(uuid.MustParse(modelNamespace), []byte("sha256:otherrepo"))
+	writeJSON(t, filepath.Join(dir, "models", twin.String()+".json"), map[string]any{
+		"name": "TestModel-Q4_K_M", "model_hash": "sha256:otherrepo",
+	})
+	results := filepath.Join(dir, "results")
+	writeJSON(t, filepath.Join(results, "run-fixture.json"), map[string]any{
+		"run_id": "11111111-1111-1111-1111-111111111111", "submitted_at": "2026-01-01T00:00:00Z",
+		"publisher_id": "test", "run_status": "complete",
+		"records": []any{
+			map[string]any{"model_id": "TestModel-Q4_K_M", "prompt_id": "floor", "quality_heuristic": 1.0},
+		},
+	})
+	if err := Sync(ctx, conn, dir, results); err != nil {
+		t.Fatalf("sync: %v", err)
+	}
+	if got := countTable(t, ctx, conn, "run_model_metrics"); got != 0 {
+		t.Fatalf("run_model_metrics = %d, want 0: two models share the name", got)
+	}
+}

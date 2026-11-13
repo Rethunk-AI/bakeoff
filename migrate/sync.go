@@ -472,9 +472,17 @@ func resolveModelKey(ctx context.Context, tx pgx.Tx, key string, cfg map[string]
 			break
 		}
 	}
-	var id uuid.UUID
-	err := tx.QueryRow(ctx, "SELECT model_id FROM models WHERE name = $1 OR model_id::text = $1 LIMIT 1", name).Scan(&id)
-	return id, err == nil
+	// models.name is not unique (one GGUF filename can come from several
+	// repos); attributing a score to an arbitrary twin would be silent misdata.
+	rows, err := tx.Query(ctx, "SELECT model_id FROM models WHERE name = $1 OR model_id::text = $1 LIMIT 2", name)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	ids, err := pgx.CollectRows(rows, pgx.RowTo[uuid.UUID])
+	if err != nil || len(ids) != 1 {
+		return uuid.Nil, false
+	}
+	return ids[0], true
 }
 
 // harnessTaskHash anchors prompt variants the harness defines per run: the

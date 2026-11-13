@@ -222,3 +222,11 @@ def test_write_record_rejects_path_escape(tmp_path):
     assert not (tmp_path.parent / "x.json").exists()
     with pytest.raises(store.StoreError):
         store.read_record("runners", "../x")
+
+
+def test_delete_record_rejects_path_escape(tmp_path):
+    victim = tmp_path.parent / "victim.json"
+    victim.write_text("{}")
+    with pytest.raises(store.StoreError, match="invalid record id"):
+        store.delete_record("runners", "../victim")
+    assert victim.exists()

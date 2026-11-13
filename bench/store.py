@@ -207,6 +207,7 @@ def delete_record(table: str, record_id: str) -> None:
 
     Raises StoreError if the file does not exist.
     """
+    _check_record_id(record_id)
     target = _table_dir(table) / f"{record_id}.json"
     try:
         target.unlink()

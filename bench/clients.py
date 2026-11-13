@@ -18,11 +18,12 @@ import httpx
 @dataclass
 class ChatResult:
     text: str
-    prompt_tokens: int
-    completion_tokens: int
+    prompt_tokens: int | None
+    completion_tokens: int | None
     latency_s: float
     ttft_s: float | None
-    tokens_per_sec: float
+    # Decode throughput; None when the token count is unknown.
+    tokens_per_sec: float | None
     raw: dict[str, Any]
 
 
@@ -56,6 +57,21 @@ def _engined_headers(headers: httpx.Headers) -> dict[str, Any]:
     if queue_ms is not None:
         out["x-engined-queue-ms"] = queue_ms
     return out
+
+
+def _decode_tps(ct: int | None, latency: float, ttft: float | None) -> float | None:
+    """Tokens per second of the decode phase; prefill is excluded when TTFT is known."""
+    if not ct or ct <= 0:
+        return None
+    if ttft is not None and ct > 1 and latency > ttft:
+        # The first token arrives at ttft, so ct-1 tokens were produced after it.
+        return (ct - 1) / (latency - ttft)
+    return ct / latency if latency > 0 else None
+
+
+def _usage_int(usage: dict[str, Any], key: str) -> int | None:
+    value = usage.get(key)
+    return int(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else None
 
 
 def _extract_delta(chunk: dict[str, Any]) -> tuple[str, str]:
@@ -111,9 +127,9 @@ class ChatClient:
         # benchmark never compares an empty string against a real response.
         choice = msg.get("content") or msg.get("reasoning_content") or ""
         usage = data.get("usage") or {}
-        pt = int(usage.get("prompt_tokens", 0))
-        ct = int(usage.get("completion_tokens", 0))
-        tps = (ct / latency) if latency > 0 and ct > 0 else 0.0
+        pt = _usage_int(usage, "prompt_tokens")
+        ct = _usage_int(usage, "completion_tokens")
+        tps = _decode_tps(ct, latency, None)
 
         return ChatResult(
             text=choice,
@@ -141,6 +157,7 @@ class ChatClient:
         usage: dict[str, Any] = {}
         last_chunk: dict[str, Any] = {}
         ttft: float | None = None
+        n_deltas = 0
 
         t0 = time.perf_counter()
         with (
@@ -164,6 +181,8 @@ class ChatClient:
                 c_delta, r_delta = _extract_delta(chunk)
                 if (c_delta or r_delta) and ttft is None:
                     ttft = time.perf_counter() - t0
+                if c_delta or r_delta:
+                    n_deltas += 1
                 if c_delta:
                     content_parts.append(c_delta)
                 if r_delta:
@@ -174,9 +193,12 @@ class ChatClient:
         reasoning = "".join(reasoning_parts)
         # Prefer content; fall back to reasoning so benchmark never scores "".
         text = content or reasoning
-        pt = int(usage.get("prompt_tokens", 0))
-        ct = int(usage.get("completion_tokens", 0))
-        tps = (ct / latency) if latency > 0 and ct > 0 else 0.0
+        pt = _usage_int(usage, "prompt_tokens")
+        ct = _usage_int(usage, "completion_tokens")
+        if ct is None and n_deltas:
+            # No usage block: servers emit one token per delta chunk, so count chunks.
+            ct = n_deltas
+        tps = _decode_tps(ct, latency, ttft)
         last_chunk.update(response_headers)
 
         return ChatResult(

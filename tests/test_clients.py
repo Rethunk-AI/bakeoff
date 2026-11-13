@@ -110,3 +110,37 @@ def test_stream_error_chunk_fails_the_call(monkeypatch):
     monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=transport, **kw))
     with pytest.raises(RuntimeError, match="out of memory"):
         ChatClient("http://x/v1", "m").chat([{"role": "user", "content": "hi"}])
+
+
+def _stream_client(monkeypatch, body: str):
+    from bench.clients import ChatClient
+
+    transport = httpx.MockTransport(lambda req: httpx.Response(200, text=body))
+    real = httpx.Client
+    monkeypatch.setattr(httpx, "Client", lambda **kw: real(transport=transport, **kw))
+    return ChatClient("http://x/v1", "m")
+
+
+def test_decode_tps_excludes_prefill():
+    from bench.clients import _decode_tps
+
+    # 11 tokens, first at 5s, done at 6s: 10 decode tokens in 1s.
+    assert _decode_tps(11, 6.0, 5.0) == 10.0
+    assert _decode_tps(None, 6.0, 5.0) is None
+    assert _decode_tps(0, 6.0, 5.0) is None
+
+
+def test_stream_without_usage_counts_deltas_not_zero(monkeypatch):
+    body = (
+        'data: {"choices":[{"delta":{"content":"a"}}]}\n\n'
+        'data: {"choices":[{"delta":{"content":"b"}}]}\n\ndata: [DONE]\n\n'
+    )
+    res = _stream_client(monkeypatch, body).chat([{"role": "user", "content": "hi"}])
+    assert res.completion_tokens == 2
+    assert res.prompt_tokens is None
+
+
+def test_stream_without_usage_or_deltas_is_unknown(monkeypatch):
+    res = _stream_client(monkeypatch, "data: [DONE]\n\n").chat([{"role": "user", "content": "hi"}])
+    assert res.completion_tokens is None
+    assert res.tokens_per_sec is None

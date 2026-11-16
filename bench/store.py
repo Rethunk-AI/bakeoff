@@ -38,6 +38,9 @@ from bench.constants import BAKEOFF_CREATOR_NAMESPACE, BAKEOFF_MODEL_NAMESPACE
 SCHEMA_VERSION = 1
 _DEFAULT_DATA_DIR = "~/.local/share/bakeoff"
 _RECORD_ID_RE = re.compile(r"^[A-Za-z0-9._][A-Za-z0-9._-]*$")
+# Simple names only, with at most one nested level for the run_queue lifecycle
+# tables ("run_queue/pending", "run_queue/completed"). No dots, so no "..".
+_TABLE_RE = re.compile(r"^[A-Za-z0-9_]+(?:/[A-Za-z0-9_]+)?$")
 
 
 class StoreError(ValueError):
@@ -105,6 +108,8 @@ def _stamp_audit(existing: dict[str, Any] | None, record: dict[str, Any]) -> dic
 
 
 def _table_dir(table: str) -> Path:
+    if not _TABLE_RE.fullmatch(table):
+        raise StoreError(f"invalid table name: {table!r}")
     return data_dir() / table
 
 

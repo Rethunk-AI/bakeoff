@@ -230,3 +230,15 @@ def test_delete_record_rejects_path_escape(tmp_path):
     with pytest.raises(store.StoreError, match="invalid record id"):
         store.delete_record("runners", "../victim")
     assert victim.exists()
+
+
+@pytest.mark.parametrize("table", ["../pwned_table", "..", "runs/../..", "/abs", "a.b"])
+def test_write_record_rejects_table_escape(tmp_path, table):
+    with pytest.raises(ValueError):
+        store.write_record(table, "rec1", {"x": 1})
+    assert not (tmp_path.parent / "pwned_table").exists()
+
+
+def test_write_record_accepts_run_queue_lifecycle_tables(tmp_path):
+    store.write_record("run_queue/pending", "q1", {"x": 1})
+    assert (tmp_path / "run_queue" / "pending" / "q1.json").exists()

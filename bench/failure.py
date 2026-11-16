@@ -28,7 +28,7 @@ timeout:
     also: httpx.ReadTimeout, httpx.TimeoutException types
 
 oom:
-    /out of memory|oom|cuda.*memory|vram|alloc.*fail/
+    /out of memory|\\boom\\b|cuda.*memory|vram|alloc.*fail/
 
 load_failure:
     /failed to load|load.*model|no such file|cannot load|incompatible|swap.*fail/
@@ -78,7 +78,7 @@ FAILURE_CODES: tuple[str, ...] = (
 
 _RE_CANCELLED = re.compile(r"cancelled|canceled|interrupt|KeyboardInterrupt", re.IGNORECASE)
 _RE_TIMEOUT = re.compile(r"timed?\s*out|timeout", re.IGNORECASE)
-_RE_OOM = re.compile(r"out of memory|oom|cuda.*memory|vram|alloc.*fail", re.IGNORECASE)
+_RE_OOM = re.compile(r"out of memory|\boom\b|cuda.*memory|vram|alloc.*fail", re.IGNORECASE)
 _RE_LOAD_FAILURE = re.compile(
     r"failed to load|load.*model|no such file|cannot load|incompatible|swap.*fail",
     re.IGNORECASE,

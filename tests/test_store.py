@@ -102,6 +102,16 @@ def test_schema_version_not_overridden_if_set():
     assert r["schema_version"] == 1
 
 
+def test_write_record_rejects_unknown_schema_version(tmp_path):
+    with pytest.raises(store.StoreError, match="schema_version"):
+        store.write_record("models", "bad", {"name": "x", "schema_version": 2})
+    assert not (tmp_path / "models" / "bad.json").exists()
+
+    store.write_record("models", "ok", {"name": "x"})
+    record = store.read_record("models", "ok")
+    assert record["schema_version"] == 1
+
+
 # ---------------------------------------------------------------------------
 # Atomicity: written file is valid JSON (no partial writes)
 # ---------------------------------------------------------------------------

@@ -130,6 +130,12 @@ def write_record(table: str, record_id: str, data: dict[str, Any]) -> Path:
     """
     _check_record_id(record_id)
     table_path = _table_dir(table)
+    # Refuse before mkdir so a bad version cannot leave a table dir or file.
+    version = data.get("schema_version", SCHEMA_VERSION)
+    if version != SCHEMA_VERSION:
+        raise StoreError(
+            f"{table}/{record_id} has schema_version {version!r}, expected {SCHEMA_VERSION}"
+        )
     table_path.mkdir(parents=True, exist_ok=True)
     target = table_path / f"{record_id}.json"
 

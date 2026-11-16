@@ -184,6 +184,11 @@ def read_record(table: str, record_id: str) -> dict[str, Any]:
         raise StoreError(f"invalid JSON in {table}/{record_id}: {e}") from e
     if not isinstance(data, dict):
         raise StoreError(f"{table}/{record_id} must contain a JSON object")
+    version = data.get("schema_version")
+    if version != SCHEMA_VERSION:
+        raise StoreError(
+            f"{table}/{record_id} has schema_version {version!r}, expected {SCHEMA_VERSION}"
+        )
     return data
 
 
@@ -199,12 +204,16 @@ def list_records(table: str) -> list[str]:
 
 
 def list_runs() -> list[str]:
-    """Return a sorted list of stored run IDs (newest-first by stem).
+    """Return stored run IDs ordered by file mtime (oldest first; ``[-1]`` is newest).
 
-    Thin wrapper over ``list_records("runs")`` so callers don't repeat
-    the table name string.
+    UUID stems are random, so lexicographic order is not chronological.
     """
-    return list_records("runs")
+    table_path = _table_dir("runs")
+    if not table_path.is_dir():
+        return []
+    paths = list(table_path.glob("*.json"))
+    paths.sort(key=lambda p: p.stat().st_mtime)
+    return [p.stem for p in paths]
 
 
 def delete_record(table: str, record_id: str) -> None:

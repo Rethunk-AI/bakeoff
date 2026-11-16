@@ -52,7 +52,7 @@ def main() -> int:
 
     from bench.store import StoreError, list_runs, read_record
 
-    run_ids = list_runs()  # ascending by stem; reverse for newest-first
+    run_ids = list_runs()  # oldest-first by mtime; reverse for newest-first
 
     if args.list:
         for rid in reversed(run_ids):

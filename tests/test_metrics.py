@@ -78,32 +78,28 @@ class TestScoreHeuristic:
 
 
 class TestParseJudge:
-    @pytest.mark.parametrize(
-        "text,expected",
-        [
-            ("A", "A"),
-            ("B", "B"),
-            ("TIE", "TIE"),
-            ("a", "A"),  # lowercased -> upper
-            (" b ", "B"),
-        ],
-    )
-    def test_bare_verdicts(self, text, expected):
-        assert parse_judge(text) == expected
+    def test_free_text_with_both_letters_is_unparsed(self):
+        # Last-token parsers treat this as B; only VERDICT: lines count.
+        assert parse_judge("A is better than B") is None
 
-    def test_empty_or_none_defaults_tie(self):
-        assert parse_judge("") == "TIE"
-        assert parse_judge(None) == "TIE"
+    def test_valid_verdict_line(self):
+        assert parse_judge("VERDICT: A") == "A"
+        assert parse_judge("some reasoning\nVERDICT: B") == "B"
 
-    def test_picks_last_verdict_token(self):
-        # Reasoning-model output: earlier tokens are deliberation; final is the call.
-        assert parse_judge("Between A and B, I pick B.") == "B"
+    def test_tie_verdict_line(self):
+        assert parse_judge("VERDICT: TIE") == "TIE"
 
-    def test_tie_on_no_verdict_token(self):
-        assert parse_judge("I cannot decide between them") == "TIE"
+    def test_missing_verdict_line_is_unparsed(self):
+        assert parse_judge("I cannot decide between them") is None
+        assert parse_judge("") is None
+        assert parse_judge(None) is None
 
-    def test_handles_punctuation_noise(self):
-        assert parse_judge("verdict: (A).") == "A"
+    def test_last_verdict_line_wins(self):
+        assert parse_judge("VERDICT: A\nVERDICT: B") == "B"
+
+    def test_case_and_whitespace_tolerant(self):
+        assert parse_judge("  verdict : a  ") == "A"
+        assert parse_judge("Verdict:  tie") == "TIE"
 
 
 # --- invert_winner ----------------------------------------------------------

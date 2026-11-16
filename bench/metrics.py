@@ -45,7 +45,7 @@ def score_heuristic(scorer: str, expected: str | None, text: str) -> float | Non
 
 JUDGE_PAIR_SYSTEM = (
     "You are a strict evaluator. Compare two assistant responses to the same user prompt. "
-    "Reply with exactly one token: A, B, or TIE. No explanation."
+    "End with a final line of the exact form VERDICT: A, VERDICT: B, or VERDICT: TIE."
 )
 
 
@@ -58,7 +58,8 @@ def judge_pair_prompt(user_prompt: str, a: str, b: str) -> list[dict[str, str]]:
                 f"USER PROMPT:\n{user_prompt}\n\n"
                 f"RESPONSE A:\n{a}\n\n"
                 f"RESPONSE B:\n{b}\n\n"
-                "Which response better satisfies the user prompt? Reply A, B, or TIE."
+                "Which response better satisfies the user prompt? "
+                "End with a final line of the exact form VERDICT: A, VERDICT: B, or VERDICT: TIE."
             ),
         },
     ]
@@ -82,25 +83,27 @@ def judge_pair_randomized(
     return judge_pair_prompt(user_prompt, a, b), "AB"
 
 
-def invert_winner(winner: str) -> str:
+def invert_winner(winner: str | None) -> str | None:
     """Map a raw pairwise verdict back to original-ordering when order==BA."""
     if winner == "A":
         return "B"
     if winner == "B":
         return "A"
-    return winner  # TIE unchanged
+    return winner  # TIE and unparsed stay as-is
 
 
-def parse_judge(text: str | None) -> str:
-    """Extract A / B / TIE verdict.
+# Only an explicit VERDICT line counts; free-text A/B mentions are not a vote.
+_VERDICT_LINE_RE = re.compile(r"^\s*verdict\s*:\s*(A|B|TIE)\s*$", re.IGNORECASE | re.MULTILINE)
 
-    Uses the *last* bare verdict token so that reasoning-style output
-    ("Looking at A and B, I pick B.") returns the final decision, not a
-    mid-sentence mention.
-    """
-    t = (text or "").strip().upper()
-    toks = [tok for tok in re.split(r"\W+", t) if tok in {"A", "B", "TIE"}]
-    return toks[-1] if toks else "TIE"
+
+def parse_judge(text: str | None) -> str | None:
+    """Extract A / B / TIE from the last explicit VERDICT line, else None."""
+    if not text:
+        return None
+    matches = _VERDICT_LINE_RE.findall(text)
+    if not matches:
+        return None
+    return matches[-1].upper()
 
 
 # --- Scored (rubric) judge prompt ------------------------------------------

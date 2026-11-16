@@ -103,7 +103,7 @@ def test_pairwise_judge_verdict_from_another_route_is_not_recorded(
 ) -> None:
     raw = {} if route is None else {"x-engined-route": route}
     out = _pairwise_all_phase(
-        _Judge("A", raw),
+        _Judge("VERDICT: A", raw),
         [{"id": "m_a"}, {"id": "m_b"}],
         [_task()],
         [{"id": "p1"}],

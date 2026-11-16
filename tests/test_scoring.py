@@ -77,6 +77,14 @@ class TestCellScore(unittest.TestCase):
         rec = {"quality_heuristic": 0.9, "failure_code": "refusal", "error": None}
         self.assertEqual(cell_score(rec), 0.0)
 
+    def test_perfect_run_without_judge_scores_one_over_judged_or_deterministic_cells(self):
+        # Default mixed matrix: 5 heuristic cells + 3 judge-needed cells, no judge.
+        # Unjudged cells drop out of both S and D so a perfect heuristic run is 1.0.
+        records = [_ok(1.0)] * 5 + [{"failure_code": None, "error": None}] * 3
+        r = model_rollup("m", records, [], 8)
+        self.assertEqual(r["cells_unjudged"], 3)
+        self.assertAlmostEqual(r["partial_score"], 1.0)
+
     def test_scored_judgement_of_five_with_null_heuristic_is_one(self):
         rec = {
             "task_id": "t",

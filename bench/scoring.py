@@ -3,11 +3,13 @@
 Implements per-cell scoring, the per-model rollup, and run-level status
 aggregation.
 
-``partial_score = S / C``: the sum of per-cell scores over the *whole* matrix
-size C, not over attempted cells A. Unattempted cells count as 0.0, so a model
-that finished half the matrix perfectly (0.5) ranks below one that finished it
-all at a 0.6 average. Dividing by A was rejected: it rewards stopping early,
-and the harness cannot know how the missing cells would have scored.
+``partial_score = S / D``. S is the sum of per-cell scores over judged-or-
+deterministic cells. D is matrix size C minus unjudged cells: attempted cells
+with neither a ``quality_heuristic`` nor a ``judge_score``. Those cells are
+omitted from S as well, so a skipped judge does not dilute the score.
+Unattempted cells still count as 0.0 against D. Dividing by attempted A was
+rejected: it rewards stopping early, and the harness cannot know how the
+missing cells would have scored. ``cells_unjudged`` is the coverage gap.
 ``completeness = A / C``. The worked examples live in tests/test_scoring.py.
 
 Public API (consumed by runner.py):
@@ -132,18 +134,29 @@ def model_rollup(
             return "unknown"
         return None
 
+    def _is_unjudged(r: dict) -> bool:
+        # Needs a judge mark: attempted, no usable heuristic, no judge_score.
+        qh = r.get("quality_heuristic")
+        if isinstance(qh, (int, float)) and 0.0 <= float(qh) <= 1.0:
+            return False
+        return r.get("judge_score") is None
+
     attempted = [r for r in main_records if _is_attempted(r)]
     failed = [r for r in main_records if _failure_code(r) is not None]
+    unjudged = [r for r in attempted if _is_unjudged(r)]
+    scored = [r for r in attempted if not _is_unjudged(r)]
 
     cells_attempted = len(attempted)
     cells_failed = len(failed)
+    cells_unjudged = len(unjudged)
 
     # --- completeness
     completeness = 0.0 if cells_total == 0 else cells_attempted / cells_total
 
-    # --- partial_score: S(m) / C  (divide by C, not by attempted)
-    score_sum = sum(cell_score(r) for r in attempted)
-    partial_score = 0.0 if cells_total == 0 else max(0.0, min(1.0, score_sum / cells_total))
+    # --- partial_score: S / (C - unjudged); unattempted still count as 0
+    score_sum = sum(cell_score(r) for r in scored)
+    scored_denom = cells_total - cells_unjudged
+    partial_score = 0.0 if scored_denom == 0 else max(0.0, min(1.0, score_sum / scored_denom))
 
     # --- status
     has_load_failure = any(_failure_code(r) == "load_failure" for r in main_records)
@@ -174,6 +187,7 @@ def model_rollup(
         "cells_total": cells_total,
         "cells_attempted": cells_attempted,
         "cells_failed": cells_failed,
+        "cells_unjudged": cells_unjudged,
         "completeness": completeness,
         "partial_score": partial_score,
         "dominant_failure_code": dominant,

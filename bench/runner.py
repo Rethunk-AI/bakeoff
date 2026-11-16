@@ -107,6 +107,15 @@ def engined_fields(res: ChatResult) -> dict[str, Any]:
     }
 
 
+def _require_route(res: ChatResult, expected_route: str | None) -> None:
+    """Fail when engined's answering address is not the one the call was addressed to."""
+    if expected_route is None:
+        return
+    got_route = res.raw.get("x-engined-route")
+    if got_route != expected_route:
+        raise RuntimeError(f"engined answered {got_route!r}, expected {expected_route!r}")
+
+
 def call_one(
     client: ChatClient,
     system: str,
@@ -142,10 +151,7 @@ def call_one(
         res = client.chat(messages)
     ru_after = resource.getrusage(resource.RUSAGE_SELF)
 
-    if expected_route is not None:
-        got_route = res.raw.get("x-engined-route")
-        if got_route != expected_route:
-            raise RuntimeError(f"engined answered {got_route!r}, expected {expected_route!r}")
+    _require_route(res, expected_route)
 
     peak_vram = sampler.peak_vram_mb
     mean_sm = sampler.mean_sm_pct
@@ -445,6 +451,7 @@ def _pairwise_all_phase(
     records: list[dict[str, Any]],
     rng: random.Random,
     pending_pairs: set | None = None,
+    expected_route: str | None = None,
 ) -> list[dict[str, Any]]:
     """Round-robin all unordered pairs (N choose 2). Randomize slot order
     per call to de-bias positional preference; invert winner on swap.
@@ -481,6 +488,7 @@ def _pairwise_all_phase(
             msgs, order = judge_pair_randomized(task.user_prompt, a["text"], b["text"], rng)
             try:
                 jr = judge.chat(msgs)
+                _require_route(jr, expected_route)
                 raw_winner = parse_judge(jr.text)
                 winner = invert_winner(raw_winner) if order == "BA" else raw_winner
                 judgements.append(
@@ -523,6 +531,7 @@ def _scored_phase(
     prompts: list[dict[str, Any]],
     records: list[dict[str, Any]],
     pending_scores: set | None = None,
+    expected_route: str | None = None,
 ) -> list[dict[str, Any]]:
     """Absolute 1-5 rubric score per (model, task, prompt). Linear in N models.
 
@@ -543,6 +552,7 @@ def _scored_phase(
                 continue
             try:
                 jr = judge.chat(judge_score_prompt(task.user_prompt, rec["text"]))
+                _require_route(jr, expected_route)
                 score = parse_score(jr.text)
                 judgements.append(
                     {
@@ -622,9 +632,18 @@ def run_judge_phase(
     if mode == "pairwise_all":
         rng = random.Random(seed)
         return _pairwise_all_phase(
-            judge, models, tasks, prompts, records, rng, pending_pairs=pending_pairs
+            judge,
+            models,
+            tasks,
+            prompts,
+            records,
+            rng,
+            pending_pairs=pending_pairs,
+            expected_route=addr,
         )
-    return _scored_phase(judge, models, tasks, prompts, records, pending_scores=pending_scores)
+    return _scored_phase(
+        judge, models, tasks, prompts, records, pending_scores=pending_scores, expected_route=addr
+    )
 
 
 def select_models(

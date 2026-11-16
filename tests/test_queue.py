@@ -341,3 +341,18 @@ def test_heartbeat_context_registers_and_sweeps(capsys):
             time.sleep(0.02)
             err += capsys.readouterr().err
     assert err.count("heartbeat sweep:") >= 2
+
+
+@pytest.mark.parametrize("queue_id", ["../../../outside-qid", "..", "a/b"])
+def test_enqueue_rejects_queue_id_path_escape(isolated_data_dir, queue_id):
+    with pytest.raises(ValueError):
+        queue.enqueue({**_item(), "queue_id": queue_id})
+    assert not (isolated_data_dir.parent / "outside-qid.json").exists()
+    assert queue.list_pending() == []
+
+
+def test_enqueue_rejects_escaping_runner_id_on_lock_path(isolated_data_dir):
+    qid = queue.enqueue(_item())
+    with pytest.raises(ValueError):
+        queue.claim("../../../../escape-runner")
+    assert (isolated_data_dir / "run_queue" / "pending" / f"{qid}.json").exists()

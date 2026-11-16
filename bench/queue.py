@@ -105,14 +105,18 @@ def _completed_dir() -> Path:
 
 
 def _pending_path(queue_id: str) -> Path:
+    store._check_record_id(queue_id)
     return _pending_dir() / f"{queue_id}.json"
 
 
 def _completed_path(queue_id: str) -> Path:
+    store._check_record_id(queue_id)
     return _completed_dir() / f"{queue_id}.json"
 
 
 def _lock_path(queue_id: str, runner_id: str) -> Path:
+    store._check_record_id(queue_id)
+    store._check_record_id(runner_id)
     return _pending_dir() / f"{queue_id}.lck-{runner_id}"
 
 
@@ -339,6 +343,7 @@ def claim(runner_id: str, settings: LivenessSettings | None = None) -> dict[str,
 
     Returns the claimed item dict, or None if no eligible items.
     """
+    store._check_record_id(runner_id)
     if not is_live(runner_id, settings):
         return None
     pending = _pending_dir()

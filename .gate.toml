@@ -1,2 +1,5 @@
 [gates.deps]
 run = "uv run deptry ."
+
+[gates.vuln]
+run = "uv audit"

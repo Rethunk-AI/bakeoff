@@ -77,6 +77,7 @@ jobs:
           install-args: --all-extras
           run-ruff: "true"
           ruff-paths: bench/ tests/
+          run-audit: "true"
 
       - name: Pyrefly
         run: uv run pyrefly check bench/
@@ -113,3 +114,21 @@ jobs:
 
       - name: Lint workflows
         run: scripts/actionlint -color
+
+  # One required check for branch protection: a matrix leg that never ran must not look like success.
+  all-checks:
+    if: always()
+    needs: [go-migrate, python, shell, workflows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any check did not succeed
+        run: |
+          if [ "${{ needs.go-migrate.result }}" != "success" ] \
+            || [ "${{ needs.python.result }}" != "success" ] \
+            || [ "${{ needs.shell.result }}" != "success" ] \
+            || [ "${{ needs.workflows.result }}" != "success" ]; then
+            echo "go-migrate=${{ needs.go-migrate.result }} python=${{ needs.python.result }} shell=${{ needs.shell.result }} workflows=${{ needs.workflows.result }}"
+            exit 1
+          fi
+          echo "all checks passed"

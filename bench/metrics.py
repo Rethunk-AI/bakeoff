@@ -131,14 +131,16 @@ def judge_score_prompt(user_prompt: str, response: str) -> list[dict[str, str]]:
     ]
 
 
-_SCORE_RE = re.compile(r"\b([1-5])\b")
+# A score may be written as "N/5" or "N out of 5"; the scale suffix is consumed
+# with the score so the trailing 5 cannot be mistaken for the verdict.
+_SCORE_RE = re.compile(r"\b([1-5])\b(?:\s*/\s*5\b|\s*out\s+of\s+5\b)?")
 
 
 def parse_score(text: str | None, default: int = 3) -> int:
-    """Extract integer score in [1,5]. Take the last valid digit in range.
+    """Extract integer score in [1,5] from an "N" or "N/5"-style answer.
 
     Reasoning models emit thoughts before the answer, so prefer the final
-    occurrence. Fall back to `default` (median 3) if no valid digit appears.
+    match. Fall back to `default` (median 3) if no score appears.
     """
     matches = _SCORE_RE.findall(text or "")
     if not matches:

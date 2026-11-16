@@ -157,6 +157,20 @@ class TestParseScore:
         # Reasoning output: intermediate mentions shouldn't beat the final answer.
         assert parse_score("Considering 2 or 3, final answer: 5") == 5
 
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("4/5", 4),
+            ("3 out of 5", 3),
+            ("I rate this 4 out of 5", 4),
+            ("4", 4),
+            ("thinking 2 then 5 steps. Final: 3", 3),
+        ],
+    )
+    def test_score_followed_by_scale_yields_score(self, raw, expected):
+        # The trailing scale digit must not be read as the verdict.
+        assert parse_score(raw) == expected
+
     def test_word_boundary_only(self):
         # "A1" should not match because \b requires a word boundary around the digit.
         assert parse_score("A1") == 3  # no valid isolated digit -> default

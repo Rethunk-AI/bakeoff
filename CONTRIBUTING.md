@@ -19,10 +19,10 @@ content here; we deliberately keep it in one place.
 
 Base environment (a running `engined`, `uv`, GGUFs): [`HUMANS.md` § Prerequisites](HUMANS.md#prerequisites). Don't re-derive that here.
 
-Dev extras (ruff, pyrefly, pytest, types-PyYAML) on top of the base venv:
+Dev tools (ruff, pyrefly, pytest, types-PyYAML) are the `dev` dependency group, which `uv sync` installs:
 
 ```sh
-uv pip install -e ".[dev]"
+uv sync
 ```
 
 ## Before opening a PR

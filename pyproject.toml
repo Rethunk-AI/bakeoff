@@ -16,16 +16,6 @@ dependencies = [
   "pyyaml>=6.0.3",
 ]
 
-[project.optional-dependencies]
-dev = [
-  "deptry>=0.25",
-  "pyrefly>=0.1",
-  "pytest>=9.0.3",
-  "ruff>=0.15.13",
-  "types-psutil>=7.0.0.20250601",
-  "types-PyYAML>=6.0.12.20260518",
-]
-
 [project.scripts]
 bakeoff-report = "bench.report_cli:main"
 bakeoff-worker = "bench.worker:main"
@@ -76,10 +66,6 @@ missing-import = false
 # --- Deptry ------------------------------------------------------------------
 [tool.deptry]
 known_first_party = ["bench"]
-# The "dev" extra is tooling (linters, type checker, test runner) invoked as
-# CLIs, not imported by bench/ -- without this deptry reports every one of
-# them as an unused dependency (DEP002).
-optional_dependencies_dev_groups = ["dev"]
 
 [tool.deptry.package_module_name_map]
 pyyaml = "yaml"
@@ -98,4 +84,10 @@ addopts = "-ra --strict-markers"
 [dependency-groups]
 dev = [
     "lefthook>=2.1.10",
+    "deptry>=0.25",
+    "pyrefly>=0.1",
+    "pytest>=9.0.3",
+    "ruff>=0.15.13",
+    "types-psutil>=7.0.0.20250601",
+    "types-PyYAML>=6.0.12.20260518",
 ]

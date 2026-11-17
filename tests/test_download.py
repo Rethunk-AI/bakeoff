@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+import bench.download as bench_download
 from bench.download import (
     collect_from_config,
     human_bytes,
@@ -104,3 +105,18 @@ class TestTargetPath:
     def test_rejects_filename_escaping_models_dir(self, tmp_path: Path):
         with pytest.raises(ValueError, match="escapes"):
             target_path(tmp_path, "org/repo", "../../../evil.gguf")
+
+    def test_rejects_malformed_repo_id(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="invalid repo_id"):
+            target_path(tmp_path, "repoid", "file.gguf")
+        with pytest.raises(ValueError, match="invalid repo_id"):
+            target_path(tmp_path, "org/repo/extra", "file.gguf")
+
+    def test_download_one_creates_nothing_for_invalid_repo_id(self, tmp_path, monkeypatch):
+        calls = []
+        monkeypatch.setattr(bench_download, "hf_hub_download", lambda **kw: calls.append(kw))
+        models_dir = tmp_path / "models"
+        with pytest.raises(ValueError, match="invalid repo_id"):
+            bench_download.download_one(models_dir, "org/repo/extra", "file.gguf", None)
+        assert calls == []
+        assert not models_dir.exists()

@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -102,7 +103,12 @@ def human_bytes(n: int | None) -> str:
     return f"{n} B"
 
 
+REPO_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*")
+
+
 def target_path(models_dir: Path, repo_id: str, filename: str) -> Path:
+    if not REPO_ID_RE.fullmatch(repo_id):
+        raise ValueError(f"invalid repo_id: {repo_id!r}")
     dest = models_dir / repo_id / filename
     if not dest.resolve().is_relative_to(models_dir.resolve()):
         raise ValueError(f"download path escapes models_dir: {repo_id}/{filename}")
@@ -119,7 +125,7 @@ def download_one(
     dest = target_path(models_dir, repo_id, filename)
     if dest.exists() and dest.stat().st_size > 0:
         return dest
-    local_dir = models_dir / repo_id
+    local_dir = dest.parent
     local_dir.mkdir(parents=True, exist_ok=True)
     path_str = hf_hub_download(
         repo_id=repo_id,
@@ -224,7 +230,14 @@ def main() -> int:
 
     failures = 0
     for repo_id, filename in pairs:
-        dest = target_path(models_dir, repo_id, filename)
+        try:
+            dest = target_path(models_dir, repo_id, filename)
+        except ValueError as e:
+            failures += 1
+            print(f"[err] {e}", file=sys.stderr)
+            if args.repo_id:
+                return 1
+            continue
         if dest.exists() and dest.stat().st_size > 0:
             print(f"[ok] {repo_id}/{filename}  (present)")
             continue

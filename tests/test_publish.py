@@ -5,9 +5,12 @@ from __future__ import annotations
 import hashlib
 import json
 
+import pytest
+
 from bench.publish import (
     _SCORE_SUMMARY_KEYS,
     SCHEMA_VERSION,
+    PublishError,
     main,
     package_result,
     submit_bundle,
@@ -188,3 +191,26 @@ def test_validate_bundle_rejects_absolute_manifest_path(tmp_path):
     manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
     errors = validate_bundle(bundle)
     assert any("unsafe" in e for e in errors)
+
+
+def test_validate_bundle_rejects_unlisted_symlink(tmp_path):
+    """A symlink the manifest never names must not reach the submission."""
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("leaked-secret\n")
+    (bundle / "innocent.txt").symlink_to(secret)
+
+    errors = validate_bundle(bundle)
+    assert any("innocent.txt" in e and "symlink" in e for e in errors)
+
+    dest = tmp_path / "results" / "submissions" / "test-run"
+    with pytest.raises(PublishError):
+        submit_bundle(bundle, checkout=tmp_path / "results")
+    assert not dest.exists()
+
+
+def test_validate_bundle_rejects_unlisted_entry(tmp_path):
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle")
+    (bundle / "extra.txt").write_text("not in manifest\n")
+    errors = validate_bundle(bundle)
+    assert any("extra.txt" in e and "not listed in manifest" in e for e in errors)

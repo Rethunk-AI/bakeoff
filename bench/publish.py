@@ -12,6 +12,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -230,6 +231,27 @@ def _manifest_file_errors(bundle_dir: Path, manifest: dict[str, Any]) -> list[st
     return errors
 
 
+def _bundle_entry_errors(bundle_dir: Path, manifest: dict[str, Any]) -> list[str]:
+    """Refuse symlinks anywhere in the bundle, plus entries the manifest does not list.
+
+    A manifest only covers what it names; anything else in the tree would be
+    copied into the submission unvalidated (a symlink would copy its target).
+    """
+    errors: list[str] = []
+    files = manifest.get("files")
+    listed = set(files) if isinstance(files, dict) else set()
+    listed.add(MANIFEST_JSON)
+    for root, dirs, names in os.walk(bundle_dir, followlinks=False):
+        for name in dirs + names:
+            path = Path(root) / name
+            rel = path.relative_to(bundle_dir).as_posix()
+            if path.is_symlink():
+                errors.append(f"{rel}: symlink not allowed")
+            elif rel not in listed:
+                errors.append(f"{rel}: not listed in manifest")
+    return errors
+
+
 def validate_bundle(bundle_dir: Path) -> list[str]:
     """Return validation errors for a packaged result bundle directory."""
     errors: list[str] = []
@@ -255,6 +277,7 @@ def validate_bundle(bundle_dir: Path) -> list[str]:
 
     errors.extend(validate_result_payload(payload))
     errors.extend(_manifest_file_errors(bundle_dir, manifest))
+    errors.extend(_bundle_entry_errors(bundle_dir, manifest))
 
     signature = manifest.get("signature")
     if signature is not None:
@@ -408,7 +431,7 @@ def submit_bundle(
     if dest.exists():
         shutil.rmtree(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copytree(bundle_dir, dest)
+    shutil.copytree(bundle_dir, dest, symlinks=False)
 
     rel_dest = dest.relative_to(checkout)
     _run(["git", "add", str(rel_dest)], cwd=checkout)

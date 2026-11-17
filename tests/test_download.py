@@ -100,3 +100,7 @@ class TestTargetPath:
     def test_nested_filename(self, tmp_path: Path):
         p = target_path(tmp_path, "org/repo", "sub/file.gguf")
         assert p == tmp_path / "org" / "repo" / "sub" / "file.gguf"
+
+    def test_rejects_filename_escaping_models_dir(self, tmp_path: Path):
+        with pytest.raises(ValueError, match="escapes"):
+            target_path(tmp_path, "org/repo", "../../../evil.gguf")

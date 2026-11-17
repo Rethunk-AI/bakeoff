@@ -103,7 +103,10 @@ def human_bytes(n: int | None) -> str:
 
 
 def target_path(models_dir: Path, repo_id: str, filename: str) -> Path:
-    return models_dir / repo_id / filename
+    dest = models_dir / repo_id / filename
+    if not dest.resolve().is_relative_to(models_dir.resolve()):
+        raise ValueError(f"download path escapes models_dir: {repo_id}/{filename}")
+    return dest
 
 
 def download_one(

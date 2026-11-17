@@ -116,6 +116,10 @@ func (r *MigrationRunner) Run(ctx context.Context, schemaVersionID int) error {
 	}
 	orderedTables := r.topologicalOrder(ctx, tables)
 
+	// Fingerprints before DDL so record migration can skip the shadow rebuild
+	// when a table's structure did not change.
+	preFingerprints := r.fingerprintTables(ctx, orderedTables)
+
 	// 4. Execute schema_migration_script (DDL phase).
 	if sv.SchemaMigrationScript != nil && *sv.SchemaMigrationScript != "" {
 		log.Printf("[migrate] running schema_migration_script for version %d", schemaVersionID)
@@ -132,7 +136,7 @@ func (r *MigrationRunner) Run(ctx context.Context, schemaVersionID int) error {
 				// Deprecated table — skip (handled by schema_tables_join edges).
 				continue
 			}
-			if err := r.runRecordMigration(ctx, sv, table); err != nil {
+			if err := r.runRecordMigration(ctx, sv, table, preFingerprints[table.TableName]); err != nil {
 				return fmt.Errorf("record migration for table %q: %w", table.TableName, err)
 			}
 		}
@@ -163,9 +167,10 @@ func (r *MigrationRunner) runSchemaScript(ctx context.Context, script string) er
 	return nil
 }
 
-// runRecordMigration runs the record_migration_script for a single table
-// using the shadow table strategy.
-func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersion, table SchemaTable) error {
+// runRecordMigration runs the record_migration_script for a single table.
+// Matching pre/post DDL fingerprints means no structural change, so records
+// are updated in place instead of rebuilding through a shadow table.
+func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersion, table SchemaTable, preFingerprint string) error {
 	script := *sv.RecordMigrationScript
 
 	// Pre-compile once; parse errors are fatal.
@@ -173,6 +178,14 @@ func (r *MigrationRunner) runRecordMigration(ctx context.Context, sv SchemaVersi
 	_, err := compileScript(script, builtins)
 	if err != nil {
 		return fmt.Errorf("record script compile error (fatal): %w", err)
+	}
+
+	postFingerprint, err := r.schemaFingerprint(ctx, table.TableName)
+	if err != nil {
+		return fmt.Errorf("schema fingerprint: %w", err)
+	}
+	if preFingerprint != "" && preFingerprint == postFingerprint {
+		return r.runRecordMigrationInline(ctx, sv, table, script)
 	}
 
 	shadowTable := fmt.Sprintf("_bakeoff_migration_%s_%d", sanitizeName(table.TableName), sv.ID)
@@ -219,7 +232,7 @@ func (r *MigrationRunner) runRecordMigrationShadow(
 	}
 
 	// Run migration loop.
-	stats, err := r.migrateRecords(ctx, sv, table, script, shadowTable, stateTable, lastRowID)
+	stats, err := r.migrateRecords(ctx, sv, table, script, shadowTable, stateTable, lastRowID, false)
 	if err != nil {
 		return err
 	}
@@ -248,6 +261,88 @@ func (r *MigrationRunner) runRecordMigrationShadow(
 	}
 
 	return nil
+}
+
+// runRecordMigrationInline updates records in place when the table DDL is unchanged.
+func (r *MigrationRunner) runRecordMigrationInline(
+	ctx context.Context,
+	sv SchemaVersion,
+	table SchemaTable,
+	script string,
+) error {
+	stateTable := "_bakeoff_migration_state"
+
+	if err := r.ensureMigrationStateTable(ctx, stateTable); err != nil {
+		return err
+	}
+
+	lastRowID, err := r.loadCheckpoint(ctx, stateTable, table.TableName, sv.ID)
+	if err != nil {
+		return err
+	}
+
+	if lastRowID == 0 {
+		log.Printf("[migrate] inline record migration for %s (schema unchanged)", table.TableName)
+		if !r.cfg.DryRun {
+			if err := r.saveCheckpoint(ctx, stateTable, table.TableName, sv.ID, 0); err != nil {
+				return err
+			}
+		}
+	} else {
+		log.Printf("[migrate] resuming inline %s from row id %d", table.TableName, lastRowID)
+	}
+
+	stats, err := r.migrateRecords(ctx, sv, table, script, table.TableName, stateTable, lastRowID, true)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("[migrate] %s: %d migrated, %d rejected, %d ignored",
+		table.TableName, stats.migrated, stats.rejected, stats.ignored)
+
+	if !r.cfg.DryRun && stats.rejected == 0 {
+		if err := r.dropCheckpoint(ctx, stateTable, table.TableName, sv.ID); err != nil {
+			return err
+		}
+		if err := r.maybeDropStateTable(ctx, stateTable); err != nil {
+			return fmt.Errorf("drop state table: %w", err)
+		}
+	} else if stats.rejected > 0 {
+		return fmt.Errorf("%d records rejected during migration of %s",
+			stats.rejected, table.TableName)
+	}
+
+	return nil
+}
+
+// fingerprintTables snapshots each table's schema fingerprint, skipping tables
+// that cannot be fingerprinted (typically not created yet).
+func (r *MigrationRunner) fingerprintTables(ctx context.Context, tables []SchemaTable) map[string]string {
+	out := make(map[string]string, len(tables))
+	for _, t := range tables {
+		fp, err := r.schemaFingerprint(ctx, t.TableName)
+		if err != nil {
+			continue
+		}
+		out[t.TableName] = fp
+	}
+	return out
+}
+
+// schemaFingerprint hashes a table's live column names, types, typmods, and
+// nullability so a structural DDL change is distinguishable from a no-op.
+func (r *MigrationRunner) schemaFingerprint(ctx context.Context, tableName string) (string, error) {
+	var fp string
+	err := r.conn.QueryRow(ctx, `
+		SELECT md5(COALESCE(string_agg(
+			a.attname || ':' || a.atttypid::text || ':' || a.atttypmod::text || ':' || a.attnotnull::text,
+			',' ORDER BY a.attnum
+		), ''))
+		FROM pg_attribute a
+		WHERE a.attrelid = $1::regclass
+		  AND a.attnum > 0
+		  AND NOT a.attisdropped`, tableName).Scan(&fp)
+	return fp, err
 }
 
 // migrationStats tracks per-run counters.
@@ -287,9 +382,11 @@ func (r *MigrationRunner) reject(st *migrateState, tableName string, row map[str
 
 // migrateRow runs the record script against one row and reports whether the
 // row counted as migrated (false for rejected or ignored rows).
-func (r *MigrationRunner) migrateRow(ctx context.Context, st *migrateState, row map[string]any, table SchemaTable, script, shadowTable string) (bool, error) {
+func (r *MigrationRunner) migrateRow(ctx context.Context, st *migrateState, row map[string]any, table SchemaTable, script, shadowTable string, inline bool) (bool, error) {
 	rec := NewRecord(row)
-	compiled, err := compileScript(script, recordBuiltins(ctx, r.conn, rec))
+	builtins := recordBuiltins(ctx, r.conn, rec)
+	builtins["this"] = rec.toTengoMap()
+	compiled, err := compileScript(script, builtins)
 	if err != nil {
 		// Script compile error is fatal.
 		return false, fmt.Errorf("record script compile error (fatal): %w", err)
@@ -322,7 +419,11 @@ func (r *MigrationRunner) migrateRow(ctx context.Context, st *migrateState, row 
 	}
 
 	if !r.cfg.DryRun {
-		if err := r.writeRecordToShadow(ctx, shadowTable, rec.MergedRow()); err != nil {
+		if inline {
+			if err := r.writeRecordInline(ctx, shadowTable, rec.MergedRow()); err != nil {
+				return false, fmt.Errorf("write in place: %w", err)
+			}
+		} else if err := r.writeRecordToShadow(ctx, shadowTable, rec.MergedRow()); err != nil {
 			return false, fmt.Errorf("write to shadow table: %w", err)
 		}
 	}
@@ -330,10 +431,10 @@ func (r *MigrationRunner) migrateRow(ctx context.Context, st *migrateState, row 
 }
 
 // migrateBatch migrates every row of a batch and returns how many were migrated.
-func (r *MigrationRunner) migrateBatch(ctx context.Context, st *migrateState, rows []map[string]any, table SchemaTable, script, shadowTable string) (int, error) {
+func (r *MigrationRunner) migrateBatch(ctx context.Context, st *migrateState, rows []map[string]any, table SchemaTable, script, shadowTable string, inline bool) (int, error) {
 	migrated := 0
 	for _, row := range rows {
-		ok, err := r.migrateRow(ctx, st, row, table, script, shadowTable)
+		ok, err := r.migrateRow(ctx, st, row, table, script, shadowTable, inline)
 		if err != nil {
 			return migrated, err
 		}
@@ -381,6 +482,7 @@ func (r *MigrationRunner) migrateRecords(
 	table SchemaTable,
 	script, shadowTable, stateTable string,
 	resumeFromID int64,
+	inline bool,
 ) (migrationStats, error) {
 	st := &migrateState{}
 	var timings batchTimings
@@ -409,7 +511,7 @@ func (r *MigrationRunner) migrateRecords(
 		}
 
 		processStart := time.Now()
-		batchMigrated, err := r.migrateBatch(ctx, st, rows, table, script, shadowTable)
+		batchMigrated, err := r.migrateBatch(ctx, st, rows, table, script, shadowTable, inline)
 		if err != nil {
 			return st.stats, err
 		}
@@ -502,6 +604,39 @@ func (r *MigrationRunner) writeRecordToShadow(ctx context.Context, shadowTable s
 		shadowTable,
 		strings.Join(cols, ", "),
 		strings.Join(placeholders, ", "))
+	_, err := r.conn.Exec(ctx, sql, vals...)
+	return err
+}
+
+// writeRecordInline updates the source row in place. Used when DDL is unchanged
+// so a shadow-table rebuild would copy the same structure back onto itself.
+func (r *MigrationRunner) writeRecordInline(ctx context.Context, table string, row map[string]any) error {
+	if len(row) == 0 {
+		return nil
+	}
+	id, ok := row["id"]
+	if !ok {
+		return fmt.Errorf("inline migration requires an id column")
+	}
+	cols := make([]string, 0, len(row))
+	vals := make([]any, 0, len(row))
+	for k, v := range row {
+		if k == "id" {
+			continue
+		}
+		cols = append(cols, k)
+		vals = append(vals, v)
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	setClauses := make([]string, len(cols))
+	for i, c := range cols {
+		setClauses[i] = fmt.Sprintf("%s = $%d", c, i+1)
+	}
+	vals = append(vals, id)
+	sql := fmt.Sprintf("UPDATE %s SET %s WHERE id = $%d",
+		table, strings.Join(setClauses, ", "), len(vals))
 	_, err := r.conn.Exec(ctx, sql, vals...)
 	return err
 }

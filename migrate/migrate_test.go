@@ -12,12 +12,15 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"os"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/Masterminds/squirrel"
 	"github.com/d5/tengo/v2"
+	"github.com/jackc/pgx/v5"
 )
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -867,6 +870,142 @@ func TestRollback_DropsOrphanShadowTablesOnly(t *testing.T) {
 	}
 	if !cat.tables["_bakeoff_migration_state"] {
 		t.Fatal("state table _bakeoff_migration_state was dropped")
+	}
+}
+
+func setupRecordMigration(t *testing.T, schemaScript, recordScript string) (*pgx.Conn, context.Context, int) {
+	t.Helper()
+	dsn := os.Getenv("DATABASE_URL")
+	if dsn == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+	ctx := t.Context()
+	admin, err := pgx.Connect(ctx, dsn)
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	t.Cleanup(func() { _ = admin.Close(context.WithoutCancel(ctx)) })
+
+	name := fmt.Sprintf("bakeoff_migrate_%d", time.Now().UnixNano())
+	ident := pgx.Identifier{name}.Sanitize()
+	if _, err := admin.Exec(ctx, "CREATE DATABASE "+ident); err != nil {
+		t.Fatalf("create database: %v", err)
+	}
+	t.Cleanup(func() {
+		_, _ = admin.Exec(context.WithoutCancel(ctx), "DROP DATABASE IF EXISTS "+ident+" WITH (FORCE)")
+	})
+
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("parse dsn: %v", err)
+	}
+	cfg.Database = name
+	conn, err := pgx.ConnectConfig(ctx, cfg)
+	if err != nil {
+		t.Fatalf("connect test db: %v", err)
+	}
+	t.Cleanup(func() { _ = conn.Close(context.WithoutCancel(ctx)) })
+
+	mustExec := func(sql string, args ...any) {
+		t.Helper()
+		if _, err := conn.Exec(ctx, sql, args...); err != nil {
+			t.Fatalf("%s: %v", sql, err)
+		}
+	}
+	mustExec(`CREATE TABLE schema_versions (
+		schema_version_id INTEGER PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+		description TEXT,
+		allow_migration BOOLEAN NOT NULL DEFAULT FALSE,
+		schema_migration_script TEXT,
+		record_migration_script TEXT,
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+	)`)
+	mustExec(`CREATE TABLE schema_tables (
+		table_id UUID PRIMARY KEY,
+		table_name TEXT NOT NULL,
+		uuid_namespace UUID NOT NULL,
+		initial_version_id INTEGER NOT NULL REFERENCES schema_versions(schema_version_id),
+		current_version_id INTEGER NOT NULL REFERENCES schema_versions(schema_version_id),
+		created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+		updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+		deprecated_at TIMESTAMPTZ
+	)`)
+	mustExec(`CREATE TABLE items (id BIGINT PRIMARY KEY, name TEXT NOT NULL)`)
+	mustExec(`INSERT INTO items (id, name) VALUES (1, 'old')`)
+
+	var schemaArg, recordArg any
+	if schemaScript != "" {
+		schemaArg = schemaScript
+	}
+	if recordScript != "" {
+		recordArg = recordScript
+	}
+	var id int
+	if err := conn.QueryRow(ctx, `
+		INSERT INTO schema_versions (description, allow_migration, schema_migration_script, record_migration_script)
+		VALUES ('test', true, $1, $2)
+		RETURNING schema_version_id`, schemaArg, recordArg).Scan(&id); err != nil {
+		t.Fatalf("insert schema version: %v", err)
+	}
+	mustExec(`INSERT INTO schema_tables (table_id, table_name, uuid_namespace, initial_version_id, current_version_id)
+		VALUES ('00000000-0000-0000-0000-000000000010', 'items', '00000000-0000-0000-0000-000000000001', $1, $1)`, id)
+	return conn, ctx, id
+}
+
+func publicTableExists(t *testing.T, ctx context.Context, conn *pgx.Conn, name string) bool {
+	t.Helper()
+	var n int
+	if err := conn.QueryRow(ctx,
+		`SELECT COUNT(*) FROM pg_tables WHERE schemaname='public' AND tablename=$1`, name,
+	).Scan(&n); err != nil {
+		t.Fatalf("table exists %s: %v", name, err)
+	}
+	return n > 0
+}
+
+func TestRun_InlineWhenSchemaUnchanged(t *testing.T) {
+	conn, ctx, versionID := setupRecordMigration(t, "", `setField("name", "migrated")`)
+	r := NewRunner(conn, DefaultConfig())
+	if err := r.Run(ctx, versionID); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if publicTableExists(t, ctx, conn, "_bakeoff_old_items") {
+		t.Fatal("unchanged schema used shadow rebuild (_bakeoff_old_items exists)")
+	}
+	if publicTableExists(t, ctx, conn, fmt.Sprintf("_bakeoff_migration_items_%d", versionID)) {
+		t.Fatal("unchanged schema left a shadow table")
+	}
+
+	var name string
+	if err := conn.QueryRow(ctx, `SELECT name FROM items WHERE id=1`).Scan(&name); err != nil {
+		t.Fatalf("read items: %v", err)
+	}
+	if name != "migrated" {
+		t.Fatalf("inline write: got %q, want migrated", name)
+	}
+}
+
+func TestRun_ShadowWhenSchemaChanged(t *testing.T) {
+	conn, ctx, versionID := setupRecordMigration(t,
+		`rawSQL("ALTER TABLE items ADD COLUMN extra TEXT")`,
+		`setField("extra", "yes")`,
+	)
+	r := NewRunner(conn, DefaultConfig())
+	if err := r.Run(ctx, versionID); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	if !publicTableExists(t, ctx, conn, "_bakeoff_old_items") {
+		t.Fatal("DDL change should swap through a shadow table (_bakeoff_old_items missing)")
+	}
+
+	var extra *string
+	if err := conn.QueryRow(ctx, `SELECT extra FROM items WHERE id=1`).Scan(&extra); err != nil {
+		t.Fatalf("read items.extra: %v", err)
+	}
+	if extra == nil || *extra != "yes" {
+		t.Fatalf("shadow write: extra=%v, want yes", extra)
 	}
 }
 

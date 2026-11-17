@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 
 from bench.publish import (
@@ -160,3 +161,30 @@ def test_strict_warns_not_errors_on_absent_fields(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "run_status" in captured.err
     assert "model_scores" in captured.err
+
+
+def test_validate_bundle_rejects_symlink_member(tmp_path):
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle")
+    secret = tmp_path / "secret.txt"
+    secret.write_text("leaked-secret\n")
+    dash = bundle / "dashboard.html"
+    dash.unlink()
+    dash.symlink_to(secret)
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"]["dashboard.html"]["sha256"] = hashlib.sha256(secret.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    errors = validate_bundle(bundle)
+    assert any("symlink" in e or "unsafe" in e for e in errors)
+
+
+def test_validate_bundle_rejects_absolute_manifest_path(tmp_path):
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle")
+    secret = tmp_path / "outside.txt"
+    secret.write_text("outside\n")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"][str(secret)] = {"sha256": hashlib.sha256(secret.read_bytes()).hexdigest()}
+    manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
+    errors = validate_bundle(bundle)
+    assert any("unsafe" in e for e in errors)

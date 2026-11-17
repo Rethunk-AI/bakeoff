@@ -205,16 +205,24 @@ def _manifest_file_errors(bundle_dir: Path, manifest: dict[str, Any]) -> list[st
     files = manifest.get("files")
     if not isinstance(files, dict) or not files:
         return ["manifest.files: required object"]
+    root = bundle_dir.resolve()
     for rel, meta in files.items():
-        if "/" in rel and any(part in {"", ".", ".."} for part in Path(rel).parts):
+        rel_path = Path(rel)
+        # Absolute names and .. join outside the bundle (pathlib keeps the absolute).
+        if rel_path.is_absolute() or any(part in {"", ".", ".."} for part in rel_path.parts):
             errors.append(f"manifest.files.{rel}: unsafe path")
             continue
         if not isinstance(meta, dict) or not meta.get("sha256"):
             errors.append(f"manifest.files.{rel}.sha256: required")
             continue
-        path = bundle_dir / rel
-        if not path.is_file():
-            errors.append(f"{rel}: missing")
+        path = bundle_dir / rel_path
+        if path.is_symlink():
+            errors.append(f"{rel}: symlink not allowed")
+            continue
+        if not path.is_file() or not path.resolve().is_relative_to(root):
+            errors.append(
+                f"{rel}: missing" if not path.is_file() else f"manifest.files.{rel}: unsafe path"
+            )
             continue
         actual = _sha256_file(path)
         if actual != meta["sha256"]:

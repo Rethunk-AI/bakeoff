@@ -17,6 +17,7 @@ SUPPORTED_VERSIONS = (2, 3)
 MAX_KV_COUNT = 100_000
 MAX_STRING_BYTES = 1 << 20
 MAX_ARRAY_LEN = 10_000_000
+MAX_VALUE_DEPTH = 32
 
 # Keys kept in the result; everything else is skipped without being stored.
 _WANTED_PREFIXES = ("general.",)
@@ -96,7 +97,9 @@ def _string(f: BinaryIO) -> str:
     return _read(f, n).decode("utf-8", errors="replace")
 
 
-def _value(f: BinaryIO, vtype: int, keep: bool) -> Any:
+def _value(f: BinaryIO, vtype: int, keep: bool, depth: int = 0) -> Any:
+    if depth > MAX_VALUE_DEPTH:
+        raise GGUFError(f"value nesting depth {depth} exceeds {MAX_VALUE_DEPTH}")
     if vtype in _SCALAR:
         return _unpack(f, _SCALAR[vtype])
     if vtype == _T_STRING:
@@ -109,7 +112,7 @@ def _value(f: BinaryIO, vtype: int, keep: bool) -> Any:
         if etype in _SCALAR and not keep:
             f.seek(n * struct.calcsize(_SCALAR[etype]), 1)
             return None
-        items = [_value(f, etype, keep) for _ in range(n)]
+        items = [_value(f, etype, keep, depth + 1) for _ in range(n)]
         return items if keep else None
     raise GGUFError(f"unknown value type {vtype}")
 

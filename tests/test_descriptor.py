@@ -12,7 +12,7 @@ import struct
 
 import pytest
 
-from bench import descriptor, store
+from bench import descriptor, gguf_meta, store
 
 
 @pytest.fixture(autouse=True)
@@ -264,3 +264,19 @@ def test_cli_not_a_gguf(tmp_path, capsys):
     _write_descriptor(desc)
     assert descriptor.main(["ingest", str(desc), "--gguf", str(gguf)]) == 1
     assert "bad magic" in capsys.readouterr().err
+
+
+def test_gguf_nested_arrays_are_bounded(tmp_path):
+    # Nested array-of-array values used to recurse until RecursionError.
+    depth = 2000
+    key = b"general.nested"
+    inner = struct.pack("<IQ", 0, 0)  # empty uint8 array
+    body = inner
+    for _ in range(depth):
+        body = struct.pack("<IQ", 9, 1) + body  # array[1] of array
+    raw = b"GGUF" + struct.pack("<IQQ", 3, 0, 1) + struct.pack("<Q", len(key)) + key
+    raw += struct.pack("<I", 9) + body
+    path = tmp_path / "nested.gguf"
+    path.write_bytes(raw)
+    with pytest.raises(gguf_meta.GGUFError, match="depth"):
+        gguf_meta.read_metadata(path)

@@ -125,7 +125,9 @@ def download_one(
     dest = target_path(models_dir, repo_id, filename)
     if dest.exists() and dest.stat().st_size > 0:
         return dest
-    local_dir = dest.parent
+    # hf_hub_download joins local_dir with the repo-relative filename, so
+    # local_dir stays the repo root even when filename is nested.
+    local_dir = models_dir / repo_id
     local_dir.mkdir(parents=True, exist_ok=True)
     path_str = hf_hub_download(
         repo_id=repo_id,

@@ -120,3 +120,16 @@ class TestTargetPath:
             bench_download.download_one(models_dir, "org/repo/extra", "file.gguf", None)
         assert calls == []
         assert not models_dir.exists()
+
+    def test_download_one_passes_repo_root_for_nested_filename(self, tmp_path, monkeypatch):
+        calls = []
+
+        def fake_download(**kw):
+            calls.append(kw)
+            return str(Path(kw["local_dir"]) / kw["filename"])
+
+        monkeypatch.setattr(bench_download, "hf_hub_download", fake_download)
+        models_dir = tmp_path / "models"
+        filename = "Q4_K_M/model-00001-of-00002.gguf"
+        bench_download.download_one(models_dir, "org/repo", filename, None)
+        assert [c["local_dir"] for c in calls] == [str(models_dir / "org" / "repo")]

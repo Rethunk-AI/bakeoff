@@ -267,7 +267,7 @@ def test_cli_not_a_gguf(tmp_path, capsys):
 
 
 def test_gguf_nested_arrays_are_bounded(tmp_path):
-    # Nested array-of-array values used to recurse until RecursionError.
+    # Nested array-of-array values would recurse until RecursionError, so depth must be bounded.
     depth = 2000
     key = b"general.nested"
     inner = struct.pack("<IQ", 0, 0)  # empty uint8 array

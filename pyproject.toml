@@ -77,6 +77,7 @@ ignore = ["E501"]
 # CI only ever type-checked bench/, never tests/ -- keep that scope.
 [tool.pyrefly]
 project-includes = ["bench"]
+check-unannotated-defs = true
 
 [[tool.pyrefly.sub-config]]
 matches = "bench/hardware.py"

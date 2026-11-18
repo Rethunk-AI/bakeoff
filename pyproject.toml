@@ -36,19 +36,40 @@ line-length = 100
 target-version = "py312"
 
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "S"]
 
 [tool.ruff.lint.per-file-ignores]
-"bench/dataset.py" = ["E501"] # fixture prompts are intentionally long
-"bench/metrics.py" = ["RUF002", "RUF003"] # × in formulas/docstrings by design
+"bench/dataset.py" = [
+  "E501",
+  "S311",
+] # long fixture prompts; seeded RNG for synthetic tasks
+"bench/engined.py" = ["S607"] # PATH lookup of engined and host tools
+"bench/hardware.py" = [
+  "S603",
+] # nvidia-smi/rocm-smi/sysctl subprocess, fixed argv
+"bench/metrics.py" = [
+  "RUF002",
+  "RUF003",
+  "S603",
+  "S607",
+] # × in formulas; power samplers call host tools
+"bench/provenance.py" = ["S603"] # git subprocess with fixed argv
+"bench/publish.py" = ["S603", "S607"] # git/gh subprocess with fixed argv
 "bench/report.py" = [
   "RUF001",
   "RUF002",
   "RUF003",
   "E501",
 ] # × in UI strings; long rows
-"bench/runner.py" = ["RUF002"] # × in docstrings by design
-"tests/test_metrics.py" = ["RUF003"] # × in formula comments by design
+"bench/runner.py" = ["RUF002", "S311"] # × in docstrings; seeded pairwise order
+"bench/worker.py" = ["S603"] # git subprocess with fixed argv
+"tests/**" = ["S101"] # pytest assertions
+"tests/test_engined_route.py" = ["S311"] # seeded RNG in fixtures
+"tests/test_metrics.py" = ["RUF003", "S311"] # × in formula comments; seeded RNG
+"tests/test_runner.py" = [
+  "S108",
+] # "/tmp/models" is a mock path, not a created file
+"tests/test_worker.py" = ["S105"] # "token" is a mock credential in fixtures
 
 # --- Pyrefly ---------------------------------------------------------------
 # CI only ever type-checked bench/, never tests/ -- keep that scope.
@@ -83,11 +104,11 @@ addopts = "-ra --strict-markers"
 
 [dependency-groups]
 dev = [
-    "lefthook>=2.1.10",
-    "deptry>=0.25",
-    "pyrefly>=0.1",
-    "pytest>=9.0.3",
-    "ruff>=0.15.13",
-    "types-psutil>=7.0.0.20250601",
-    "types-PyYAML>=6.0.12.20260518",
+  "lefthook>=2.1.10",
+  "deptry>=0.25",
+  "pyrefly>=0.1",
+  "pytest>=9.0.3",
+  "ruff>=0.15.13",
+  "types-psutil>=7.0.0.20250601",
+  "types-PyYAML>=6.0.12.20260518",
 ]

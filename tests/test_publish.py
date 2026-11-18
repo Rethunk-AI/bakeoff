@@ -6,6 +6,7 @@ import hashlib
 import json
 
 import pytest
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 from bench.publish import (
     _SCORE_SUMMARY_KEYS,
@@ -15,8 +16,10 @@ from bench.publish import (
     package_result,
     submit_bundle,
     validate_bundle,
+    validate_path,
     validate_result_payload,
 )
+from bench.signing import generate_keypair, sign_result
 
 
 def _payload():
@@ -214,3 +217,151 @@ def test_validate_bundle_rejects_unlisted_entry(tmp_path):
     (bundle / "extra.txt").write_text("not in manifest\n")
     errors = validate_bundle(bundle)
     assert any("extra.txt" in e and "not listed in manifest" in e for e in errors)
+
+
+def test_malformed_result_fields_are_named():
+    missing = validate_result_payload({})
+    assert any("run_id" in e for e in missing)
+    assert any("timestamp" in e for e in missing)
+    assert any(e == "config: required object" for e in missing)
+    assert any(e == "provenance: required object" for e in missing)
+    assert any("tasks: required non-empty list" in e for e in missing)
+
+    nested = validate_result_payload(
+        {
+            "run_id": "r",
+            "timestamp": "t",
+            "config": {
+                "models": ["nope", {"id": "", "gguf": ""}],
+                "prompts": [{}, {"id": "p"}],
+            },
+            "provenance": {"git": "not-an-object"},
+            "tasks": [{}, {"id": "t1"}],
+            "records": ["nope", {}],
+            "model_metadata": ["nope", {}],
+            "run_status": "maybe",
+            "model_scores": {"not": "a list"},
+        }
+    )
+    joined = "\n".join(nested)
+    assert "provenance.config_hash" in joined
+    assert "provenance.seed" in joined
+    assert "provenance.git.sha" in joined
+    assert "config.models[0]: required object" in joined
+    assert "config.models[1].id" in joined
+    assert "config.models[1].gguf" in joined
+    assert "config.prompts[0].id" in joined
+    assert "tasks[0].id" in joined
+    assert "records[0]: required object" in joined
+    assert "records[1].task_id" in joined
+    assert "model_metadata[0]: required object" in joined
+    assert "model_metadata[1].id" in joined
+    assert "model_metadata[1].gguf" in joined
+    assert "run_status:" in joined
+    assert "model_scores: must be a list" in joined
+
+
+def test_unreadable_result_files_are_rejected(tmp_path):
+    assert any("not found" in e for e in validate_path(tmp_path / "missing.json"))
+    (tmp_path / "bad.json").write_text("{nope")
+    assert any("invalid JSON" in e for e in validate_path(tmp_path / "bad.json"))
+    (tmp_path / "arr.json").write_text("[]")
+    assert any("JSON object" in e for e in validate_path(tmp_path / "arr.json"))
+
+
+def test_signed_envelope_needs_a_matching_pem_public_key(tmp_path):
+    priv, pub_b64 = generate_keypair()
+    other_priv, other_pub = generate_keypair()
+    envelope = sign_result(_payload(), priv, "runner-1")
+    path = tmp_path / "run.json"
+    path.write_text(json.dumps(envelope))
+
+    assert any("no public key" in e for e in validate_path(path))
+    assert any("signature verification failed" in e for e in validate_path(path, other_pub))
+
+    pem = priv.public_key().public_bytes(
+        encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo
+    )
+    key_path = tmp_path / "pub.pem"
+    key_path.write_bytes(pem)
+    assert main(["validate", str(path), "--public-key", str(key_path)]) == 0
+
+    b64_path = tmp_path / "pub.b64"
+    b64_path.write_text(pub_b64 + "\n")
+    assert main(["validate", str(path), "--public-key", str(b64_path)]) == 0
+
+    wrong_pem = other_priv.public_key().public_bytes(
+        encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo
+    )
+    wrong_path = tmp_path / "wrong.pem"
+    wrong_path.write_bytes(wrong_pem)
+    assert main(["validate", str(path), "--public-key", str(wrong_path)]) == 1
+
+
+def test_bundle_rejects_incomplete_manifest_and_required_unsigned_signature(tmp_path):
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert any("missing" in e for e in validate_bundle(empty))
+
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "ok-bundle")
+    assert validate_path(bundle) == []
+
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle")
+    (bundle / "result.json").unlink()
+    assert any("missing" in e for e in validate_bundle(bundle))
+
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle2")
+    (bundle / "manifest.json").write_text("[]\n")
+    assert any("JSON object" in e for e in validate_bundle(bundle))
+
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle3")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"] = {}
+    manifest_path.write_text(json.dumps(manifest) + "\n")
+    assert any("manifest.files" in e for e in validate_bundle(bundle))
+
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle4")
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["files"]["dashboard.html"] = {}
+    del manifest["schema_version"]
+    manifest["run_id"] = ""
+    manifest["created_at"] = ""
+    manifest["signature"] = True
+    manifest_path.write_text(json.dumps(manifest) + "\n")
+    errors = validate_bundle(bundle)
+    joined = "\n".join(errors)
+    assert "schema_version" in joined
+    assert "manifest.run_id" in joined
+    assert "manifest.created_at" in joined
+    assert "sha256" in joined
+    assert "manifest.signature" in joined
+
+    bundle = package_result(_write_payload(tmp_path), tmp_path / "bundle5")
+    (bundle / "dashboard.html").unlink()
+    manifest_path = bundle / "manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["signature"] = {"required": True}
+    manifest_path.write_text(json.dumps(manifest) + "\n")
+    errors = validate_bundle(bundle)
+    joined = "\n".join(errors)
+    assert "dashboard.html" in joined and "missing" in joined
+    assert "signature.path" in joined
+
+
+def test_package_refuses_invalid_payload_and_existing_output(tmp_path):
+    bad = tmp_path / "bad.json"
+    bad.write_text(json.dumps({"run_id": "x"}))
+    with pytest.raises(PublishError, match="invalid result"):
+        package_result(bad, tmp_path / "out")
+
+    result = _write_payload(tmp_path)
+    payload = json.loads(result.read_text())
+    payload["run_id"] = "???"
+    result.write_text(json.dumps(payload))
+    first = package_result(result)
+    assert first.name == "run"
+    with pytest.raises(PublishError, match="exists"):
+        package_result(result)
+    assert package_result(result, force=True) == first

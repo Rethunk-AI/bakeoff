@@ -1,4 +1,0 @@
-[deviations]
-# The fleet artifact is Go-only. This repository also holds Python, and the
-# rule requires CodeQL for every language present (python, build-mode none).
-"patterns-repo-settings-00001" = "jobs matrix includes python because this repository holds Python as well as Go"

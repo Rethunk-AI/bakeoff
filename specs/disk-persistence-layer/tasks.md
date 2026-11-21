@@ -6,8 +6,6 @@
 - [x] Add `tests/test_store.py`: roundtrip, audit-field preservation, UUID determinism.
 - [x] Implement `bench/descriptor.py`: `load_descriptor` (schema_version gate), `validate_descriptor` (issue list), `descriptor_uuid`, `save_descriptor`.
 - [x] Add `tests/test_descriptor.py`: happy path, missing/bad schema_version, UUID hash vs provisional.
-- [x] Implement `bench/queue.py`: `enqueue`, `claim` (rename-as-mutex, race-safe), `mark_in_progress`, `complete`, `fail` (backoff + terminal), `cancel`, `reap_stale_claims`.
-- [x] Add `tests/test_queue.py`: end-to-end happy path, fail/retry/exhaustion, retry_after gate, stale-claim reaping, concurrent 8-thread race.
 - [x] Update `AGENTS.md`: design invariant entry + layout block entries for store/descriptor/queue.
 - [x] Update `HUMANS.md`: `BAKEOFF_DATA_DIR` env var documentation.
 - [x] Add spec files and `specs/index.md` Active table row.
@@ -18,6 +16,5 @@
 - [x] Embedded GGUF metadata cross-check against descriptor fields.
 - [x] DB-sync: write store records to `schema/schema.sql` Postgres tables when a DB connection is available.
 - [x] Descriptor CLI entry point (`python -m bench.descriptor ingest <file>`).
-- [x] Runner registration (`bench/queue.py` runner heartbeat + `runners/` table).
 - [x] Canonicalize provisional-UUID numeric formatting (`parameter_count_b`/`source_size`) so disk-side and future DB-ingestion side derive identical UUID5 keys (currently relies on Python f-string formatting matching on both sides).
 - [x] Harden descriptor/store timestamp parsing to accept all ISO-8601 shapes (microseconds, explicit `+00:00` offset); current `%Y-%m-%dT%H:%M:%SZ` parser only handles whole-second `Z` form.

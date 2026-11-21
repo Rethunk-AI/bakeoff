@@ -24,6 +24,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Hardware schema tables** — `interface_type`, `gpu_hardware`, `system_hardware`, `system_software`, `system_gpu_link`, and `run_hardware_metrics` tables. (#17–#21)
 - **Schema-version tracking** — `schema_versions`, `schema_tables`, and `schema_tables_join` tables for schema-version tracking and migration-graph bookkeeping. (#25)
 
+### Removed
+
+- `bench/queue.py` (the opt-in disk-backed run queue) and its tests: nothing in the runner or worker called it. The runner still writes its own `run_queue/` records through `bench/store.py`.
+
 ### Changed
 
 - Refactored runner to route all inference through `llama-swap` proxy; retired `bin/serve.sh` in favour of `bin/llama-swap.sh`.

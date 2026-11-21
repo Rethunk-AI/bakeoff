@@ -43,13 +43,9 @@ Shared foundation: `data_dir()`, `write_record`, `read_record`, `list_records`, 
 
 Model descriptor reader/validator/persister for hand-crafted seed JSON. `load_descriptor` raises `DescriptorError` immediately on missing or unsupported `schema_version`. `validate_descriptor` returns an aggregated list of issues. `descriptor_uuid` derives UUID from model_hash or provisional key. `save_descriptor` validates then persists.
 
-### `bench/queue.py`
-
-Opt-in disk queue. Claim is race-safe via rename-as-mutex: `os.rename(src, lock)` is the claim gate; concurrent runners that lose get `FileNotFoundError`. CLAIMED/IN_PROGRESS items stay in `pending/`; terminal items move to `completed/`. Backoff: `retry_after = now + 5*attempt_count minutes`, `priority += 5*attempt_count`.
-
 ## Acceptance Criteria
 
-- `bench/store.py`, `bench/descriptor.py`, `bench/queue.py` pass ruff, pyrefly (py312), and pytest.
+- `bench/store.py` and `bench/descriptor.py` pass ruff, pyrefly (py312), and pytest.
 - `bench/runner.py` default path is unchanged.
 - `BAKEOFF_DATA_DIR` is documented in `HUMANS.md`.
 - Spec, plan, and tasks created under `specs/disk-persistence-layer/`.

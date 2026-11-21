@@ -6,10 +6,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Unreleased]
 
-### Fixed
-
-- A dropped connection no longer kills the worker heartbeat thread, which made the queue hand a running job to another runner. Every queue client call now turns transport errors into `WorkerError`, so a failed submit still reports `/fail`.
-
 ### Added
 
 - **Hardware schema completed to the #17 to #21 specs and the fields #38 lists** — `interface_type` gains `bandwidth_peak_gb_s`, `description`, `interface_family`, `lane_transfer_rate` (renamed from `transfer_rate`; a float, since PCIe Gen 1 is 2.5 GT/s) and `lane_count`, seeded with PCIe Gen 1 to 5 by x1/x4/x8/x16, SXM2/4/5, NVLink 2.0/3.0/4.0, Thunderbolt 3/4, USB4 and OCuLink 2.0. New `vram_type`, `gpu_architecture` and `tflops_source` lookup tables (seeds beside it). `gpu_hardware` carries the PCI vendor, device and subsystem ids, `gpu_architecture_id`, `vram_type_id`, `memory_bandwidth_peak_gb_s`, `tflops_source_id` and `tdp_w`. `system_hardware` and `system_software` follow #19, `system_gpu_link` is keyed `(system_hardware_id, slot_index)` with the slot-native and actual interface types, and `run_hardware_metrics` references the link and the software row. `bench/hardware.py` now reports the PCI ids, memory and boost clocks and the slot-native and actual PCIe link. (#38)
@@ -42,6 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Fixed
 
+- A dropped connection no longer kills the worker heartbeat thread, which made the queue hand a running job to another runner. Every queue client call now turns transport errors into `WorkerError`, so a failed submit still reports `/fail`.
 - Removed duplicate `_fmt` definition in `bench/report.py`.
 - Applied current ruff formatting fleet-wide.
 

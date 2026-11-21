@@ -107,7 +107,7 @@ addopts = "-ra --strict-markers"
 
 [dependency-groups]
 dev = [
-  "lefthook>=2.1.10",
+  "lefthook>=2.2.2",
   "deptry",
   "pyrefly>=0.1",
   "pytest>=9.0.3",

@@ -111,7 +111,7 @@ dev = [
   "deptry",
   "pyrefly>=0.1",
   "pytest>=9.0.3",
-  "ruff>=0.15.13",
+  "ruff>=0.17.5",
   "types-psutil>=7.0.0.20250601",
   "types-PyYAML>=6.0.12.20260518",
 ]

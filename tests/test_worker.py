@@ -310,3 +310,9 @@ def test_heartbeat_loop_retries_after_one_failure():
     stop.set()
     thread.join(timeout=2)
     assert client.calls >= 2
+
+
+def test_transport_error_becomes_worker_error() -> None:
+    client = QueueClient("http://127.0.0.1:9", timeout_s=1)
+    with pytest.raises(WorkerError):
+        client.heartbeat("job")

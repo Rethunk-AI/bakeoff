@@ -89,6 +89,17 @@ class QueueClient:
     def _url(self, path: str) -> str:
         return f"{self.base_url}{path}"
 
+    def _post(self, path: str, *, authed: bool = True, **kwargs: Any) -> httpx.Response:
+        try:
+            return httpx.post(
+                self._url(path),
+                headers=self._headers(authed=authed),
+                timeout=self.timeout_s,
+                **kwargs,
+            )
+        except httpx.HTTPError as exc:
+            raise WorkerError(f"{type(exc).__name__}: {exc}") from exc
+
     def _raise_for_error(self, response: httpx.Response) -> None:
         if response.status_code < 400:
             return
@@ -103,9 +114,9 @@ class QueueClient:
         effective_user: str,
         capabilities: dict[str, Any],
     ) -> dict[str, Any]:
-        response = httpx.post(
-            self._url("/api/runners/register"),
-            headers=self._headers(authed=False),
+        response = self._post(
+            "/api/runners/register",
+            authed=False,
             json={
                 "public_key": public_key,
                 "hostname": hostname,
@@ -113,7 +124,6 @@ class QueueClient:
                 "effective_user": effective_user,
                 "capabilities": capabilities,
             },
-            timeout=self.timeout_s,
         )
         self._raise_for_error(response)
         payload = response.json()
@@ -124,11 +134,9 @@ class QueueClient:
         return payload
 
     def claim(self, capabilities: dict[str, Any] | None = None) -> dict[str, Any] | None:
-        response = httpx.post(
-            self._url("/api/queue/claim"),
-            headers=self._headers(),
+        response = self._post(
+            "/api/queue/claim",
             json={"capabilities": capabilities or {}},
-            timeout=self.timeout_s,
         )
         if response.status_code == 204:
             return None
@@ -141,30 +149,24 @@ class QueueClient:
         return response.json()
 
     def heartbeat(self, job_id: str) -> dict[str, Any]:
-        response = httpx.post(
-            self._url(f"/api/queue/{job_id}/heartbeat"),
-            headers=self._headers(),
-            timeout=self.timeout_s,
+        response = self._post(
+            f"/api/queue/{job_id}/heartbeat",
         )
         self._raise_for_error(response)
         return response.json()
 
     def submit(self, job_id: str, envelope: dict[str, Any]) -> dict[str, Any]:
-        response = httpx.post(
-            self._url(f"/api/queue/{job_id}/submit"),
-            headers=self._headers(),
+        response = self._post(
+            f"/api/queue/{job_id}/submit",
             json=envelope,
-            timeout=self.timeout_s,
         )
         self._raise_for_error(response)
         return response.json()
 
     def fail(self, job_id: str, error: str) -> dict[str, Any]:
-        response = httpx.post(
-            self._url(f"/api/queue/{job_id}/fail"),
-            headers=self._headers(),
+        response = self._post(
+            f"/api/queue/{job_id}/fail",
             json={"error": error},
-            timeout=self.timeout_s,
         )
         self._raise_for_error(response)
         return response.json()

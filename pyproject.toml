@@ -109,7 +109,7 @@ addopts = "-ra --strict-markers"
 dev = [
   "lefthook>=2.1.10",
   "deptry",
-  "pyrefly>=0.1",
+  "pyrefly>=1.4.1",
   "pytest>=9.0.3",
   "ruff>=0.15.13",
   "types-psutil>=7.0.0.20250601",

@@ -3,3 +3,13 @@ run = "uv run deptry ."
 
 [gates.vuln]
 run = "uv audit"
+
+# Scope matches CI's `pyrefly check bench/`.
+[gates.typecheck]
+run = "uv run pyrefly check bench/"
+
+[gates.compile]
+run = "uv run python -m compileall -q bench/ tests/"
+
+[gates.dry-run]
+run = "uv run python -m bench.runner --config config.yaml --dry-run"
